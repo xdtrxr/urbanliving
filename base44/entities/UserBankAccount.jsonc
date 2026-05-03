@@ -4,33 +4,37 @@
   "properties": {
     "user_email": {
       "type": "string",
-      "description": "Email of the account owner"
+      "description": "Email of the user who owns this bank account"
     },
     "bank_name": {
       "type": "string",
-      "description": "Name of the bank"
+      "description": "Name of the Nigerian bank (e.g., GTBank, Zenith Bank)"
     },
     "bank_code": {
       "type": "string",
-      "description": "Paystack bank code"
+      "description": "Paystack bank code for the bank"
     },
     "account_number": {
       "type": "string",
-      "description": "Bank account number"
+      "description": "10-digit Nigerian bank account number"
     },
     "account_name": {
       "type": "string",
-      "description": "Verified account holder name"
+      "description": "Account holder name as verified by the bank"
     },
-    "is_verified": {
-      "type": "boolean",
-      "default": false,
-      "description": "Whether account is verified via Paystack"
+    "recipient_code": {
+      "type": "string",
+      "description": "Paystack transfer recipient code"
     },
     "is_primary": {
       "type": "boolean",
       "default": false,
       "description": "Whether this is the primary withdrawal account"
+    },
+    "is_verified": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the account has been verified"
     }
   },
   "required": [
@@ -39,5 +43,31 @@
     "bank_code",
     "account_number",
     "account_name"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "write": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
 }
