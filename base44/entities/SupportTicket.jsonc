@@ -1,98 +1,64 @@
 {
-  "name": "SupportTicket",
+  "name": "Trip",
   "type": "object",
   "properties": {
-    "user_email": {
+    "name": {
       "type": "string",
-      "description": "Email of the user who created the ticket"
+      "description": "Name of the trip, e.g., 'Paris Summer Vacation'"
     },
-    "subject": {
+    "booking_id": {
       "type": "string",
-      "description": "Subject/title of the support ticket"
+      "description": "Reference to the associated booking"
     },
-    "category": {
+    "start_date": {
       "type": "string",
-      "enum": [
-        "booking",
-        "payment",
-        "account",
-        "technical",
-        "general"
-      ],
-      "description": "Category of the support request"
+      "format": "date"
     },
-    "priority": {
+    "end_date": {
       "type": "string",
-      "enum": [
-        "low",
-        "medium",
-        "high",
-        "urgent"
-      ],
-      "default": "medium",
-      "description": "Priority level of the ticket"
+      "format": "date"
     },
-    "status": {
-      "type": "string",
-      "enum": [
-        "open",
-        "in_progress",
-        "resolved",
-        "closed"
-      ],
-      "default": "open",
-      "description": "Current status of the ticket"
-    },
-    "description": {
-      "type": "string",
-      "description": "Detailed description of the issue"
-    },
-    "ai_handled": {
-      "type": "boolean",
-      "default": false,
-      "description": "Whether the ticket was handled by AI or needs human intervention"
-    },
-    "resolution": {
-      "type": "string",
-      "description": "Resolution provided for the ticket"
-    },
-    "satisfaction_rating": {
-      "type": "number",
-      "minimum": 1,
-      "maximum": 5,
-      "description": "User satisfaction rating (1-5 stars)"
+    "preferences": {
+      "type": "object",
+      "properties": {
+        "pace": {
+          "type": "string",
+          "enum": [
+            "relaxed",
+            "moderate",
+            "fast_paced"
+          ]
+        },
+        "interests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "budget": {
+          "type": "string",
+          "enum": [
+            "budget",
+            "moderate",
+            "luxury"
+          ]
+        }
+      },
+      "description": "User preferences for this specific trip"
     }
   },
   "required": [
-    "user_email",
-    "subject",
-    "category",
-    "description"
+    "name",
+    "booking_id",
+    "start_date",
+    "end_date"
   ],
   "rls": {
     "read": {
-      "$or": [
-        {
-          "user_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
+      "created_by": "{{user.email}}"
     },
     "write": {
-      "$or": [
-        {
-          "user_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
+      "created_by": "{{user.email}}"
     }
   }
 }
