@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar, MapPin, Users, Clock, ExternalLink, Compass, X, AlertCircle, CreditCard, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
-import { format, isAfter, isBefore, parseISO } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -75,18 +75,13 @@ export default function BookingsPage() {
     } else if (!silent) {
       setIsRefreshing(true);
     }
-    
+
     try {
-      console.log('📡 Fetching bookings from database...');
-      const bookingData = await base44.entities.Booking.filter({}, '-created_date'); // Most recent first
-      console.log(`✅ Loaded ${bookingData.length} bookings`);
-      
-      // Log pending bookings specifically
-      const pendingBookings = bookingData.filter(b => b.status === 'pending' && b.payment_status === 'unpaid');
-      console.log(`📋 Found ${pendingBookings.length} pending approval bookings:`, 
-        pendingBookings.map(b => ({ id: b.id, property_id: b.property_id, created: b.created_date }))
-      );
-      
+      console.log('📡 Fetching bookings via getBookings function...');
+      const result = await base44.functions.invoke('getBookings', { scope: 'mine' });
+      const bookingData = result?.data?.success ? result.data.data : [];
+      console.log(`✅ Loaded ${bookingData.length} bookings`, result?.data?.counts);
+
       setBookings(bookingData);
 
       const validPropertyIds = [...new Set(
@@ -151,49 +146,21 @@ export default function BookingsPage() {
     return availabilityRequests[key] || null;
   };
 
-  const categorizeBookings = () => {
-    const now = new Date();
-    const upcoming = [];
-    const current = [];
-    const past = [];
-    const pendingApproval = [];
-
-    console.log('📊 Categorizing', bookings.length, 'bookings...');
-
-    bookings.forEach(booking => {
-      // Skip cancelled bookings from main categorization
-      if (booking.status === 'cancelled') {
-        return;
-      }
-
-      // CRITICAL: Identify pending bookings awaiting approval
-      if (booking.status === 'pending' && booking.payment_status === 'unpaid') {
-        console.log('✅ Found pending approval booking:', booking.id);
-        pendingApproval.push(booking);
-        return;
-      }
-
-      const checkIn = parseISO(booking.check_in);
-      const checkOut = parseISO(booking.check_out);
-
-      if (isAfter(now, checkOut)) {
-        past.push(booking);
-      } else if (isBefore(now, checkIn)) {
-        upcoming.push(booking);
-      } else {
-        current.push(booking);
-      }
+  // Bucket comes from the getBookings backend function (single source of truth).
+  // Fallback for any row missing a bucket: treat as pending-approval so it surfaces.
+  const groupByBucket = () => {
+    const buckets = {
+      'pending-approval': [],
+      'upcoming': [],
+      'current': [],
+      'past': [],
+      'cancelled': [],
+    };
+    bookings.forEach(b => {
+      const key = buckets[b.bucket] ? b.bucket : 'pending-approval';
+      buckets[key].push(b);
     });
-
-    console.log('📊 Categorization complete:', {
-      pendingApproval: pendingApproval.length,
-      upcoming: upcoming.length,
-      current: current.length,
-      past: past.length,
-      cancelled: bookings.filter(b => b.status === 'cancelled').length
-    });
-
-    return { upcoming, current, past, pendingApproval };
+    return buckets;
   };
 
   const canCancelBooking = (booking) => {
@@ -542,8 +509,12 @@ export default function BookingsPage() {
     );
   };
 
-  const { upcoming, current, past, pendingApproval } = categorizeBookings();
-  const cancelledBookings = bookings.filter(b => b.status === 'cancelled');
+  const grouped = groupByBucket();
+  const pendingApproval = grouped['pending-approval'];
+  const upcoming = grouped['upcoming'];
+  const current = grouped['current'];
+  const past = grouped['past'];
+  const cancelledBookings = grouped['cancelled'];
 
   if (isLoading) {
     return (
