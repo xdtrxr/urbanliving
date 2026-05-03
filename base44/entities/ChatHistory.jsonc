@@ -4,11 +4,11 @@
   "properties": {
     "user_email": {
       "type": "string",
-      "description": "Email of the user"
+      "description": "Email of the user who sent the message"
     },
     "message": {
       "type": "string",
-      "description": "Message content"
+      "description": "The message content"
     },
     "role": {
       "type": "string",
@@ -16,33 +16,38 @@
         "user",
         "assistant"
       ],
-      "description": "Who sent the message"
+      "description": "Whether this message was from user or AI"
     },
     "message_type": {
       "type": "string",
       "enum": [
         "text",
         "recommendations",
-        "search_results",
-        "booking_assistance",
-        "booking_details",
-        "no_results",
-        "error"
+        "booking_assistance"
       ],
-      "default": "text"
+      "default": "text",
+      "description": "Type of message for special handling"
     },
     "session_id": {
       "type": "string",
-      "description": "Session identifier"
+      "description": "Unique identifier for the chat session"
     },
     "metadata": {
       "type": "object",
-      "description": "Additional metadata (search params, etc.)"
+      "description": "Additional data like recommendations, booking params, etc."
     }
   },
   "required": [
     "user_email",
     "message",
     "role"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "user_email": "{{user.email}}"
+    },
+    "write": {
+      "user_email": "{{user.email}}"
+    }
+  }
 }
