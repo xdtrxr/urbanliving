@@ -3,10 +3,34 @@
   "type": "object",
   "properties": {
     "user_email": {
-      "type": "string"
+      "type": "string",
+      "description": "Email of the user who created the ticket"
     },
     "subject": {
-      "type": "string"
+      "type": "string",
+      "description": "Subject/title of the support ticket"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "booking",
+        "payment",
+        "account",
+        "technical",
+        "general"
+      ],
+      "description": "Category of the support request"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "urgent"
+      ],
+      "default": "medium",
+      "description": "Priority level of the ticket"
     },
     "status": {
       "type": "string",
@@ -16,23 +40,59 @@
         "resolved",
         "closed"
       ],
-      "default": "open"
+      "default": "open",
+      "description": "Current status of the ticket"
     },
-    "category": {
-      "type": "string"
-    },
-    "priority": {
+    "description": {
       "type": "string",
-      "enum": [
-        "low",
-        "medium",
-        "high"
-      ],
-      "default": "medium"
+      "description": "Detailed description of the issue"
+    },
+    "ai_handled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the ticket was handled by AI or needs human intervention"
+    },
+    "resolution": {
+      "type": "string",
+      "description": "Resolution provided for the ticket"
+    },
+    "satisfaction_rating": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "User satisfaction rating (1-5 stars)"
     }
   },
   "required": [
     "user_email",
-    "subject"
-  ]
+    "subject",
+    "category",
+    "description"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "write": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
 }
