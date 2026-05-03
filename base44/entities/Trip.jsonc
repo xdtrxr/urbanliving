@@ -4,32 +4,29 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Trip name"
+      "description": "Name of the trip, e.g., 'Paris Summer Vacation'"
     },
     "booking_id": {
       "type": "string",
-      "description": "Reference to the Booking"
+      "description": "Reference to the associated booking"
     },
     "start_date": {
       "type": "string",
-      "format": "date",
-      "description": "Trip start date"
+      "format": "date"
     },
     "end_date": {
       "type": "string",
-      "format": "date",
-      "description": "Trip end date"
+      "format": "date"
     },
     "preferences": {
       "type": "object",
-      "description": "User preferences for AI trip generation",
       "properties": {
         "pace": {
           "type": "string",
           "enum": [
             "relaxed",
             "moderate",
-            "busy"
+            "fast_paced"
           ]
         },
         "interests": {
@@ -46,11 +43,8 @@
             "luxury"
           ]
         }
-      }
-    },
-    "notes": {
-      "type": "string",
-      "description": "General trip notes"
+      },
+      "description": "User preferences for this specific trip"
     }
   },
   "required": [
@@ -58,5 +52,13 @@
     "booking_id",
     "start_date",
     "end_date"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
 }
