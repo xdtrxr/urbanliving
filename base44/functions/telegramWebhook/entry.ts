@@ -84,6 +84,46 @@ Deno.serve(async (req) => {
 
         console.log(`✅ Request ${requestId} ${newStatus}`);
 
+        // On approval, stamp approved_at on the matching Booking so the payment timer can start.
+        if (action === 'approve') {
+            try {
+                const matchQuery = new URLSearchParams({
+                    property_id: request.property_id,
+                    check_in: request.check_in,
+                    check_out: request.check_out,
+                    guest_email: request.user_email,
+                    status: 'pending',
+                }).toString();
+                const bookingsRes = await fetch(`${baseUrl}/entities/Booking?${matchQuery}`, {
+                    method: 'GET',
+                    headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
+                });
+                if (bookingsRes.ok) {
+                    const matches = await bookingsRes.json();
+                    const target = Array.isArray(matches) ? matches[0] : null;
+                    if (target?.id) {
+                        const stampRes = await fetch(`${baseUrl}/entities/Booking/${target.id}`, {
+                            method: 'PUT',
+                            headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ approved_at: new Date().toISOString() }),
+                        });
+                        if (stampRes.ok) {
+                            console.log(`✅ approved_at stamped on Booking ${target.id}`);
+                        } else {
+                            console.warn('⚠️ Failed to stamp approved_at:', stampRes.status, await stampRes.text());
+                        }
+                    } else {
+                        console.warn('⚠️ No matching pending booking found for approval');
+                    }
+                } else {
+                    console.warn('⚠️ Failed to query bookings for approval stamp:', bookingsRes.status);
+                }
+            } catch (stampError) {
+                console.error('❌ Error stamping approved_at:', stampError);
+                // Don't fail the webhook if stamping fails
+            }
+        }
+
         // Update Telegram message
         const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
         const statusEmoji = action === 'approve' ? '✅' : '❌';

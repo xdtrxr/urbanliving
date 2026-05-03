@@ -207,6 +207,26 @@ export default function BookingsPage() {
     const availabilityRequest = getAvailabilityRequest(booking);
     const approvalStatus = availabilityRequest?.status || 'pending';
 
+    // Live countdown to payment deadline (only when admin has approved)
+    const [deadlineMs] = useState(() => {
+      const t = Date.parse(booking.payment_deadline || '');
+      return Number.isNaN(t) ? null : t;
+    });
+    const [msLeft, setMsLeft] = useState(() => deadlineMs ? Math.max(0, deadlineMs - Date.now()) : null);
+    useEffect(() => {
+      if (!deadlineMs) return;
+      const tick = () => setMsLeft(Math.max(0, deadlineMs - Date.now()));
+      const id = setInterval(tick, 1000);
+      return () => clearInterval(id);
+    }, [deadlineMs]);
+    const formatLeft = (ms) => {
+      if (ms == null) return '';
+      const totalSec = Math.floor(ms / 1000);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      return `${m}m ${s.toString().padStart(2, '0')}s`;
+    };
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -245,11 +265,23 @@ export default function BookingsPage() {
                       </div>
                     )}
                   </div>
-                  <Badge className={`${approvalStatusColors[approvalStatus]} border font-medium`}>
-                    {approvalStatus === 'pending' && '⏳ Awaiting Approval'}
-                    {approvalStatus === 'approved' && '✅ Approved'}
-                    {approvalStatus === 'rejected' && '❌ Rejected'}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-2">
+                    <Badge className={`${approvalStatusColors[approvalStatus]} border font-medium`}>
+                      {approvalStatus === 'pending' && '⏳ Awaiting Approval'}
+                      {approvalStatus === 'approved' && '✅ Approved'}
+                      {approvalStatus === 'rejected' && '❌ Rejected'}
+                    </Badge>
+                    {approvalStatus === 'approved' && msLeft != null && msLeft > 0 && (
+                      <Badge className={`border font-medium ${
+                        msLeft < 5 * 60 * 1000
+                          ? 'bg-red-100 text-red-800 border-red-200'
+                          : 'bg-amber-100 text-amber-800 border-amber-200'
+                      }`}>
+                        <Clock className="w-3 h-3 mr-1 inline" />
+                        Pay in {formatLeft(msLeft)}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
 

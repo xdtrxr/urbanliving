@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Lock, ShieldCheck, CreditCard, Loader2, CheckCircle, AlertTriangle, ArrowLeft, Mail, User } from 'lucide-react';
+import { Lock, ShieldCheck, CreditCard, Loader2, CheckCircle, AlertTriangle, ArrowLeft, Mail, User, Clock } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
@@ -46,6 +46,11 @@ export default function PaymentPage() {
   });
   const [validationErrors, setValidationErrors] = useState({});
 
+  // Payment window countdown
+  const [deadlineMs, setDeadlineMs] = useState(null);
+  const [msLeft, setMsLeft] = useState(null);
+  const [hasExpired, setHasExpired] = useState(false);
+
   useEffect(() => {
     console.log('=== PAYMENT PAGE MOUNTED ===');
     console.log('URL Search Params:', window.location.search);
@@ -57,6 +62,46 @@ export default function PaymentPage() {
     loadBookingAndUserData();
     loadPaystackKey();
   }, []);
+
+  // Tick the countdown every second once we know the deadline
+  useEffect(() => {
+    if (!deadlineMs) return;
+    const tick = () => {
+      const remaining = deadlineMs - Date.now();
+      setMsLeft(Math.max(0, remaining));
+      if (remaining <= 0) {
+        setHasExpired(true);
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [deadlineMs]);
+
+  // On expiry: cancel booking, alert user, redirect.
+  useEffect(() => {
+    if (!hasExpired || !bookingData?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await base44.entities.Booking.update(bookingData.id, { status: 'cancelled' });
+      } catch (err) {
+        console.warn('Failed to mark booking cancelled on expiry:', err);
+      }
+      if (cancelled) return;
+      alert('Your payment window has expired and the booking has been cancelled. Please request availability again.');
+      navigate(createPageUrl('Bookings'));
+    })();
+    return () => { cancelled = true; };
+  }, [hasExpired, bookingData?.id, navigate]);
+
+  const formatRemaining = (ms) => {
+    if (ms == null) return '';
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   const loadPaystackKey = async () => {
     try {
@@ -115,16 +160,52 @@ export default function PaymentPage() {
         return;
       }
 
+      // Fetch the full booking record so we can compute the payment deadline
+      // and stamp payment_started_at on first visit.
+      let fullBooking = null;
+      try {
+        fullBooking = await base44.entities.Booking.get(bookingId);
+      } catch (fetchErr) {
+        console.warn('Could not fetch full booking record:', fetchErr);
+      }
+
       // Set booking data
       const bookingInfo = {
         id: bookingId,
         total_price: parseFloat(total),
         property_title: propertyTitle || 'Your selected property',
         guest_email: guestEmail || user.email,
+        approved_at: fullBooking?.approved_at || null,
+        payment_started_at: fullBooking?.payment_started_at || null,
       };
 
       console.log('✅ Booking data set:', bookingInfo);
       setBookingData(bookingInfo);
+
+      // Stamp payment_started_at on first arrival (one-shot)
+      if (fullBooking && !fullBooking.payment_started_at) {
+        try {
+          const nowIso = new Date().toISOString();
+          await base44.entities.Booking.update(bookingId, { payment_started_at: nowIso });
+          bookingInfo.payment_started_at = nowIso;
+          console.log('✅ payment_started_at stamped:', nowIso);
+        } catch (stampErr) {
+          console.warn('Could not stamp payment_started_at:', stampErr);
+        }
+      }
+
+      // Compute deadline: min(approved + 3hr, max(approved + 1hr, started + 1hr))
+      if (bookingInfo.approved_at) {
+        const HOUR = 60 * 60 * 1000;
+        const approved = Date.parse(bookingInfo.approved_at);
+        if (!Number.isNaN(approved)) {
+          const started = Date.parse(bookingInfo.payment_started_at || '');
+          const fromOpen = Number.isNaN(started) ? 0 : started + HOUR;
+          const fromApproval = approved + HOUR;
+          const cap = approved + 3 * HOUR;
+          setDeadlineMs(Math.min(cap, Math.max(fromApproval, fromOpen)));
+        }
+      }
 
       // Pre-fill payment details
       setPaymentDetails({
@@ -518,6 +599,34 @@ export default function PaymentPage() {
             <p className="text-slate-600">Complete your booking payment</p>
           </div>
         </div>
+
+        {/* Payment timer */}
+        {msLeft != null && !paymentComplete && (
+          <div
+            className={`mb-6 rounded-2xl border px-5 py-4 flex items-center justify-between shadow-sm ${
+              msLeft < 5 * 60 * 1000
+                ? 'bg-red-50 border-red-200 text-red-800'
+                : 'bg-amber-50 border-amber-200 text-amber-800'
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 flex-shrink-0" />
+              <div>
+                <p className="font-semibold">
+                  {msLeft > 0 ? 'Complete payment within' : 'Payment window expired'}
+                </p>
+                <p className="text-sm opacity-80">
+                  Booking will be auto-cancelled if not paid in time.
+                </p>
+              </div>
+            </div>
+            <div className="font-mono text-2xl font-bold tabular-nums">
+              {formatRemaining(msLeft)}
+            </div>
+          </div>
+        )}
 
         {/* Booking Summary */}
         <Card className="mb-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
