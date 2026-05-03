@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClient } from 'npm:@base44/sdk@0.8.6';
 
 Deno.serve(async (req) => {
     console.log('=== TELEGRAM WEBHOOK CALLED ===');
@@ -147,6 +147,22 @@ Status: ${statusText} by admin`;
 
         await answerCallbackQuery(callbackQuery.id, `Request ${statusText.toLowerCase()} successfully!`);
 
+        // Email the guest about the decision
+        try {
+            await emailGuestDecision({
+                guestEmail: request.user_email,
+                guestName: request.user_name,
+                propertyTitle: request.property_title,
+                checkIn: request.check_in,
+                checkOut: request.check_out,
+                action,
+                appId,
+                serviceToken: apiKey,
+            });
+        } catch (emailErr) {
+            console.error('Failed to email guest about decision:', emailErr);
+        }
+
         return new Response(JSON.stringify({ ok: true }), {
             headers: { 'Content-Type': 'application/json' }
         });
@@ -163,6 +179,48 @@ Status: ${statusText} by admin`;
         });
     }
 });
+
+interface GuestDecisionParams {
+    guestEmail: string;
+    guestName: string;
+    propertyTitle: string;
+    checkIn: string;
+    checkOut: string;
+    action: 'approve' | 'reject';
+    appId: string;
+    serviceToken: string;
+}
+
+async function emailGuestDecision(p: GuestDecisionParams) {
+    if (!p.guestEmail) {
+        console.warn('No guest email — skipping decision notification');
+        return;
+    }
+    const sdk = createClient({ appId: p.appId, serviceToken: p.serviceToken, requiresAuth: false });
+
+    const subject = p.action === 'approve'
+        ? `Approved: your booking for ${p.propertyTitle}`
+        : `Update on your booking request for ${p.propertyTitle}`;
+
+    const body = p.action === 'approve'
+        ? `Hi ${p.guestName || 'there'},\n\n` +
+          `Great news — your availability request for "${p.propertyTitle}" (${p.checkIn} → ${p.checkOut}) has been approved.\n\n` +
+          `You have 1 hour to complete payment from when you open the payment page (and a 3-hour hard cap from this approval). After that the booking will be automatically cancelled.\n\n` +
+          `Open Bookings to proceed: head to the app and click "Proceed to Payment" on this booking.\n\n` +
+          `— UrbanStays`
+        : `Hi ${p.guestName || 'there'},\n\n` +
+          `Unfortunately, "${p.propertyTitle}" is not available for ${p.checkIn} → ${p.checkOut}.\n\n` +
+          `Please try different dates or browse other properties in the app.\n\n` +
+          `— UrbanStays`;
+
+    await sdk.integrations.Core.SendEmail({
+        to: p.guestEmail,
+        subject,
+        body,
+        from_name: 'UrbanStays',
+    });
+    console.log(`✅ Guest decision email sent to ${p.guestEmail}`);
+}
 
 async function answerCallbackQuery(callbackQueryId, text) {
     const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');

@@ -27,7 +27,11 @@ import {
   Settings, // NEW
   DollarSign, // NEW
   FileText, // Added for basic info section
-  XCircle // Added for clear edit button
+  XCircle, // Added for clear edit button
+  Briefcase,
+  Clock,
+  Users,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -107,6 +111,10 @@ export default function AdminPage() {
   // State for the new Tabs component
   const [activeAdminTab, setActiveAdminTab] = useState('add-manual'); // Default to manual entry tab
 
+  // Platform overview stats
+  const [platformStats, setPlatformStats] = useState(null);
+  const [platformStatsAt, setPlatformStatsAt] = useState(null);
+  const [isRefreshingPlatformStats, setIsRefreshingPlatformStats] = useState(false);
 
   useEffect(() => {
     checkAdminAccess();
@@ -116,8 +124,26 @@ export default function AdminPage() {
     if (isAuthorized) {
         loadSupportTickets();
         loadProperties();
+        loadPlatformStats();
+        const id = setInterval(() => loadPlatformStats(true), 30000);
+        return () => clearInterval(id);
     }
   }, [isAuthorized]);
+
+  const loadPlatformStats = async (silent = false) => {
+    if (!silent) setIsRefreshingPlatformStats(true);
+    try {
+      const result = await base44.functions.invoke('getDashboardStats', { scope: 'all' });
+      if (result?.data?.success) {
+        setPlatformStats(result.data.data);
+        setPlatformStatsAt(new Date());
+      }
+    } catch (err) {
+      console.error('Failed to load platform stats:', err);
+    } finally {
+      if (!silent) setIsRefreshingPlatformStats(false);
+    }
+  };
 
   const checkAdminAccess = async () => {
     setIsLoading(true);
@@ -553,6 +579,79 @@ export default function AdminPage() {
           </div>
           <p className="text-slate-600 text-lg">Manage property data via manual entry or live data fetch</p>
         </div>
+
+        {/* Platform Overview */}
+        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="w-5 h-5" />
+                Platform Overview
+              </CardTitle>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500">
+                  {platformStatsAt ? `Updated ${platformStatsAt.toLocaleTimeString()}` : 'Loading...'}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadPlatformStats()}
+                  disabled={isRefreshingPlatformStats}
+                  className="rounded-xl"
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingPlatformStats ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-slate-600">Total Bookings</p>
+                  <Briefcase className="w-4 h-4 text-blue-500" />
+                </div>
+                <p className="text-2xl font-bold text-slate-900">{platformStats?.bookings.total ?? '—'}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {platformStats ? `${platformStats.bookings.upcoming} upcoming, ${platformStats.bookings.current} current` : ''}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-slate-600">Pending</p>
+                  <Clock className="w-4 h-4 text-amber-500" />
+                </div>
+                <p className="text-2xl font-bold text-slate-900">{platformStats?.bookings.pending ?? '—'}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {platformStats ? `${platformStats.bookings.cancelled} cancelled total` : ''}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-slate-600">Revenue (Paid)</p>
+                  <DollarSign className="w-4 h-4 text-green-500" />
+                </div>
+                <p className="text-2xl font-bold text-slate-900">
+                  {platformStats ? `₦${platformStats.revenue.paidNGN.toLocaleString()}` : '—'}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {platformStats ? `₦${platformStats.revenue.pendingNGN.toLocaleString()} pending` : ''}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-slate-600">Referrals</p>
+                  <Users className="w-4 h-4 text-purple-500" />
+                </div>
+                <p className="text-2xl font-bold text-slate-900">{platformStats?.referrals.count ?? '—'}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {platformStats ? `${platformStats.referrals.successful} successful · ₦${platformStats.referrals.earningsNGN.toLocaleString()} paid out` : ''}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* MCP Data Fetch Tool */}
         <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">

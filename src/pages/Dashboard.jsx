@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Briefcase, Heart, Search, Settings, ArrowRight } from 'lucide-react';
+import { Briefcase, Heart, Search, Settings, ArrowRight, Clock, DollarSign, Gift, RefreshCw } from 'lucide-react';
 import LoyaltyCard from '../components/dashboard/LoyaltyCard';
 import NFTCollection from '../components/dashboard/NFTCollection';
 import ReferralCodePrompt from '../components/dashboard/ReferralCodePrompt';
@@ -36,6 +36,9 @@ function StatCard({ icon, title, value, description }) {
 export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState({ bookings: 0, wishlist: 0 });
+  const [dashStats, setDashStats] = useState(null);
+  const [dashStatsAt, setDashStatsAt] = useState(null);
+  const [isRefreshingStats, setIsRefreshingStats] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showReferralPrompt, setShowReferralPrompt] = useState(false);
   const [referrals, setReferrals] = useState([]);
@@ -45,7 +48,25 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboardData();
+    // Auto-refresh stats every 30 seconds for "real-time" feel
+    const id = setInterval(() => loadDashStats(true), 30000);
+    return () => clearInterval(id);
   }, []);
+
+  const loadDashStats = async (silent = false) => {
+    if (!silent) setIsRefreshingStats(true);
+    try {
+      const result = await base44.functions.invoke('getDashboardStats', { scope: 'mine' });
+      if (result?.data?.success) {
+        setDashStats(result.data.data);
+        setDashStatsAt(new Date());
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard stats:', err);
+    } finally {
+      if (!silent) setIsRefreshingStats(false);
+    }
+  };
 
   const loadDashboardData = async () => {
     setIsLoading(true);
@@ -162,17 +183,17 @@ export default function DashboardPage() {
         setIsLoadingReferralStats(false);
       }
 
-      const bookingData = await base44.entities.Booking.filter({ guest_email: userData.email });
-      
       const wishlistProperties = userData.wishlist && userData.wishlist.length > 0
         ? await base44.entities.Property.filter({ id: { $in: userData.wishlist } })
         : [];
       setWishlistItems(wishlistProperties);
 
       setStats({
-        bookings: bookingData.length,
         wishlist: userData.wishlist?.length || 0
       });
+
+      // Real-time booking/revenue/referral stats from getDashboardStats
+      await loadDashStats();
 
     } catch (error) {
       console.error("Error loading dashboard data:", error);
@@ -224,20 +245,52 @@ export default function DashboardPage() {
         <p className="text-slate-600">Here's your travel snapshot.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        {/* Stats */}
-        <StatCard
-          title="Total Bookings"
-          value={stats.bookings}
-          description="All your past and future trips"
-          icon={<Briefcase className="h-4 w-4 text-slate-500 group-hover:text-blue-500 transition-colors duration-300" />}
-        />
-        <StatCard
-          title="Wishlisted Properties"
-          value={stats.wishlist}
-          description="Your saved favorites"
-          icon={<Heart className="h-4 w-4 text-slate-500 group-hover:text-pink-500 transition-colors duration-300" />}
-        />
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm text-slate-500">
+            {dashStatsAt ? `Updated ${dashStatsAt.toLocaleTimeString()}` : 'Loading stats...'}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadDashStats()}
+            disabled={isRefreshingStats}
+            className="rounded-xl"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingStats ? 'animate-spin' : ''}`} />
+            {isRefreshingStats ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Total Bookings"
+            value={dashStats?.bookings.total ?? '—'}
+            description="All your trips"
+            icon={<Briefcase className="h-4 w-4 text-slate-500 group-hover:text-blue-500 transition-colors duration-300" />}
+          />
+          <StatCard
+            title="Pending"
+            value={dashStats?.bookings.pending ?? '—'}
+            description="Awaiting approval or payment"
+            icon={<Clock className="h-4 w-4 text-slate-500 group-hover:text-amber-500 transition-colors duration-300" />}
+          />
+          <StatCard
+            title="Total Spend"
+            value={dashStats ? `₦${dashStats.revenue.paidNGN.toLocaleString()}` : '—'}
+            description="Paid bookings"
+            icon={<DollarSign className="h-4 w-4 text-slate-500 group-hover:text-green-500 transition-colors duration-300" />}
+          />
+          <StatCard
+            title="Referral Earnings"
+            value={dashStats ? `₦${dashStats.referrals.earningsNGN.toLocaleString()}` : '—'}
+            description={dashStats ? `${dashStats.referrals.successful}/${dashStats.referrals.count} successful` : ''}
+            icon={<Gift className="h-4 w-4 text-slate-500 group-hover:text-purple-500 transition-colors duration-300" />}
+          />
+        </div>
+        <div className="mt-4 flex items-center gap-3 text-sm text-slate-500">
+          <Heart className="w-4 h-4 text-pink-500" />
+          <span>{stats.wishlist} wishlisted properties</span>
+        </div>
       </div>
 
       {/* Wishlist Preview Section */}
