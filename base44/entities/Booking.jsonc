@@ -67,6 +67,15 @@
       "type": "string",
       "format": "date-time",
       "description": "ISO timestamp when user first opened the payment page"
+    },
+    "transaction_hash": {
+      "type": "string",
+      "description": "Paystack transaction reference for audit and refunds"
+    },
+    "paid_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when payment cleared and booking was confirmed"
     }
   },
   "required": [
