@@ -1,24 +1,25 @@
-import Search from './pages/Search';
-import Property from './pages/Property';
-import Bookings from './pages/Bookings';
-import Wishlist from './pages/Wishlist';
-import Profile from './pages/Profile';
-import AIChatConcierge from './pages/AIChatConcierge';
-import Dashboard from './pages/Dashboard';
-import Trips from './pages/Trips';
-import TripPlanner from './pages/TripPlanner';
-import Admin from './pages/Admin';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import FAQ from './pages/FAQ';
-import Quests from './pages/Quests';
-import Checkout from './pages/Checkout';
-import Support from './pages/Support';
-import PaymentPage from './pages/PaymentPage';
-import BankAccounts from './pages/BankAccounts';
-import Withdrawals from './pages/Withdrawals';
-import ReferralTest from './pages/ReferralTest';
+import { lazy } from 'react';
 import __Layout from './Layout.jsx';
 
+const Search = lazy(() => import('./pages/Search'));
+const Property = lazy(() => import('./pages/Property'));
+const Bookings = lazy(() => import('./pages/Bookings'));
+const Wishlist = lazy(() => import('./pages/Wishlist'));
+const Profile = lazy(() => import('./pages/Profile'));
+const AIChatConcierge = lazy(() => import('./pages/AIChatConcierge'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Trips = lazy(() => import('./pages/Trips'));
+const TripPlanner = lazy(() => import('./pages/TripPlanner'));
+const Admin = lazy(() => import('./pages/Admin'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const FAQ = lazy(() => import('./pages/FAQ'));
+const Quests = lazy(() => import('./pages/Quests'));
+const Checkout = lazy(() => import('./pages/Checkout'));
+const Support = lazy(() => import('./pages/Support'));
+const PaymentPage = lazy(() => import('./pages/PaymentPage'));
+const BankAccounts = lazy(() => import('./pages/BankAccounts'));
+const Withdrawals = lazy(() => import('./pages/Withdrawals'));
+const ReferralTest = lazy(() => import('./pages/ReferralTest'));
 
 export const PAGES = {
     "Search": Search,
