@@ -2,50 +2,106 @@
   "name": "Quest",
   "type": "object",
   "properties": {
-    "quest_id": {
-      "type": "string"
+    "user_email": {
+      "type": "string",
+      "description": "Email of the user completing quests"
     },
     "quest_type": {
-      "type": "string"
+      "type": "string",
+      "enum": [
+        "social_follow",
+        "engagement",
+        "daily_engagement",
+        "booking_milestone",
+        "referral_milestone",
+        "review_milestone"
+      ],
+      "description": "Type of quest"
+    },
+    "quest_id": {
+      "type": "string",
+      "description": "Unique identifier for the quest (e.g., 'follow_twitter', 'daily_chat_agent')"
     },
     "platform": {
-      "type": "string"
-    },
-    "points_reward": {
-      "type": "number"
-    },
-    "verification_method": {
       "type": "string",
-      "default": "automatic"
-    },
-    "is_daily": {
-      "type": "boolean",
-      "default": false
-    },
-    "user_email": {
-      "type": "string"
+      "enum": [
+        "twitter",
+        "instagram",
+        "linkedin",
+        "telegram",
+        "discord",
+        "youtube",
+        "tiktok",
+        "chat_agent"
+      ],
+      "description": "Social media platform for social quests or engagement type for engagement quests"
     },
     "status": {
       "type": "string",
       "enum": [
         "available",
-        "processing",
+        "in_progress",
+        "completed",
         "claimed"
       ],
-      "default": "available"
+      "default": "available",
+      "description": "Current status of the quest"
+    },
+    "points_reward": {
+      "type": "number",
+      "description": "Luxe points earned for completing this quest"
     },
     "completion_date": {
-      "type": "string"
+      "type": "string",
+      "format": "date-time",
+      "description": "When the quest was completed"
     },
     "last_completed_date": {
-      "type": "string"
+      "type": "string",
+      "format": "date",
+      "description": "Date when this daily quest was last completed (for daily quests)"
+    },
+    "is_daily": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this quest can be completed daily"
+    },
+    "verification_method": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "automatic",
+        "screenshot",
+        "username_check"
+      ],
+      "description": "How the quest completion is verified"
     },
     "verification_data": {
-      "type": "object"
+      "type": "object",
+      "description": "Additional data for verification (username, screenshot URL, etc.)"
     }
   },
   "required": [
+    "user_email",
+    "quest_type",
     "quest_id",
-    "user_email"
-  ]
+    "points_reward"
+  ],
+  "rls": {
+    "read": {
+      "user_email": "{{user.email}}"
+    },
+    "write": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
 }
