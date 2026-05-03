@@ -3,27 +3,34 @@
   "type": "object",
   "properties": {
     "property_id": {
-      "type": "string"
+      "type": "string",
+      "description": "ID of the property being checked"
     },
     "property_title": {
-      "type": "string"
+      "type": "string",
+      "description": "Title of the property"
     },
     "user_email": {
-      "type": "string"
+      "type": "string",
+      "description": "Email of the user making the request"
     },
     "user_name": {
-      "type": "string"
+      "type": "string",
+      "description": "Name of the user"
     },
     "check_in": {
       "type": "string",
-      "format": "date"
+      "format": "date",
+      "description": "Check-in date"
     },
     "check_out": {
       "type": "string",
-      "format": "date"
+      "format": "date",
+      "description": "Check-out date"
     },
     "guests": {
-      "type": "number"
+      "type": "number",
+      "description": "Number of guests"
     },
     "status": {
       "type": "string",
@@ -32,23 +39,36 @@
         "approved",
         "rejected"
       ],
-      "default": "pending"
+      "default": "pending",
+      "description": "Approval status from admin"
+    },
+    "admin_response": {
+      "type": "string",
+      "description": "Admin's response message"
+    },
+    "telegram_message_id": {
+      "type": "string",
+      "description": "Telegram message ID for tracking"
     },
     "has_conflict": {
       "type": "boolean",
-      "default": false
+      "description": "Whether there's a booking conflict"
     },
     "conflict_details": {
-      "type": "object"
-    },
-    "admin_response": {
-      "type": "string"
+      "type": "object",
+      "description": "Details about the conflict if any"
     }
   },
   "required": [
     "property_id",
+    "property_title",
     "user_email",
     "check_in",
-    "check_out"
-  ]
+    "check_out",
+    "guests"
+  ],
+  "rls": {
+    "read": null,
+    "write": null
+  }
 }
