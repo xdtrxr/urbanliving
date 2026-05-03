@@ -3,10 +3,12 @@
   "type": "object",
   "properties": {
     "referrer_email": {
-      "type": "string"
+      "type": "string",
+      "description": "Email of the user who made the referral"
     },
     "referred_email": {
-      "type": "string"
+      "type": "string",
+      "description": "Email of the new user who was referred"
     },
     "status": {
       "type": "string",
@@ -14,18 +16,47 @@
         "signed_up",
         "booking_completed"
       ],
-      "default": "signed_up"
+      "default": "signed_up",
+      "description": "The status of the referral journey"
     },
     "booking_id": {
-      "type": "string"
+      "type": "string",
+      "description": "The ID of the first successful booking made by the referred user"
     },
     "amount_earned_ngn": {
       "type": "number",
-      "default": 0
+      "description": "Referral earnings in NGN awarded to the referrer for this referral"
     }
   },
   "required": [
     "referrer_email",
     "referred_email"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "referrer_email": "{{user.email}}"
+        },
+        {
+          "referred_email": "{{user.email}}"
+        }
+      ]
+    },
+    "write": {
+      "$or": [
+        {
+          "referrer_email": "{{user.email}}"
+        },
+        {
+          "referred_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
 }
