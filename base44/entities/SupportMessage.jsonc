@@ -3,7 +3,8 @@
   "type": "object",
   "properties": {
     "ticket_id": {
-      "type": "string"
+      "type": "string",
+      "description": "Reference to the support ticket"
     },
     "sender_type": {
       "type": "string",
@@ -11,24 +12,63 @@
         "user",
         "ai_agent",
         "human_agent"
-      ]
+      ],
+      "description": "Who sent this message"
     },
     "message": {
-      "type": "string"
+      "type": "string",
+      "description": "Content of the message"
     },
     "message_type": {
       "type": "string",
       "enum": [
         "text",
-        "image",
-        "file"
+        "solution",
+        "escalation",
+        "closure"
       ],
-      "default": "text"
+      "default": "text",
+      "description": "Type of message for categorization"
+    },
+    "automated_response": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this was an automated AI response"
+    },
+    "helpful": {
+      "type": "boolean",
+      "description": "User feedback on whether the response was helpful"
     }
   },
   "required": [
     "ticket_id",
     "sender_type",
     "message"
-  ]
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "write": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
 }
