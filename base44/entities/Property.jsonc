@@ -3,10 +3,12 @@
   "type": "object",
   "properties": {
     "title": {
-      "type": "string"
+      "type": "string",
+      "description": "Property title"
     },
     "description": {
-      "type": "string"
+      "type": "string",
+      "description": "Detailed property description"
     },
     "location": {
       "type": "object",
@@ -34,18 +36,22 @@
       }
     },
     "price_per_night": {
-      "type": "number"
-    },
-    "currency": {
-      "type": "string",
-      "default": "NGN"
+      "type": "number",
+      "description": "Price per night in NGN"
     },
     "caution_fee": {
       "type": "number",
+      "description": "Refundable caution fee in NGN",
       "default": 0
     },
+    "currency": {
+      "type": "string",
+      "default": "NGN",
+      "description": "The currency of the price (always NGN)"
+    },
     "max_guests": {
-      "type": "number"
+      "type": "number",
+      "description": "Maximum number of guests"
     },
     "bedrooms": {
       "type": "number"
@@ -67,24 +73,43 @@
     "amenities": {
       "type": "array",
       "items": {
-        "type": "string"
+        "type": "string",
+        "enum": [
+          "wifi",
+          "kitchen",
+          "parking",
+          "pool",
+          "gym",
+          "balcony",
+          "air_conditioning",
+          "heating",
+          "washer",
+          "dryer",
+          "pets_allowed",
+          "smoking_allowed",
+          "workspace"
+        ]
       }
     },
     "images": {
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "Array of image URLs"
     },
     "videos": {
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "description": "Array of video URLs",
+      "default": []
     },
     "rating": {
       "type": "number",
-      "default": 0
+      "minimum": 0,
+      "maximum": 5
     },
     "reviews_count": {
       "type": "number",
@@ -97,17 +122,32 @@
       "type": "boolean",
       "default": false
     },
+    "external_id": {
+      "type": "string",
+      "description": "Unique ID from the source (manual_123, file_456, etc.)"
+    },
     "source": {
       "type": "string",
-      "default": "manual"
-    },
-    "external_id": {
-      "type": "string"
+      "enum": [
+        "manual",
+        "file_upload"
+      ],
+      "description": "Source of the property data"
     }
   },
   "required": [
     "title",
+    "location",
     "price_per_night",
-    "max_guests"
-  ]
+    "max_guests",
+    "property_type"
+  ],
+  "rls": {
+    "read": null,
+    "write": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
 }
