@@ -1,0 +1,35 @@
+{
+  "name": "LoyaltyTransaction",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string"
+    },
+    "points_earned": {
+      "type": "number"
+    },
+    "transaction_type": {
+      "type": "string",
+      "enum": [
+        "booking",
+        "quest",
+        "referral",
+        "bonus"
+      ]
+    },
+    "booking_id": {
+      "type": "string"
+    },
+    "quest_id": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "user_email",
+    "points_earned",
+    "transaction_type"
+  ]
+}

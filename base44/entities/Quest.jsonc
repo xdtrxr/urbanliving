@@ -1,0 +1,51 @@
+{
+  "name": "Quest",
+  "type": "object",
+  "properties": {
+    "quest_id": {
+      "type": "string"
+    },
+    "quest_type": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "points_reward": {
+      "type": "number"
+    },
+    "verification_method": {
+      "type": "string",
+      "default": "automatic"
+    },
+    "is_daily": {
+      "type": "boolean",
+      "default": false
+    },
+    "user_email": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "processing",
+        "claimed"
+      ],
+      "default": "available"
+    },
+    "completion_date": {
+      "type": "string"
+    },
+    "last_completed_date": {
+      "type": "string"
+    },
+    "verification_data": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "quest_id",
+    "user_email"
+  ]
+}

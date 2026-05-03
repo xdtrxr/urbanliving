@@ -1,0 +1,31 @@
+{
+  "name": "Referral",
+  "type": "object",
+  "properties": {
+    "referrer_email": {
+      "type": "string"
+    },
+    "referred_email": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "signed_up",
+        "booking_completed"
+      ],
+      "default": "signed_up"
+    },
+    "booking_id": {
+      "type": "string"
+    },
+    "amount_earned_ngn": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": [
+    "referrer_email",
+    "referred_email"
+  ]
+}

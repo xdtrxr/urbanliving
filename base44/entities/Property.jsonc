@@ -1,0 +1,113 @@
+{
+  "name": "Property",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "coordinates": {
+          "type": "object",
+          "properties": {
+            "lat": {
+              "type": "number"
+            },
+            "lng": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "price_per_night": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string",
+      "default": "NGN"
+    },
+    "caution_fee": {
+      "type": "number",
+      "default": 0
+    },
+    "max_guests": {
+      "type": "number"
+    },
+    "bedrooms": {
+      "type": "number"
+    },
+    "bathrooms": {
+      "type": "number"
+    },
+    "property_type": {
+      "type": "string",
+      "enum": [
+        "apartment",
+        "house",
+        "studio",
+        "loft",
+        "penthouse",
+        "villa"
+      ]
+    },
+    "amenities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "videos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rating": {
+      "type": "number",
+      "default": 0
+    },
+    "reviews_count": {
+      "type": "number",
+      "default": 0
+    },
+    "host_name": {
+      "type": "string"
+    },
+    "instant_book": {
+      "type": "boolean",
+      "default": false
+    },
+    "source": {
+      "type": "string",
+      "default": "manual"
+    },
+    "external_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "price_per_night",
+    "max_guests"
+  ]
+}

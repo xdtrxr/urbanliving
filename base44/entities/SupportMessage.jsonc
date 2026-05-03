@@ -1,0 +1,34 @@
+{
+  "name": "SupportMessage",
+  "type": "object",
+  "properties": {
+    "ticket_id": {
+      "type": "string"
+    },
+    "sender_type": {
+      "type": "string",
+      "enum": [
+        "user",
+        "ai_agent",
+        "human_agent"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "message_type": {
+      "type": "string",
+      "enum": [
+        "text",
+        "image",
+        "file"
+      ],
+      "default": "text"
+    }
+  },
+  "required": [
+    "ticket_id",
+    "sender_type",
+    "message"
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "default": "user"
+    },
+    "profile_picture": {
+      "type": "string"
+    },
+    "bio": {
+      "type": "string"
+    },
+    "phone_number": {
+      "type": "string"
+    },
+    "travel_style": {
+      "type": "string",
+      "enum": [
+        "luxury",
+        "budget",
+        "adventure",
+        "business",
+        "family",
+        "romantic"
+      ]
+    },
+    "interests": {
+      "type": "string"
+    },
+    "loyalty_points": {
+      "type": "number",
+      "default": 0
+    },
+    "loyalty_tier": {
+      "type": "string",
+      "enum": [
+        "Bronze",
+        "Silver",
+        "Gold",
+        "Platinum",
+        "Diamond"
+      ],
+      "default": "Bronze"
+    },
+    "wishlist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "referral_code": {
+      "type": "string"
+    },
+    "referred_by_code": {
+      "type": "string"
+    },
+    "referral_balance_ngn": {
+      "type": "number",
+      "default": 0
+    }
+  }
+}

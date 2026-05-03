@@ -1,0 +1,54 @@
+{
+  "name": "AvailabilityRequest",
+  "type": "object",
+  "properties": {
+    "property_id": {
+      "type": "string"
+    },
+    "property_title": {
+      "type": "string"
+    },
+    "user_email": {
+      "type": "string"
+    },
+    "user_name": {
+      "type": "string"
+    },
+    "check_in": {
+      "type": "string",
+      "format": "date"
+    },
+    "check_out": {
+      "type": "string",
+      "format": "date"
+    },
+    "guests": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ],
+      "default": "pending"
+    },
+    "has_conflict": {
+      "type": "boolean",
+      "default": false
+    },
+    "conflict_details": {
+      "type": "object"
+    },
+    "admin_response": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "property_id",
+    "user_email",
+    "check_in",
+    "check_out"
+  ]
+}

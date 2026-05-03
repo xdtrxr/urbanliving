@@ -1,0 +1,62 @@
+{
+  "name": "Booking",
+  "type": "object",
+  "properties": {
+    "property_id": {
+      "type": "string"
+    },
+    "guest_name": {
+      "type": "string"
+    },
+    "guest_email": {
+      "type": "string"
+    },
+    "check_in": {
+      "type": "string",
+      "format": "date"
+    },
+    "check_out": {
+      "type": "string",
+      "format": "date"
+    },
+    "guests": {
+      "type": "number"
+    },
+    "total_price": {
+      "type": "number"
+    },
+    "special_requests": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "confirmed",
+        "cancelled",
+        "completed"
+      ],
+      "default": "pending"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "unpaid",
+        "paid",
+        "refunded"
+      ],
+      "default": "unpaid"
+    },
+    "payment_method": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "property_id",
+    "guest_email",
+    "check_in",
+    "check_out",
+    "guests",
+    "total_price"
+  ]
+}
