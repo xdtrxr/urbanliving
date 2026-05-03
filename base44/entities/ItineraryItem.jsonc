@@ -1,0 +1,61 @@
+{
+  "name": "ItineraryItem",
+  "type": "object",
+  "properties": {
+    "trip_id": {
+      "type": "string",
+      "description": "Reference to the Trip"
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the activity"
+    },
+    "start_time": {
+      "type": "string",
+      "description": "Start time (HH:MM)"
+    },
+    "end_time": {
+      "type": "string",
+      "description": "End time (HH:MM)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Activity title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Activity details"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "transport",
+        "accommodation",
+        "food",
+        "activity",
+        "sightseeing",
+        "shopping",
+        "other"
+      ],
+      "default": "activity"
+    },
+    "location": {
+      "type": "string",
+      "description": "Location or address"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "cost": {
+      "type": "number",
+      "description": "Estimated cost"
+    }
+  },
+  "required": [
+    "trip_id",
+    "date",
+    "title"
+  ]
+}

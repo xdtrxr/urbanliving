@@ -1,0 +1,48 @@
+{
+  "name": "ChatHistory",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "Email of the user"
+    },
+    "message": {
+      "type": "string",
+      "description": "Message content"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "user",
+        "assistant"
+      ],
+      "description": "Who sent the message"
+    },
+    "message_type": {
+      "type": "string",
+      "enum": [
+        "text",
+        "recommendations",
+        "search_results",
+        "booking_assistance",
+        "booking_details",
+        "no_results",
+        "error"
+      ],
+      "default": "text"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata (search params, etc.)"
+    }
+  },
+  "required": [
+    "user_email",
+    "message",
+    "role"
+  ]
+}

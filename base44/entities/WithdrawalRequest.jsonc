@@ -1,0 +1,46 @@
+{
+  "name": "WithdrawalRequest",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "Email of the requester"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Withdrawal amount in NGN"
+    },
+    "bank_account_id": {
+      "type": "string",
+      "description": "Reference to UserBankAccount"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "reversed"
+      ],
+      "default": "pending"
+    },
+    "paystack_transfer_code": {
+      "type": "string",
+      "description": "Paystack transfer reference"
+    },
+    "processed_at": {
+      "type": "string",
+      "description": "When the withdrawal was processed"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error details if failed"
+    }
+  },
+  "required": [
+    "user_email",
+    "amount",
+    "bank_account_id"
+  ]
+}

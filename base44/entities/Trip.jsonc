@@ -1,0 +1,62 @@
+{
+  "name": "Trip",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Trip name"
+    },
+    "booking_id": {
+      "type": "string",
+      "description": "Reference to the Booking"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Trip start date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Trip end date"
+    },
+    "preferences": {
+      "type": "object",
+      "description": "User preferences for AI trip generation",
+      "properties": {
+        "pace": {
+          "type": "string",
+          "enum": [
+            "relaxed",
+            "moderate",
+            "busy"
+          ]
+        },
+        "interests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "budget": {
+          "type": "string",
+          "enum": [
+            "budget",
+            "moderate",
+            "luxury"
+          ]
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "General trip notes"
+    }
+  },
+  "required": [
+    "name",
+    "booking_id",
+    "start_date",
+    "end_date"
+  ]
+}
