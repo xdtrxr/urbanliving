@@ -257,6 +257,18 @@ export default function PaymentPage() {
           transaction_hash: transactionRef
         });
         console.log('✅ Booking updated successfully');
+
+        // Fire-and-forget referral reward (idempotent on the backend)
+        try {
+          const refResult = await base44.functions.invoke('processReferralReward', {
+            booking_id: bookingData.id,
+          });
+          if (refResult?.data?.success && refResult.data.data?.amount_awarded_ngn) {
+            console.log(`🎁 Referrer awarded ₦${refResult.data.data.amount_awarded_ngn}`);
+          }
+        } catch (refErr) {
+          console.warn('Referral reward call failed (non-fatal):', refErr);
+        }
       }
 
       setPaymentComplete(true);

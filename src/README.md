@@ -76,9 +76,12 @@ src/
 
 | Function | Description |
 |---|---|
-| `sendTelegramNotification` | Sends availability request to admin Telegram with Approve/Reject buttons |
-| `telegramWebhook` | Handles Telegram callback queries (approve/reject actions) |
-| `checkAvailabilityWebhook` | Processes availability checks |
+| `checkAvailabilityWebhook` | Detects date conflicts, creates AvailabilityRequest + pending Booking, notifies admin via Telegram with property image and Approve/Reject buttons |
+| `telegramWebhook` | Handles Telegram callback queries (approve/reject actions); stamps `approved_at` on the matching Booking and emails the guest |
+| `getBookings` | Returns the caller's bookings (or all, for admin) with computed `bucket` and `payment_deadline`; auto-cancels pending bookings past their deadline |
+| `getDashboardStats` | Aggregated bookings/revenue/referral stats for user or admin scope |
+| `attributeReferral` | Attaches a referral code to the current user and creates the Referral record |
+| `processReferralReward` | Idempotently awards 5% of a paid booking to the referrer |
 | `logBookingToGoogleSheet` | Logs confirmed bookings to Google Sheets |
 | `aiCustomerService` | AI-powered support ticket response generation |
 | `generatePropertyData` | AI-assisted property data generation for admins |

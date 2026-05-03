@@ -37,85 +37,34 @@ export default function ReferralCodePrompt({ user, onSubmitted }) {
         setError(null);
         
         try {
-            console.log('🔍 Validating referral code:', code);
-            
-            // Check if user already has a referral
-            const existingReferral = await base44.entities.Referral.filter({
-                referred_email: user.email
+            console.log('🔍 Submitting referral code:', code);
+            const result = await base44.functions.invoke('attributeReferral', {
+                ref_code: code,
             });
-            
-            if (existingReferral.length > 0) {
-                setError("You've already used a referral code!");
-                setIsLoading(false);
-                return;
-            }
-            
-            // 1. Find the referrer by the code they entered (use service role to bypass RLS)
-            const referrers = await base44.asServiceRole.entities.User.filter({ 
-                referral_code: code.trim().toUpperCase() 
-            });
-            
-            if (referrers.length === 0) {
-                setError("This referral code is not valid. Please check and try again.");
-                setIsLoading(false);
-                return;
-            }
-            
-            const referrer = referrers[0];
-            
-            // Prevent self-referral
-            if (referrer.email === user.email) {
-                setError("You cannot use your own referral code!");
-                setIsLoading(false);
-                return;
-            }
-            
-            console.log('✅ Valid referrer found:', referrer.email);
-            
-            // 2. Update the current user's data
-            await base44.auth.updateMe({ 
-                referred_by_code: code.trim().toUpperCase(),
-                referral_prompt_seen: true
-            });
-            
-            console.log('✅ User updated with referral code');
-            
-            // 3. Create a new Referral record (use service role to ensure it works)
-            await base44.asServiceRole.entities.Referral.create({
-                referrer_email: referrer.email,
-                referred_email: user.email,
-                status: 'signed_up'
-            });
-            
-            console.log('✅ Referral record created');
-            
-            // 4. Clear the stored code from localStorage
-            localStorage.removeItem('luxeliving_referral_code');
-            console.log('🧹 Cleared referral code from localStorage');
-            
-            alert('🎉 Referral code applied! Your referrer will earn rewards when you make your first booking!');
-            
-            onSubmitted();
-            setOpen(false);
+            const data = result?.data;
 
+            if (data?.success) {
+                console.log('✅ Referral attributed:', data.data);
+                localStorage.removeItem('luxeliving_referral_code');
+                alert('🎉 Referral code applied! Your referrer will earn rewards when you make your first booking!');
+                onSubmitted();
+                setOpen(false);
+                return;
+            }
+
+            const codeReason = data?.code;
+            if (codeReason === 'ALREADY_ATTRIBUTED') {
+                setError("You've already used a referral code!");
+            } else if (codeReason === 'INVALID_CODE') {
+                setError('This referral code is not valid. Please check and try again.');
+            } else if (codeReason === 'SELF_REFERRAL') {
+                setError('You cannot use your own referral code!');
+            } else {
+                setError(data?.error || 'An error occurred. Please try again.');
+            }
         } catch (err) {
             console.error('❌ Error applying referral code:', err);
-            console.error('Error details:', {
-                message: err.message,
-                response: err.response?.data,
-                stack: err.stack
-            });
-            
-            // Provide specific error messages based on the error type
-            if (err.message?.includes('already exists') || err.message?.includes('duplicate')) {
-                setError("You've already used a referral code!");
-            } else if (err.message?.includes('not found') || err.response?.status === 404) {
-                setError("Invalid referral code. Please check and try again.");
-            } else if (err.message?.includes('permission') || err.response?.status === 403) {
-                setError("Permission denied. Please contact support.");
-            } else {
-                setError(`Error: ${err.message || 'An error occurred. Please try again.'}`);
-            }
+            setError(err.message || 'An error occurred. Please try again.');
         }
         setIsLoading(false);
     };

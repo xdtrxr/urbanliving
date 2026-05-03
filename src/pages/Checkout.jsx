@@ -98,67 +98,18 @@ export default function CheckoutPage() {
     }
   };
 
-  const processReferralReward = async (bookingData, bookingUser) => {
+  const processReferralReward = async (bookingData) => {
     try {
-      console.log('🔍 Checking for referral rewards...');
-      
-      if (!bookingUser.referred_by_code) {
-        console.log('ℹ️ No referral code found for this user');
-        return null;
-      }
-      
-      const referrers = await base44.entities.User.filter({ 
-        referral_code: bookingUser.referred_by_code 
-      });
-      
-      if (referrers.length === 0) {
-        console.log('⚠️ Referrer not found');
-        return null;
-      }
-      
-      const referrer = referrers[0];
-      console.log(`👤 Found referrer: ${referrer.email}`);
-      
-      let referralRecord = await base44.entities.Referral.filter({
-        referrer_email: referrer.email,
-        referred_email: bookingUser.email
-      }).then(r => r[0]);
-      
-      if (!referralRecord) {
-        console.log('⚠️ Referral record not found, creating one...');
-        referralRecord = await base44.entities.Referral.create({
-          referrer_email: referrer.email,
-          referred_email: bookingUser.email,
-          status: 'signed_up'
-        });
-      }
-      
-      if (referralRecord.status === 'booking_completed') {
-        console.log('ℹ️ Referral reward already processed for this user\'s first booking.');
-        return null;
-      }
-      
-      const referralAmountNGN = bookingData.total_price * 0.05;
-      
-      console.log(`🎁 Awarding ₦${referralAmountNGN.toFixed(2)} referral earnings to ${referrer.email}`);
-      
-      const referrerNewBalance = (referrer.referral_balance_ngn || 0) + referralAmountNGN;
-      
-      await base44.entities.User.update(referrer.id, {
-        referral_balance_ngn: referrerNewBalance
-      });
-      
-      await base44.entities.Referral.update(referralRecord.id, {
-        status: 'booking_completed',
+      const result = await base44.functions.invoke('processReferralReward', {
         booking_id: bookingData.id,
-        amount_earned_ngn: referralAmountNGN
       });
-      
-      console.log('✅ Referral reward processed successfully');
-      
-      return { referrerEmail: referrer.email, amountAwardedNGN: referralAmountNGN };
+      const data = result?.data?.data;
+      if (result?.data?.success && data?.amount_awarded_ngn) {
+        return { referrerEmail: data.referrer_email, amountAwardedNGN: data.amount_awarded_ngn };
+      }
+      return null;
     } catch (error) {
-      console.error('❌ Error processing referral reward:', error);
+      console.error('❌ Referral reward call failed:', error);
       return null;
     }
   };
@@ -219,7 +170,7 @@ export default function CheckoutPage() {
         });
         
         const loyaltyResult = await awardBookingPoints(existingBooking);
-        const referralResult = await processReferralReward(existingBooking, user);
+        const referralResult = await processReferralReward(existingBooking);
         
         logBookingToGoogleSheet(existingBooking.id);
         
@@ -275,7 +226,7 @@ export default function CheckoutPage() {
       console.log('✅ Booking created:', bookingData.id);
       
       const loyaltyResult = await awardBookingPoints(bookingData);
-      const referralResult = await processReferralReward(bookingData, user);
+      const referralResult = await processReferralReward(bookingData);
       
       logBookingToGoogleSheet(bookingData.id);
       
@@ -322,130 +273,38 @@ export default function CheckoutPage() {
     setShowSuccessMessage(false);
 
     try {
-      // Step 1: Check for conflicts
-      console.log('\n📋 Step 1: Checking for conflicts...');
-      const existingBookings = await base44.entities.Booking.filter({
-        property_id: property.id,
-        status: { $in: ['confirmed', 'pending'] }
-      });
-      console.log(`Found ${existingBookings.length} existing bookings`);
-
-      const checkInDate = new Date(bookingDetails.checkIn);
-      const checkOutDate = new Date(bookingDetails.checkOut);
-
-      let hasConflict = false;
-      let conflictingBooking = null;
-
-      for (const booking of existingBookings) {
-        const bookingCheckIn = new Date(booking.check_in);
-        const bookingCheckOut = new Date(booking.check_out);
-
-        if (
-          (checkInDate >= bookingCheckIn && checkInDate < bookingCheckOut) ||
-          (checkOutDate > bookingCheckIn && checkOutDate <= bookingCheckOut) ||
-          (checkInDate <= bookingCheckIn && checkOutDate >= bookingCheckOut)
-        ) {
-          hasConflict = true;
-          conflictingBooking = booking;
-          console.log('⚠️ CONFLICT DETECTED:', booking.id);
-          break;
-        }
-      }
-
-      if (!hasConflict) {
-        console.log('✅ No conflicts found');
-      }
-
-      // Step 2: Create AvailabilityRequest
-      console.log('\n📝 Step 2: Creating AvailabilityRequest...');
-      const requestData = {
+      // One backend call handles: conflict detection, AvailabilityRequest creation,
+      // pending Booking creation, and admin Telegram notification.
+      const result = await base44.functions.invoke('checkAvailabilityWebhook', {
         property_id: property.id,
         property_title: property.title,
-        user_email: user.email,
-        user_name: user.full_name || 'Guest User',
-        check_in: format(bookingDetails.checkIn, 'yyyy-MM-dd'),
-        check_out: format(bookingDetails.checkOut, 'yyyy-MM-dd'),
-        guests: bookingDetails.guests,
-        status: 'pending',
-        has_conflict: hasConflict,
-        conflict_details: hasConflict ? {
-          booking_id: conflictingBooking.id,
-          check_in: conflictingBooking.check_in,
-          check_out: conflictingBooking.check_out,
-          guest_email: conflictingBooking.guest_email
-        } : null
-      };
-      console.log('Request data:', requestData);
-
-      const request = await base44.entities.AvailabilityRequest.create(requestData);
-      console.log('✅ AvailabilityRequest created successfully!');
-      console.log('   ID:', request.id);
-      console.log('   Status:', request.status);
-      
-      // Step 3: Create pending Booking - THIS IS CRITICAL
-      console.log('\n📝 Step 3: Creating PENDING Booking record...');
-      const bookingData = {
-        property_id: property.id,
-        guest_name: user.full_name || 'Guest User',
-        guest_email: user.email,
+        property_location: property.location,
         check_in: format(bookingDetails.checkIn, 'yyyy-MM-dd'),
         check_out: format(bookingDetails.checkOut, 'yyyy-MM-dd'),
         guests: bookingDetails.guests,
         total_price: totalPrice,
         special_requests: bookingDetails.specialRequests || '',
-        status: 'pending',
-        payment_status: 'unpaid'
-      };
-      console.log('Booking data to create:', bookingData);
+      });
 
-      let pendingBooking;
-      try {
-        pendingBooking = await base44.entities.Booking.create(bookingData);
-        console.log('✅ PENDING BOOKING CREATED SUCCESSFULLY!');
-        console.log('   Booking ID:', pendingBooking.id);
-        console.log('   Status:', pendingBooking.status);
-        console.log('   Payment Status:', pendingBooking.payment_status);
-        console.log('   Guest Email:', pendingBooking.guest_email);
-        setCreatedBookingId(pendingBooking.id);
-      } catch (bookingError) {
-        console.error('❌ CRITICAL ERROR: Failed to create pending booking!');
-        console.error('Error details:', bookingError);
-        console.error('Error message:', bookingError.message);
-        console.error('Error stack:', bookingError.stack);
-        throw new Error(`Failed to create pending booking: ${bookingError.message}`);
+      const data = result?.data;
+      if (!data?.success) {
+        throw new Error(data?.error || 'Failed to submit availability check');
       }
-      
-      // Step 4: Update state
-      console.log('\n📊 Step 4: Updating UI state...');
-      setAvailabilityRequestId(request.id);
+
+      const { request_id, booking_id, has_conflict } = data.data;
+      console.log('✅ Availability check submitted', { request_id, booking_id, has_conflict });
+
+      setCreatedBookingId(booking_id);
+      setAvailabilityRequestId(request_id);
       setAvailabilityStatus('pending');
       setShowSuccessMessage(true);
       setIsCheckingAvailability(false);
-      console.log('✅ UI state updated');
 
-      // Step 5: Send Telegram notification
-      console.log('\n📤 Step 5: Sending Telegram notification...');
-      try {
-        await base44.functions.invoke('sendTelegramNotification', {
-          request_id: request.id,
-          property_title: property.title,
-          property_id: property.id,
-          property_location: property.location,
-          user_name: user.full_name || 'Guest User',
-          user_email: user.email,
-          user_mobile: user.phone_number || 'Not provided',
-          check_in: format(bookingDetails.checkIn, 'yyyy-MM-dd'),
-          check_out: format(bookingDetails.checkOut, 'yyyy-MM-dd'),
-          guests: bookingDetails.guests,
-          has_conflict: hasConflict
-        });
-        console.log('✅ Telegram notification sent');
-      } catch (telegramError) {
-        console.error('⚠️ Telegram notification failed (non-critical):', telegramError.message);
+      if (has_conflict) {
+        console.warn('⚠️ Conflict flagged — admin will review the overlap');
       }
 
-      console.log('\n═══════════════════════════════════════');
-      console.log('🎉 AVAILABILITY CHECK COMPLETED SUCCESSFULLY!');
+      console.log('🎉 AVAILABILITY CHECK COMPLETED');
       console.log('═══════════════════════════════════════');
       console.log('Summary:');
       console.log('  - AvailabilityRequest ID:', request.id);

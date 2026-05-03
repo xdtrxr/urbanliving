@@ -42,74 +42,23 @@ export default function ReferralTracker() {
         // Step 3: If user is logged in and doesn't have referred_by_code
         if (user && !user.referred_by_code) {
           const storedRefCode = localStorage.getItem('luxeliving_referral_code');
-          
+
           if (storedRefCode) {
-            console.log('🎯 Processing stored referral code for user:', user.email);
-            
+            console.log('🎯 Attributing stored referral code for user:', user.email);
             try {
-              // Verify the referral code exists and belongs to a valid user
-              const referrers = await base44.asServiceRole.entities.User.filter({ 
-                referral_code: storedRefCode.toUpperCase() 
+              const result = await base44.functions.invoke('attributeReferral', {
+                ref_code: storedRefCode,
               });
-              
-              if (referrers.length === 0) {
-                console.error('⚠️ Invalid referral code:', storedRefCode);
-                localStorage.removeItem('luxeliving_referral_code');
-                return;
+              if (result?.data?.success) {
+                console.log('✅ Referral attributed:', result.data.data);
+              } else {
+                console.warn('⚠️ Referral attribution failed:', result?.data?.code || result?.data?.error);
               }
-              
-              const referrer = referrers[0];
-              
-              // Don't allow self-referral
-              if (referrer.email === user.email) {
-                console.error('⚠️ Cannot refer yourself!');
-                localStorage.removeItem('luxeliving_referral_code');
-                return;
-              }
-              
-              console.log('✅ Valid referrer found:', referrer.email);
-              
-              // Check if referral already exists
-              const existingReferral = await base44.entities.Referral.filter({
-                referred_email: user.email
-              });
-              
-              if (existingReferral.length > 0) {
-                console.log('ℹ️ User already has a referral record');
-                localStorage.removeItem('luxeliving_referral_code');
-                return;
-              }
-              
-              // Update user with referred_by_code
-              await base44.auth.updateMe({ 
-                referred_by_code: storedRefCode.toUpperCase(),
-                referral_prompt_seen: true
-              });
-              
-              console.log('✅ User profile updated with referral code');
-              
-              // Create initial Referral record with 'signed_up' status
-              await base44.asServiceRole.entities.Referral.create({
-                referrer_email: referrer.email,
-                referred_email: user.email,
-                status: 'signed_up'
-              });
-              
-              console.log('✅ Referral record created');
-              
-              // Clear localStorage after successful processing
-              localStorage.removeItem('luxeliving_referral_code');
-              console.log('🧹 Cleared referral code from localStorage');
-              
-              console.log('🎉 Referral tracking complete!');
             } catch (error) {
-              console.error('❌ Error processing referral:', error);
-              console.error('Error details:', {
-                message: error.message,
-                code: storedRefCode,
-                user: user.email
-              });
+              console.error('❌ Error attributing referral:', error);
             }
+            // Clear regardless — single attempt per visit
+            localStorage.removeItem('luxeliving_referral_code');
           }
         }
       } catch (error) {
