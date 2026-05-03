@@ -3,33 +3,72 @@
   "type": "object",
   "properties": {
     "user_email": {
-      "type": "string"
+      "type": "string",
+      "description": "User's email address"
     },
     "points_earned": {
-      "type": "number"
+      "type": "number",
+      "description": "Points earned in this transaction"
     },
     "transaction_type": {
       "type": "string",
       "enum": [
         "booking",
-        "quest",
+        "review",
         "referral",
+        "milestone",
         "bonus"
-      ]
+      ],
+      "description": "Type of activity that earned points"
     },
     "booking_id": {
-      "type": "string"
-    },
-    "quest_id": {
-      "type": "string"
+      "type": "string",
+      "description": "Associated booking ID if applicable"
     },
     "description": {
-      "type": "string"
+      "type": "string",
+      "description": "Description of the transaction"
+    },
+    "nft_awarded": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "rarity": {
+          "type": "string"
+        }
+      },
+      "description": "NFT token awarded with this transaction"
     }
   },
   "required": [
     "user_email",
     "points_earned",
-    "transaction_type"
-  ]
+    "transaction_type",
+    "description"
+  ],
+  "rls": {
+    "read": {
+      "user_email": "{{user.email}}"
+    },
+    "write": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
 }
