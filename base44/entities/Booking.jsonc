@@ -57,6 +57,16 @@
         "other"
       ],
       "default": "paystack"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when admin approved the availability request"
+    },
+    "payment_started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when user first opened the payment page"
     }
   },
   "required": [
