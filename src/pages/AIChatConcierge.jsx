@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -178,12 +177,18 @@ export default function AIChatConciergePage() {
   const saveMessageToHistory = async (message, role, messageType = 'text', metadata = null) => {
     if (!user || !sessionId) return;
     
+    const MAX_MESSAGE_LENGTH = 2000;
+    let messageText = typeof message === 'string' ? message : JSON.stringify(message);
+    if (messageText.length > MAX_MESSAGE_LENGTH) {
+      messageText = messageText.substring(0, MAX_MESSAGE_LENGTH) + '... [truncated]';
+    }
+
     try {
       await base44.entities.ChatHistory.create({
         user_email: user.email,
-        message: typeof message === 'string' ? message : JSON.stringify(message),
+        message: messageText,
         role,
-        message_type: messageType,
+        message_type: ['text', 'recommendations', 'booking_assistance'].includes(messageType) ? messageType : 'text',
         session_id: sessionId,
         metadata
       });
