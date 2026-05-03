@@ -29,3 +29,10 @@ dist-ssr
 
 .env
 .vite
+.gstack/
+.claude/
+
+# Claude Code / agent tooling
+CLAUDE.md
+AGENTS.md
+.aider*
