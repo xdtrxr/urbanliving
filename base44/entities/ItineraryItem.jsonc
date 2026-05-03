@@ -4,58 +4,62 @@
   "properties": {
     "trip_id": {
       "type": "string",
-      "description": "Reference to the Trip"
-    },
-    "date": {
-      "type": "string",
-      "format": "date",
-      "description": "Date of the activity"
-    },
-    "start_time": {
-      "type": "string",
-      "description": "Start time (HH:MM)"
-    },
-    "end_time": {
-      "type": "string",
-      "description": "End time (HH:MM)"
+      "description": "Reference to the Trip this item belongs to"
     },
     "title": {
       "type": "string",
-      "description": "Activity title"
+      "description": "Title of the event, e.g., 'Dinner at Le Jules Verne'"
     },
     "description": {
       "type": "string",
-      "description": "Activity details"
+      "description": "A brief description of the item"
     },
     "category": {
       "type": "string",
       "enum": [
-        "transport",
-        "accommodation",
-        "food",
+        "dining",
         "activity",
         "sightseeing",
-        "shopping",
+        "work",
+        "transport",
         "other"
       ],
-      "default": "activity"
+      "description": "Category of the itinerary item"
     },
-    "location": {
+    "date": {
       "type": "string",
-      "description": "Location or address"
+      "format": "date"
     },
-    "notes": {
+    "start_time": {
       "type": "string",
-      "description": "Additional notes"
+      "description": "e.g., '19:00'"
     },
-    "cost": {
-      "type": "number",
-      "description": "Estimated cost"
+    "end_time": {
+      "type": "string",
+      "description": "e.g., '21:00'"
+    },
+    "location_address": {
+      "type": "string",
+      "description": "Address of the item's location"
+    },
+    "cost_estimate": {
+      "type": "string",
+      "description": "Estimated cost, e.g., '$$$' or 'Approx. \u20ac150'"
     }
   },
   "required": [
     "trip_id",
+    "title",
+    "category",
     "date",
-    "title"
-  ]
+    "start_time"
+  ],
+  "rls": {
+    "read": {
+      "created_by": "{{user.email}}"
+    },
+    "write": {
+      "created_by": "{{user.email}}"
+    }
+  }
 }
