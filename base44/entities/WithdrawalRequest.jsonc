@@ -4,15 +4,15 @@
   "properties": {
     "user_email": {
       "type": "string",
-      "description": "Email of the requester"
-    },
-    "amount": {
-      "type": "number",
-      "description": "Withdrawal amount in NGN"
+      "description": "Email of the user requesting withdrawal"
     },
     "bank_account_id": {
       "type": "string",
-      "description": "Reference to UserBankAccount"
+      "description": "Reference to the UserBankAccount used for this withdrawal"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Amount to withdraw in NGN"
     },
     "status": {
       "type": "string",
@@ -23,24 +23,65 @@
         "failed",
         "reversed"
       ],
-      "default": "pending"
+      "default": "pending",
+      "description": "Current status of the withdrawal"
     },
-    "paystack_transfer_code": {
+    "transfer_code": {
       "type": "string",
-      "description": "Paystack transfer reference"
+      "description": "Paystack transfer code/reference"
     },
-    "processed_at": {
+    "transfer_id": {
       "type": "string",
-      "description": "When the withdrawal was processed"
+      "description": "Paystack transfer ID"
     },
     "error_message": {
       "type": "string",
-      "description": "Error details if failed"
+      "description": "Error details if the withdrawal failed"
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the withdrawal was requested"
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the withdrawal was completed/failed"
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "Internal notes from admin review"
     }
   },
   "required": [
     "user_email",
-    "amount",
-    "bank_account_id"
-  ]
+    "bank_account_id",
+    "amount"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "write": {
+      "$or": [
+        {
+          "user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
 }
