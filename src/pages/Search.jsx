@@ -44,42 +44,35 @@ export default function SearchPage() {
     }
   };
   
+  const buildSearchParams = useCallback(() => ({
+    location: searchQuery,
+    guests,
+    bedrooms,
+    propertyType: filters.propertyType,
+    minPrice: filters.minPrice,
+    maxPrice: filters.maxPrice,
+    amenities: filters.amenities,
+    limit: 50,
+  }), [searchQuery, guests, bedrooms, filters]);
+
   const handleSearch = async () => {
-    console.log('🔍 Search initiated:', { searchQuery, guests, bedrooms });
-    
-    await search({
-      location: searchQuery,
-      guests,
-      bedrooms,
-      propertyType: filters.propertyType,
-      limit: 50
-    });
+    console.log('🔍 Search initiated');
+    await search(buildSearchParams());
   };
-  
-  const applyFilters = useCallback(() => {
-    let filtered = properties;
 
-    filtered = filtered.filter(p => 
-      p.price_per_night >= filters.minPrice && 
-      p.price_per_night <= filters.maxPrice
-    );
-
-    if (filters.propertyType !== "any") {
-      filtered = filtered.filter(p => p.property_type === filters.propertyType);
-    }
-
-    if (filters.amenities.length > 0) {
-      filtered = filtered.filter(p => 
-        filters.amenities.every(amenity => p.amenities?.includes(amenity))
-      );
-    }
-
-    setFilteredProperties(filtered);
-  }, [properties, filters]);
-
+  // Filtering is now done at the database layer; the displayed list mirrors fetched results.
   useEffect(() => {
-    applyFilters();
-  }, [applyFilters]);
+    setFilteredProperties(properties);
+  }, [properties]);
+
+  // Re-fetch when filter panel changes (debounced) so price/amenities round-trip to the DB.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      search(buildSearchParams());
+    }, 400);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.minPrice, filters.maxPrice, filters.propertyType, filters.amenities]);
 
   const handleAIRecommendations = async () => {
     if (!user) {

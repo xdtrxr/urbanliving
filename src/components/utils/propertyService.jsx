@@ -255,46 +255,55 @@ class PropertyService {
   async searchDatabase(params = {}) {
     console.log('[PropertyService] 📊 DATABASE SEARCH');
     console.log('[PropertyService] Search params:', JSON.stringify(params, null, 2));
-    
+
     try {
-      // Build filter criteria
       const filter = {};
 
-      // Location filter (city or country)
+      // Location: match against city OR country OR address (case-insensitive substring)
       if (params.location && params.location.trim() !== '') {
-        const locationLower = params.location.toLowerCase().trim();
-        console.log('[PropertyService] Filtering by location (case-insensitive):', locationLower);
-        filter['location.city'] = { $regex: locationLower, $options: 'i' };
+        const locationTrim = params.location.trim();
+        filter.$or = [
+          { 'location.city': { $regex: locationTrim, $options: 'i' } },
+          { 'location.country': { $regex: locationTrim, $options: 'i' } },
+          { 'location.address': { $regex: locationTrim, $options: 'i' } },
+        ];
       }
 
-      // Guests filter
+      // Guests
       if (params.guests) {
-        console.log('[PropertyService] Filtering by guests (>= ):', params.guests);
         filter.max_guests = { $gte: parseInt(params.guests) };
       }
 
-      // Bedrooms filter
+      // Bedrooms / property type from the bedrooms picker
       if (params.bedrooms && params.bedrooms !== 'any') {
         if (params.bedrooms === 'studio') {
-          console.log('[PropertyService] Filtering by property_type: studio');
           filter.property_type = 'studio';
         } else if (params.bedrooms === 'loft') {
-          console.log('[PropertyService] Filtering by property_type: loft');
           filter.property_type = 'loft';
         } else {
-          console.log('[PropertyService] Filtering by bedrooms (>=):', params.bedrooms);
           filter.bedrooms = { $gte: parseInt(params.bedrooms) };
         }
       }
 
-      // Property type filter
+      // Property type from the filter panel (overrides above only if explicitly set)
       if (params.propertyType && params.propertyType !== 'any') {
-        console.log('[PropertyService] Filtering by property_type:', params.propertyType);
         filter.property_type = params.propertyType;
       }
 
+      // Price range — push to DB instead of trimming client-side
+      const priceRange = {};
+      if (typeof params.minPrice === 'number' && params.minPrice > 0) priceRange.$gte = params.minPrice;
+      if (typeof params.maxPrice === 'number' && params.maxPrice > 0) priceRange.$lte = params.maxPrice;
+      if (Object.keys(priceRange).length > 0) {
+        filter.price_per_night = priceRange;
+      }
+
+      // Amenities — match all selected
+      if (Array.isArray(params.amenities) && params.amenities.length > 0) {
+        filter.amenities = { $all: params.amenities };
+      }
+
       console.log('[PropertyService] Final database filter:', JSON.stringify(filter, null, 2));
-      console.log('[PropertyService] Executing query with limit:', params.limit || 50);
 
       const properties = await base44.entities.Property.filter(
         Object.keys(filter).length > 0 ? filter : {},
