@@ -13,10 +13,11 @@ import BookingAssistant from '../components/chat/BookingAssistant';
 import RecommendationCard from '../components/chat/RecommendationCard';
 import SearchResultCard from '../components/chat/SearchResultCard';
 import BookingDetailsCard from '../components/chat/BookingDetailsCard'; // New import
+import BookingConfirmCard from '../components/chat/BookingConfirmCard';
 import { usePropertySearch } from "../components/hooks/usePropertySearch";
 
 const welcomeLines = [
-  "Hello! 👋 I'm **Agent Luxe**, your AI rental assistant.",
+  "Hello! 👋 I'm **Agent Nova**, your AI rental assistant.",
   "I'm here to help you find the perfect property, manage bookings, and provide personalized recommendations.",
   "I can assist with property searches, booking inquiries, check-in details, local recommendations, and much more! ✨"
 ];
@@ -120,6 +121,78 @@ export default function AIChatConciergePage() {
   useEffect(() => {
     initializeChatSession();
   }, [initializeChatSession]);
+
+  // Proactive Nova nudges: surface unread booking status changes when chat reopens.
+  // Tracks announced booking IDs in localStorage so we don't re-nudge.
+  const surfaceProactiveNudges = useCallback(async () => {
+    try {
+      const result = await base44.functions.invoke('getBookings', { scope: 'mine' });
+      if (!result?.data?.success) return;
+      const bookings = result.data.data || [];
+
+      const seenKey = 'nova_announced_booking_events';
+      let seen = {};
+      try { seen = JSON.parse(localStorage.getItem(seenKey) || '{}'); } catch { seen = {}; }
+
+      const nudges = [];
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+
+      for (const b of bookings) {
+        // Approved + awaiting payment
+        if (b.bucket === 'pending-approval' && b.approved_at && !b.payment_started_at) {
+          const key = `approved:${b.id}`;
+          if (!seen[key]) {
+            nudges.push(`✅ Your request for booking \`${b.id}\` was approved. You have ~1 hour to pay before it auto-cancels.`);
+            seen[key] = now;
+          }
+        }
+        // Newly paid/confirmed in last 24h
+        if (b.bucket === 'upcoming' && b.paid_at) {
+          const paidMs = Date.parse(b.paid_at);
+          if (!Number.isNaN(paidMs) && now - paidMs < dayMs) {
+            const key = `paid:${b.id}`;
+            if (!seen[key]) {
+              nudges.push(`🎉 Payment confirmed for booking \`${b.id}\`. See you soon!`);
+              seen[key] = now;
+            }
+          }
+        }
+        // Auto-cancelled (timer expired)
+        if (b.bucket === 'cancelled' && b.payment_deadline) {
+          const key = `expired:${b.id}`;
+          if (!seen[key]) {
+            nudges.push(`⏰ Booking \`${b.id}\` was auto-cancelled because the payment window expired. Want me to find another option?`);
+            seen[key] = now;
+          }
+        }
+      }
+
+      if (nudges.length === 0) return;
+
+      // Prune entries older than 30 days
+      for (const k of Object.keys(seen)) {
+        if (now - (seen[k] || 0) > 30 * dayMs) delete seen[k];
+      }
+      localStorage.setItem(seenKey, JSON.stringify(seen));
+
+      const nudgeMessage = {
+        id: `nova_nudge_${Date.now()}`,
+        role: 'assistant',
+        content: `Quick update before we continue:\n\n${nudges.map((n) => `• ${n}`).join('\n')}`,
+      };
+      setMessages((prev) => [nudgeMessage, ...prev]);
+    } catch (err) {
+      console.warn('Proactive nudge check failed:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoadingHistory && user) {
+      surfaceProactiveNudges();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingHistory, user]);
   
   const checkChatQuestCompletion = async (userData, messageCount) => {
     try {
@@ -151,14 +224,14 @@ export default function AIChatConciergePage() {
           user_email: userData.email,
           points_earned: quest.points_reward,
           transaction_type: 'engagement',
-          description: 'Daily chat with Agent Luxe',
+          description: 'Daily chat with Agent Nova',
           quest_id: quest.id
         });
 
         await base44.entities.Quest.update(quest.id, { status: 'claimed' });
 
         setTimeout(() => {
-          alert(`🎉 Daily quest completed! You earned ${quest.points_reward} Luxe Points for chatting with Agent Luxe today!`);
+          alert(`🎉 Daily quest completed! You earned ${quest.points_reward} Luxe Points for chatting with Agent Nova today!`);
         }, 1500);
       }
     } catch (error) {
@@ -232,7 +305,7 @@ export default function AIChatConciergePage() {
       }
 
       const prompt = `
-You are **Agent Luxe (AI Rental Assistant)** — an expert AI co-host that manages and optimizes short-term rental properties for LuxeLiving.
+You are **Agent Nova (AI Rental Assistant)** — an expert AI co-host that manages and optimizes short-term rental properties for LuxeLiving.
 
 ## 🎯 YOUR CORE MISSION
 Help guests find perfect properties, manage bookings, answer questions, and deliver five-star experiences through warm, professional, and efficient service.
@@ -362,13 +435,36 @@ If user wants to browse properties AND suitable properties exist:
   "response": "Brief introduction message"
 }
 
-**ACTION 4: General Conversation**
+**ACTION 4: Confirm Booking via Chat (end-to-end)**
+When the user has chosen a specific property AND specified check_in, check_out, and guests in the conversation, propose the booking for one-tap confirmation. The user will tap "Submit Booking Request" to send it to admin for approval.
+
+CRITICAL — only return this action when ALL of these are known: a specific property_id from the database, a check_in date (YYYY-MM-DD), a check_out date (YYYY-MM-DD), and a guest count. If anything is missing, ASK in conversation; do NOT guess.
+
+{
+  "action": "confirm_booking",
+  "booking": {
+    "property_id": "exact_id_from_database",
+    "property_title": "exact_title",
+    "property_location": { "city": "...", "country": "..." },
+    "check_in": "YYYY-MM-DD",
+    "check_out": "YYYY-MM-DD",
+    "guests": 2,
+    "nights": 3,
+    "price_per_night": 50000,
+    "total_price": 150000,
+    "special_requests": "optional notes from the conversation, or empty"
+  },
+  "response": "Brief one-sentence confirmation prompt to the user."
+}
+
+**ACTION 5: General Conversation**
 For other queries, return just a text response (not JSON).
 
 ## 🌟 REMEMBER
 - Be helpful and proactive
 - Show booking details when asked
 - Use interactive forms for searches
+- Use confirm_booking only when property + dates + guests are ALL determined
 - **NEVER RECOMMEND FAKE PROPERTIES**
 - **ALWAYS return proper JSON for actions**
 - **Recommend from ALL available properties (database + MCP/Airbnb)**
@@ -431,6 +527,15 @@ For other queries, return just a text response (not JSON).
             };
             await saveMessageToHistory(assistantMessage.content, 'assistant');
           }
+        } else if (parsedResult.action === 'confirm_booking') {
+          assistantMessage = {
+            id: Date.now() + 1,
+            role: 'assistant',
+            type: 'booking_confirm',
+            content: parsedResult.response,
+            booking: parsedResult.booking,
+          };
+          await saveMessageToHistory(parsedResult.response, 'assistant', 'booking_confirm', parsedResult.booking);
         } else if (parsedResult.action === 'initiate_booking') {
           assistantMessage = { 
             id: Date.now() + 1, 
@@ -490,7 +595,7 @@ For other queries, return just a text response (not JSON).
     setIsLoading(true);
 
     try {
-      console.log('🤖 Agent Luxe: Fetching properties via smart search...');
+      console.log('🤖 Agent Nova: Fetching properties via smart search...');
       
       let propertiesForAI = [];
       try {
@@ -534,7 +639,7 @@ For other queries, return just a text response (not JSON).
             source: p.source || 'database' // Ensure source is included
           }));
           
-          console.log(`🤖 Agent Luxe: Using ${mappedPropertiesForAI.length} properties (DB + MCP)`);
+          console.log(`🤖 Agent Nova: Using ${mappedPropertiesForAI.length} properties (DB + MCP)`);
           console.log(`📊 Sources: ${[...new Set(mappedPropertiesForAI.map(p => p.source))].join(', ')}`);
           
           await continueWithAI(mappedPropertiesForAI, conversationContext, userMessage);
@@ -679,7 +784,7 @@ For other queries, return just a text response (not JSON).
                 <Sparkles className="w-4 h-4 text-amber-400" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-slate-900">Agent Luxe</h1>
+                <h1 className="text-lg font-semibold text-slate-900">Agent Nova</h1>
                 <p className="text-xs text-slate-500">Your AI Travel Concierge</p>
               </div>
             </div>
@@ -753,6 +858,15 @@ For other queries, return just a text response (not JSON).
                             ));
                           }}
                         />
+                      </div>
+                    ) : message.type === 'booking_confirm' ? (
+                      <div className="space-y-3">
+                        {message.content && (
+                          <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm">
+                            <p className="text-sm text-slate-800">{message.content}</p>
+                          </div>
+                        )}
+                        <BookingConfirmCard booking={message.booking} />
                       </div>
                     ) : message.type === 'booking_details' ? (
                       <div className="space-y-4">
@@ -903,7 +1017,7 @@ For other queries, return just a text response (not JSON).
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Message Agent Luxe..."
+              placeholder="Message Agent Nova..."
               className="flex-1 py-2.5 px-3.5 rounded-lg border-slate-300 focus:border-slate-500 focus:ring-slate-500/30 resize-none text-sm"
               disabled={isLoading}
             />
