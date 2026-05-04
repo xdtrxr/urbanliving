@@ -82,6 +82,8 @@ src/
 | `getDashboardStats` | Aggregated bookings/revenue/referral stats for user or admin scope |
 | `attributeReferral` | Attaches a referral code to the current user and creates the Referral record |
 | `processReferralReward` | Idempotently awards 5% of a paid booking to the referrer |
+| `verifyPaystackPayment` | Server-verifies a Paystack reference, marks booking paid, notifies admin, triggers referral reward |
+| `paystackWebhook` | Receives Paystack webhooks (HMAC-SHA512 verified), processes `charge.success` idempotently as authoritative source of truth |
 | `logBookingToGoogleSheet` | Logs confirmed bookings to Google Sheets |
 | `aiCustomerService` | AI-powered support ticket response generation |
 | `generatePropertyData` | AI-assisted property data generation for admins |

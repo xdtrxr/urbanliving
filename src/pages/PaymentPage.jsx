@@ -247,41 +247,42 @@ export default function PaymentPage() {
       console.log('=== PROCESSING PAYMENT SUCCESS ===');
       console.log('Transaction Ref:', transactionRef);
       console.log('Method:', method);
-      
-      // Update booking status
-      if (bookingData.id && !bookingData.id.startsWith('temp_')) {
-        await base44.entities.Booking.update(bookingData.id, {
-          payment_status: 'paid',
-          status: 'confirmed',
-          payment_method: method,
-          transaction_hash: transactionRef
-        });
-        console.log('✅ Booking updated successfully');
 
-        // Fire-and-forget referral reward (idempotent on the backend)
-        try {
-          const refResult = await base44.functions.invoke('processReferralReward', {
+      if (bookingData.id && !bookingData.id.startsWith('temp_')) {
+        if (method === 'paystack') {
+          // Server verifies with Paystack (authoritative); also notifies admin and triggers referral reward.
+          const result = await base44.functions.invoke('verifyPaystackPayment', {
             booking_id: bookingData.id,
+            reference: transactionRef,
           });
-          if (refResult?.data?.success && refResult.data.data?.amount_awarded_ngn) {
-            console.log(`🎁 Referrer awarded ₦${refResult.data.data.amount_awarded_ngn}`);
+          if (!result?.data?.success) {
+            throw new Error(result?.data?.error || 'Payment verification failed');
           }
-        } catch (refErr) {
-          console.warn('Referral reward call failed (non-fatal):', refErr);
+          console.log('✅ Payment verified server-side');
+        } else {
+          // Non-Paystack methods (e.g. Stripe simulation) still go via direct update.
+          await base44.entities.Booking.update(bookingData.id, {
+            payment_status: 'paid',
+            status: 'confirmed',
+            payment_method: method,
+            transaction_hash: transactionRef,
+          });
+          try {
+            await base44.functions.invoke('processReferralReward', { booking_id: bookingData.id });
+          } catch (refErr) {
+            console.warn('Referral reward call failed (non-fatal):', refErr);
+          }
         }
       }
 
       setPaymentComplete(true);
-      
-      // Redirect after 3 seconds
-      setTimeout(() => {
-        console.log('Redirecting to bookings page...');
-        navigate(createPageUrl('Bookings'));
-      }, 3000);
-      
+      setTimeout(() => navigate(createPageUrl('Bookings')), 3000);
     } catch (error) {
-      console.error('Error updating booking:', error);
-      alert('Payment successful but failed to update booking. Please contact support with reference: ' + transactionRef);
+      console.error('Error verifying payment:', error);
+      alert(
+        `Your payment has been received but we could not verify it automatically. ` +
+        `Please contact support with reference: ${transactionRef}\n\nDetails: ${error.message || error}`
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -341,7 +342,7 @@ export default function PaymentPage() {
         key: paystackPublicKey,
         email: paymentDetails.email,
         amount: Math.round(bookingData.total_price * 100),
-        currency: 'USD',
+        currency: 'NGN',
         ref: paymentReference,
         metadata: {
           booking_id: bookingData.id,
