@@ -1,6 +1,7 @@
-import { createClientFromRequest, createClient } from 'npm:@base44/sdk@0.7.1';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
 
 const PAYSTACK_VERIFY_URL = 'https://api.paystack.co/transaction/verify';
+const REFERRAL_RATE = 0.05;
 
 async function notifyAdmin(opts: {
     bookingId: string;
@@ -139,15 +140,41 @@ Deno.serve(async (req) => {
             reference,
         });
 
+        // Inline referral reward — direct service-role writes, idempotent.
         try {
-            const appId = Deno.env.get('BASE44_APP_ID');
-            const apiKey = Deno.env.get('BASE44_SERVICE_ROLE_KEY');
-            if (appId && apiKey) {
-                const sdk = createClient({ appId, serviceToken: apiKey, requiresAuth: false });
-                await sdk.functions.invoke('processReferralReward', { booking_id: booking.id });
+            const guests = await base44.asServiceRole.entities.User.filter({ email: booking.guest_email });
+            const guest = guests[0];
+            if (guest?.referred_by_code) {
+                const referrers = await base44.asServiceRole.entities.User.filter({ referral_code: guest.referred_by_code });
+                const referrer = referrers[0];
+                if (referrer) {
+                    let referrals = await base44.asServiceRole.entities.Referral.filter({
+                        referrer_email: referrer.email,
+                        referred_email: guest.email,
+                    });
+                    let referral = referrals[0];
+                    if (!referral) {
+                        referral = await base44.asServiceRole.entities.Referral.create({
+                            referrer_email: referrer.email,
+                            referred_email: guest.email,
+                            status: 'signed_up',
+                        });
+                    }
+                    if (referral.status !== 'booking_completed') {
+                        const amountNGN = Math.round((Number(booking.total_price) || 0) * REFERRAL_RATE);
+                        const newBalance = (Number(referrer.referral_balance_ngn) || 0) + amountNGN;
+                        await base44.asServiceRole.entities.User.update(referrer.id, { referral_balance_ngn: newBalance });
+                        await base44.asServiceRole.entities.Referral.update(referral.id, {
+                            status: 'booking_completed',
+                            booking_id: booking.id,
+                            amount_earned_ngn: amountNGN,
+                        });
+                        console.log(`🎁 Referrer ${referrer.email} awarded ₦${amountNGN}`);
+                    }
+                }
             }
         } catch (refErr) {
-            console.warn('processReferralReward call failed (non-fatal):', refErr);
+            console.warn('Inline referral reward failed (non-fatal):', refErr);
         }
 
         return new Response(JSON.stringify({

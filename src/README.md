@@ -81,7 +81,7 @@ src/
 | `getBookings` | Returns the caller's bookings (or all, for admin) with computed `bucket` and `payment_deadline`; auto-cancels pending bookings past their deadline |
 | `getDashboardStats` | Aggregated bookings/revenue/referral stats for user or admin scope |
 | `attributeReferral` | Attaches a referral code to the current user and creates the Referral record |
-| `processReferralReward` | Idempotently awards 5% of a paid booking to the referrer |
+| `processReferralReward` | Idempotently awards 5% of a paid booking to the referrer (used by Checkout instant-confirm; Paystack flows inline the same logic) |
 | `verifyPaystackPayment` | Server-verifies a Paystack reference, marks booking paid, notifies admin, triggers referral reward |
 | `paystackWebhook` | Receives Paystack webhooks (HMAC-SHA512 verified), processes `charge.success` idempotently as authoritative source of truth |
 | `logBookingToGoogleSheet` | Logs confirmed bookings to Google Sheets |

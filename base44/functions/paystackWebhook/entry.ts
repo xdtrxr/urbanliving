@@ -1,5 +1,7 @@
 import { createClient } from 'npm:@base44/sdk@0.7.1';
 
+const REFERRAL_RATE = 0.05;
+
 async function hmacSha512Hex(secret: string, body: string): Promise<string> {
     const enc = new TextEncoder();
     const key = await crypto.subtle.importKey(
@@ -128,10 +130,41 @@ Deno.serve(async (req) => {
             reference,
         });
 
+        // Inline referral reward — direct service-role writes, idempotent.
         try {
-            await sdk.functions.invoke('processReferralReward', { booking_id: booking.id });
+            const guests = await sdk.asServiceRole.entities.User.filter({ email: booking.guest_email });
+            const guest = guests[0];
+            if (guest?.referred_by_code) {
+                const referrers = await sdk.asServiceRole.entities.User.filter({ referral_code: guest.referred_by_code });
+                const referrer = referrers[0];
+                if (referrer) {
+                    let referrals = await sdk.asServiceRole.entities.Referral.filter({
+                        referrer_email: referrer.email,
+                        referred_email: guest.email,
+                    });
+                    let referral = referrals[0];
+                    if (!referral) {
+                        referral = await sdk.asServiceRole.entities.Referral.create({
+                            referrer_email: referrer.email,
+                            referred_email: guest.email,
+                            status: 'signed_up',
+                        });
+                    }
+                    if (referral.status !== 'booking_completed') {
+                        const amountNGN = Math.round((Number(booking.total_price) || 0) * REFERRAL_RATE);
+                        const newBalance = (Number(referrer.referral_balance_ngn) || 0) + amountNGN;
+                        await sdk.asServiceRole.entities.User.update(referrer.id, { referral_balance_ngn: newBalance });
+                        await sdk.asServiceRole.entities.Referral.update(referral.id, {
+                            status: 'booking_completed',
+                            booking_id: booking.id,
+                            amount_earned_ngn: amountNGN,
+                        });
+                        console.log(`🎁 Referrer ${referrer.email} awarded ₦${amountNGN}`);
+                    }
+                }
+            }
         } catch (refErr) {
-            console.warn('processReferralReward (webhook path) failed:', refErr);
+            console.warn('Webhook inline referral reward failed (non-fatal):', refErr);
         }
 
         return ack({ processed: true, booking_id: booking.id });
