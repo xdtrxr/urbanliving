@@ -15,6 +15,8 @@ import {
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const WITHDRAWAL_THRESHOLD_NGN = 10000;
+
 const statusConfig = {
   pending: {
     icon: Clock,
@@ -85,15 +87,15 @@ export default function WithdrawalsPage() {
 
   const handleSubmitRequest = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.amount || !formData.bank_account_id) {
       alert('Please fill in all fields');
       return;
     }
 
     const amount = parseFloat(formData.amount);
-    if (amount < 1000) {
-      alert('Minimum withdrawal amount is ₦1,000');
+    if (amount < WITHDRAWAL_THRESHOLD_NGN) {
+      alert(`Minimum withdrawal amount is ₦${WITHDRAWAL_THRESHOLD_NGN.toLocaleString()}`);
       return;
     }
 
@@ -171,14 +173,29 @@ export default function WithdrawalsPage() {
               </Button>
             </Link>
           </Card>
+        ) : availableBalance < WITHDRAWAL_THRESHOLD_NGN ? (
+          <Card className="bg-amber-50 border-amber-200 rounded-2xl p-6 mb-8">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-900 mb-1">
+                  Withdrawal threshold not met
+                </p>
+                <p className="text-sm text-amber-800">
+                  You need at least ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} in referral
+                  earnings to request a withdrawal. You currently have ₦{availableBalance.toLocaleString()}
+                  {' '}— ₦{(WITHDRAWAL_THRESHOLD_NGN - availableBalance).toLocaleString()} to go.
+                </p>
+              </div>
+            </div>
+          </Card>
         ) : !showRequestForm ? (
           <Button
             onClick={() => setShowRequestForm(true)}
-            disabled={availableBalance < 1000}
             className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white py-6 rounded-2xl font-semibold mb-8"
           >
             <Send className="w-5 h-5 mr-2" />
-            {availableBalance < 1000 ? 'Minimum Balance Required (₦1,000)' : 'Request Withdrawal'}
+            Request Withdrawal
           </Button>
         ) : (
           <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
@@ -219,16 +236,16 @@ export default function WithdrawalsPage() {
                   <Input
                     id="amount"
                     type="number"
-                    min="1000"
+                    min={WITHDRAWAL_THRESHOLD_NGN}
                     max={availableBalance}
                     step="100"
-                    placeholder="Enter amount"
+                    placeholder={`Min ₦${WITHDRAWAL_THRESHOLD_NGN.toLocaleString()}`}
                     value={formData.amount}
                     onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
                     className="mt-1 rounded-xl"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    Minimum: ₦1,000 • Maximum: ₦{availableBalance.toLocaleString()}
+                    Minimum: ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} • Maximum: ₦{availableBalance.toLocaleString()}
                   </p>
                 </div>
 

@@ -1,9 +1,11 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
 
+const WITHDRAWAL_THRESHOLD_NGN = 10000;
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
-        
+
         // Authenticate user
         const user = await base44.auth.me();
         if (!user) {
@@ -14,22 +16,27 @@ Deno.serve(async (req) => {
 
         // Validate input
         if (!amount || !bank_account_id) {
-            return Response.json({ 
-                error: 'Missing required fields: amount and bank_account_id' 
+            return Response.json({
+                error: 'Missing required fields: amount and bank_account_id'
             }, { status: 400 });
         }
 
-        if (amount < 1000) {
-            return Response.json({ 
-                error: 'Minimum withdrawal amount is ₦1,000' 
+        if (amount < WITHDRAWAL_THRESHOLD_NGN) {
+            return Response.json({
+                error: `Minimum withdrawal amount is ₦${WITHDRAWAL_THRESHOLD_NGN.toLocaleString()}`
             }, { status: 400 });
         }
 
-        // Check user's available balance
+        // Check user's available balance — must meet threshold AND have enough
         const userBalance = user.referral_balance_ngn || 0;
+        if (userBalance < WITHDRAWAL_THRESHOLD_NGN) {
+            return Response.json({
+                error: `You need at least ₦${WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} in referral earnings to withdraw. Current balance: ₦${userBalance.toLocaleString()}.`
+            }, { status: 400 });
+        }
         if (amount > userBalance) {
-            return Response.json({ 
-                error: `Insufficient balance. You have ₦${userBalance.toLocaleString()} available.` 
+            return Response.json({
+                error: `Insufficient balance. You have ₦${userBalance.toLocaleString()} available.`
             }, { status: 400 });
         }
 
