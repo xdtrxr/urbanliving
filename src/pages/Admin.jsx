@@ -116,6 +116,11 @@ export default function AdminPage() {
   const [platformStatsAt, setPlatformStatsAt] = useState(null);
   const [isRefreshingPlatformStats, setIsRefreshingPlatformStats] = useState(false);
 
+  // Pending availability requests for in-app admin decisions
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [decidingId, setDecidingId] = useState(null);
+
   useEffect(() => {
     checkAdminAccess();
   }, []);
@@ -125,10 +130,53 @@ export default function AdminPage() {
         loadSupportTickets();
         loadProperties();
         loadPlatformStats();
-        const id = setInterval(() => loadPlatformStats(true), 30000);
-        return () => clearInterval(id);
+        loadPendingRequests();
+        const statsTimer = setInterval(() => loadPlatformStats(true), 30000);
+        const reqTimer = setInterval(() => loadPendingRequests(true), 15000);
+        return () => {
+          clearInterval(statsTimer);
+          clearInterval(reqTimer);
+        };
     }
   }, [isAuthorized]);
+
+  const loadPendingRequests = async (silent = false) => {
+    if (!silent) setIsLoadingRequests(true);
+    try {
+      const requests = await base44.entities.AvailabilityRequest.filter(
+        { status: 'pending' },
+        '-created_date',
+        50
+      );
+      setPendingRequests(requests || []);
+    } catch (err) {
+      console.error('Failed to load pending availability requests:', err);
+    } finally {
+      if (!silent) setIsLoadingRequests(false);
+    }
+  };
+
+  const handleDecide = async (requestId, action) => {
+    setDecidingId(requestId);
+    try {
+      const result = await base44.functions.invoke('decideAvailabilityRequest', {
+        request_id: requestId,
+        action,
+      });
+      if (!result?.data?.success) {
+        throw new Error(result?.data?.error || 'Failed to update request');
+      }
+      // Optimistic remove
+      setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      loadPlatformStats(true);
+    } catch (err) {
+      console.error('Decision failed:', err);
+      alert(`Failed to ${action} request: ${err.message || err}`);
+      loadPendingRequests();
+    } finally {
+      setDecidingId(null);
+    }
+  };
 
   const loadPlatformStats = async (silent = false) => {
     if (!silent) setIsRefreshingPlatformStats(true);
@@ -650,6 +698,97 @@ export default function AdminPage() {
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Pending Availability Requests */}
+        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Pending Availability Requests
+                {pendingRequests.length > 0 && (
+                  <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                    {pendingRequests.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadPendingRequests()}
+                disabled={isLoadingRequests}
+                className="rounded-xl"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoadingRequests ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoadingRequests && pendingRequests.length === 0 ? (
+              <div className="text-center py-6 text-slate-500 text-sm">Loading requests...</div>
+            ) : pendingRequests.length === 0 ? (
+              <div className="text-center py-6 text-slate-500 text-sm">No pending requests right now.</div>
+            ) : (
+              <div className="space-y-3">
+                {pendingRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    className={`rounded-2xl border p-4 ${
+                      req.has_conflict ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div className="flex-1 min-w-[260px]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-semibold text-slate-900">{req.property_title || 'Untitled property'}</p>
+                          {req.has_conflict && (
+                            <Badge className="bg-red-100 text-red-800 border-red-200 text-xs">⚠ Conflict</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-600">
+                          <span className="font-medium">{req.user_name || req.user_email}</span> · {req.user_email}
+                        </p>
+                        <p className="text-sm text-slate-700 mt-1">
+                          {req.check_in} → {req.check_out} · {req.guests} guest{req.guests === 1 ? '' : 's'}
+                        </p>
+                        {req.has_conflict && req.conflict_details && (
+                          <p className="text-xs text-red-700 mt-2">
+                            Conflicts with booking <code className="font-mono">{req.conflict_details.booking_id}</code>
+                            {' '}({req.conflict_details.check_in} → {req.conflict_details.check_out})
+                          </p>
+                        )}
+                        <p className="text-xs text-slate-400 mt-2">
+                          Requested {req.created_date ? new Date(req.created_date).toLocaleString() : 'recently'}
+                          {' · '}ID <code className="font-mono">{req.id}</code>
+                        </p>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <Button
+                          size="sm"
+                          onClick={() => handleDecide(req.id, 'approve')}
+                          disabled={decidingId === req.id}
+                          className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
+                        >
+                          {decidingId === req.id ? 'Working…' : '✅ Approve'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDecide(req.id, 'reject')}
+                          disabled={decidingId === req.id}
+                          className="rounded-xl border-red-300 text-red-700 hover:bg-red-50"
+                        >
+                          ❌ Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
