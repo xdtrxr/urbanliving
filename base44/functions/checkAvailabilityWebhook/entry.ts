@@ -47,6 +47,8 @@ async function sendAdminTelegram(opts: {
     guests: number;
     checkIn: string;
     checkOut: string;
+    totalPrice: number;
+    specialRequests: string;
     hasConflict: boolean;
     conflicting: any | null;
     requestId: string;
@@ -68,6 +70,14 @@ async function sendAdminTelegram(opts: {
         ? `\n\n⚠️ *${conflictText}*\n• Conflicting Booking: \`${opts.conflicting.id}\`\n• Dates: ${opts.conflicting.check_in} → ${opts.conflicting.check_out}\n• Guest: ${opts.conflicting.guest_email}`
         : `\n\n✅ *${conflictText}*\nNo overlapping bookings.`;
 
+    const specialRequestsBlock = opts.specialRequests && opts.specialRequests.trim()
+        ? `\n\n📝 *Special Requests:*\n${opts.specialRequests.trim()}`
+        : '';
+
+    const totalLine = opts.totalPrice > 0
+        ? `\n💰 *Total:* ₦${opts.totalPrice.toLocaleString()}`
+        : '';
+
     const text = `${conflictEmoji} *AVAILABILITY CHECK REQUEST*
 
 📍 *Property:* ${opts.propertyTitle}
@@ -82,7 +92,7 @@ async function sendAdminTelegram(opts: {
 
 📅 *Requested Dates:*
 • Check-in: ${opts.checkIn}
-• Check-out: ${opts.checkOut}${conflictBlock}
+• Check-out: ${opts.checkOut}${totalLine}${specialRequestsBlock}${conflictBlock}
 
 *Request ID:* \`${opts.requestId}\``;
 
@@ -233,6 +243,8 @@ Deno.serve(async (req) => {
                     guests: guests || 1,
                     checkIn: check_in,
                     checkOut: check_out,
+                    totalPrice: Number(total_price) || 0,
+                    specialRequests: special_requests || '',
                     hasConflict,
                     conflicting,
                     requestId: availabilityRequest.id,
