@@ -275,13 +275,6 @@ export default function CheckoutPage() {
       }
 
       console.log('🎉 AVAILABILITY CHECK COMPLETED');
-      console.log('═══════════════════════════════════════');
-      console.log('Summary:');
-      console.log('  - AvailabilityRequest ID:', request.id);
-      console.log('  - Pending Booking ID:', pendingBooking.id);
-      console.log('  - Has Conflict:', hasConflict);
-      console.log('  - Status: pending');
-      console.log('═══════════════════════════════════════\n');
 
     } catch (error) {
       console.error('\n❌❌❌ CRITICAL ERROR IN AVAILABILITY CHECK ❌❌❌');

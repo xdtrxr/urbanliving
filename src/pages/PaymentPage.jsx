@@ -11,6 +11,9 @@ import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { awardBookingMilestones } from '@/components/utils/loyaltyService';
 
+const DEBUG_PAYMENT = false;
+const dlog = (...args) => { if (DEBUG_PAYMENT) console.log(...args); };
+
 // Payment provider logos
 const PaystackLogo = () => (
   <svg width="100" height="28" viewBox="0 0 200 60" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -53,12 +56,12 @@ export default function PaymentPage() {
   const [hasExpired, setHasExpired] = useState(false);
 
   useEffect(() => {
-    console.log('=== PAYMENT PAGE MOUNTED ===');
-    console.log('URL Search Params:', window.location.search);
-    console.log('booking_id:', searchParams.get('booking_id'));
-    console.log('total:', searchParams.get('total'));
-    console.log('property_title:', searchParams.get('property_title'));
-    console.log('guest_email:', searchParams.get('guest_email'));
+    dlog('=== PAYMENT PAGE MOUNTED ===');
+    dlog('URL Search Params:', window.location.search);
+    dlog('booking_id:', searchParams.get('booking_id'));
+    dlog('total:', searchParams.get('total'));
+    dlog('property_title:', searchParams.get('property_title'));
+    dlog('guest_email:', searchParams.get('guest_email'));
     
     loadBookingAndUserData();
     loadPaystackKey();
@@ -79,21 +82,12 @@ export default function PaymentPage() {
     return () => clearInterval(interval);
   }, [deadlineMs]);
 
-  // On expiry: cancel booking, alert user, redirect.
+  // On expiry: alert user and redirect. Server-side getBookings will mark
+  // the booking cancelled on its next read (single source of truth).
   useEffect(() => {
     if (!hasExpired || !bookingData?.id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        await base44.entities.Booking.update(bookingData.id, { status: 'cancelled' });
-      } catch (err) {
-        console.warn('Failed to mark booking cancelled on expiry:', err);
-      }
-      if (cancelled) return;
-      alert('Your payment window has expired and the booking has been cancelled. Please request availability again.');
-      navigate(createPageUrl('Bookings'));
-    })();
-    return () => { cancelled = true; };
+    alert('Your payment window has expired and the booking has been cancelled. Please request availability again.');
+    navigate(createPageUrl('Bookings'));
   }, [hasExpired, bookingData?.id, navigate]);
 
   const formatRemaining = (ms) => {
@@ -109,7 +103,7 @@ export default function PaymentPage() {
       const response = await base44.functions.invoke('getPaystackPublicKey');
       if (response.data && response.data.publicKey) {
         setPaystackPublicKey(response.data.publicKey);
-        console.log('✅ Paystack public key loaded');
+        dlog('✅ Paystack public key loaded');
       } else {
         console.error('Failed to load Paystack public key: Response missing publicKey', response);
         setError("Could not load payment provider configuration. Please try again later.");
@@ -121,7 +115,7 @@ export default function PaymentPage() {
   };
 
   const loadBookingAndUserData = async () => {
-    console.log('=== LOADING BOOKING DATA ===');
+    dlog('=== LOADING BOOKING DATA ===');
     setIsPageLoading(true);
     setError(null);
     
@@ -132,7 +126,7 @@ export default function PaymentPage() {
       const propertyTitle = searchParams.get('property_title');
       const guestEmail = searchParams.get('guest_email');
 
-      console.log('Extracted params:', { bookingId, total, propertyTitle, guestEmail });
+      dlog('Extracted params:', { bookingId, total, propertyTitle, guestEmail });
 
       // Validate required parameters
       if (!bookingId) {
@@ -153,7 +147,7 @@ export default function PaymentPage() {
       let user;
       try {
         user = await base44.auth.me();
-        console.log('User loaded:', user.email);
+        dlog('User loaded:', user.email);
       } catch (userError) {
         console.error('Failed to load user:', userError);
         setError("Please log in to continue with payment.");
@@ -180,7 +174,7 @@ export default function PaymentPage() {
         payment_started_at: fullBooking?.payment_started_at || null,
       };
 
-      console.log('✅ Booking data set:', bookingInfo);
+      dlog('✅ Booking data set:', bookingInfo);
       setBookingData(bookingInfo);
 
       // Stamp payment_started_at on first arrival (one-shot)
@@ -189,7 +183,7 @@ export default function PaymentPage() {
           const nowIso = new Date().toISOString();
           await base44.entities.Booking.update(bookingId, { payment_started_at: nowIso });
           bookingInfo.payment_started_at = nowIso;
-          console.log('✅ payment_started_at stamped:', nowIso);
+          dlog('✅ payment_started_at stamped:', nowIso);
         } catch (stampErr) {
           console.warn('Could not stamp payment_started_at:', stampErr);
         }
@@ -214,7 +208,7 @@ export default function PaymentPage() {
         fullName: user.full_name || ''
       });
       
-      console.log('=== BOOKING DATA LOADED SUCCESSFULLY ===');
+      dlog('=== BOOKING DATA LOADED SUCCESSFULLY ===');
       
     } catch (e) {
       console.error('=== ERROR LOADING BOOKING DATA ===', e);
@@ -245,9 +239,9 @@ export default function PaymentPage() {
 
   const handlePaymentSuccess = async (transactionRef, method) => {
     try {
-      console.log('=== PROCESSING PAYMENT SUCCESS ===');
-      console.log('Transaction Ref:', transactionRef);
-      console.log('Method:', method);
+      dlog('=== PROCESSING PAYMENT SUCCESS ===');
+      dlog('Transaction Ref:', transactionRef);
+      dlog('Method:', method);
 
       if (bookingData.id && !bookingData.id.startsWith('temp_')) {
         if (method === 'paystack') {
@@ -259,7 +253,7 @@ export default function PaymentPage() {
           if (!result?.data?.success) {
             throw new Error(result?.data?.error || 'Payment verification failed');
           }
-          console.log('✅ Payment verified server-side');
+          dlog('✅ Payment verified server-side');
           // Award client-driven loyalty milestones (5% + first-booking + 3-in-month)
           try {
             await awardBookingMilestones({
@@ -300,7 +294,7 @@ export default function PaymentPage() {
 
   const handlePaystackPayment = async () => {
     try {
-      console.log('=== INITIALIZING PAYSTACK ===');
+      dlog('=== INITIALIZING PAYSTACK ===');
       
       // Check if public key is loaded
       if (!paystackPublicKey) {
@@ -309,7 +303,7 @@ export default function PaymentPage() {
 
       // Load Paystack script if not already loaded
       if (!window.PaystackPop) {
-        console.log('Loading Paystack script...');
+        dlog('Loading Paystack script...');
         const script = document.createElement('script');
         script.src = 'https://js.paystack.co/v1/inline.js';
         script.async = true;
@@ -317,7 +311,7 @@ export default function PaymentPage() {
         
         await new Promise((resolve, reject) => {
           script.onload = () => {
-            console.log('✅ Paystack script loaded');
+            dlog('✅ Paystack script loaded');
             resolve();
           };
           script.onerror = (err) => {
@@ -332,18 +326,18 @@ export default function PaymentPage() {
         throw new Error('Paystack SDK failed to load');
       }
 
-      console.log('Paystack SDK loaded, initializing payment...');
+      dlog('Paystack SDK loaded, initializing payment...');
 
       const paymentReference = `LUX_${bookingData.id}_${Date.now()}`;
       
       // Define the callback function BEFORE creating the config
       const onPaymentSuccess = (response) => {
-        console.log('✅ Paystack payment callback triggered:', response);
+        dlog('✅ Paystack payment callback triggered:', response);
         handlePaymentSuccess(response.reference, 'paystack');
       };
 
       const onPaymentClose = () => {
-        console.log('Paystack payment window closed by user');
+        dlog('Paystack payment window closed by user');
         setIsProcessing(false);
       };
 
@@ -374,7 +368,7 @@ export default function PaymentPage() {
         onClose: onPaymentClose
       };
 
-      console.log('Paystack config (key hidden for security):', {
+      dlog('Paystack config (key hidden for security):', {
         ...config,
         key: paystackPublicKey ? paystackPublicKey.substring(0, 10) + '...' : 'key not loaded'
       });
@@ -383,7 +377,7 @@ export default function PaymentPage() {
       const handler = window.PaystackPop.setup(config);
       handler.openIframe();
       
-      console.log('✅ Paystack iframe opened');
+      dlog('✅ Paystack iframe opened');
 
     } catch (error) {
       console.error('❌ Paystack error:', error);
@@ -394,7 +388,7 @@ export default function PaymentPage() {
 
   const handleStripePayment = async () => {
     try {
-      console.log('=== INITIALIZING STRIPE ===');
+      dlog('=== INITIALIZING STRIPE ===');
       
       // Load Stripe script if not already loaded
       if (!window.Stripe) {
@@ -406,7 +400,7 @@ export default function PaymentPage() {
         // FIX: Ensure 'reject' is defined in the Promise constructor
         await new Promise((resolve, reject) => {
           script.onload = () => {
-            console.log('✅ Stripe script loaded');
+            dlog('✅ Stripe script loaded');
             resolve();
           };
           script.onerror = (err) => {
@@ -419,12 +413,12 @@ export default function PaymentPage() {
       // const stripe = window.Stripe('pk_test_your_stripe_public_key'); // TODO: Replace with actual key
 
       // For demo purposes, simulate successful payment after a delay
-      console.log('Simulating Stripe payment...');
+      dlog('Simulating Stripe payment...');
       
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       const simulatedReference = `stripe_sim_${Date.now()}`;
-      console.log('✅ Simulated Stripe payment successful');
+      dlog('✅ Simulated Stripe payment successful');
       
       await handlePaymentSuccess(simulatedReference, 'stripe');
       
@@ -436,14 +430,14 @@ export default function PaymentPage() {
   };
 
   const handlePayment = async () => {
-    console.log('=== PAYMENT BUTTON CLICKED ===');
+    dlog('=== PAYMENT BUTTON CLICKED ===');
     
     if (!validatePaymentDetails()) {
-      console.log('❌ Validation failed', validationErrors);
+      dlog('❌ Validation failed', validationErrors);
       return;
     }
 
-    console.log('✅ Validation passed, processing payment...');
+    dlog('✅ Validation passed, processing payment...');
     setIsProcessing(true);
     
     try {
@@ -463,7 +457,7 @@ export default function PaymentPage() {
 
   // PREVENT ANY AUTOMATIC REDIRECTS
   useEffect(() => {
-    console.log('Current state:', { isPageLoading, error, bookingData, paymentComplete });
+    dlog('Current state:', { isPageLoading, error, bookingData, paymentComplete });
   }, [isPageLoading, error, bookingData, paymentComplete]);
 
   if (isPageLoading) {
@@ -608,7 +602,7 @@ export default function PaymentPage() {
           <Button
             variant="ghost"
             onClick={() => {
-              console.log('Back button clicked');
+              dlog('Back button clicked');
               navigate(-1);
             }}
             className="mb-4 hover:bg-white/50"
@@ -673,7 +667,7 @@ export default function PaymentPage() {
                 <div className="flex justify-between items-center pt-2">
                   <span className="text-lg font-bold text-slate-900">Total Amount:</span>
                   <span className="text-2xl font-bold text-slate-900">
-                    ${bookingData.total_price.toLocaleString()}
+                    ₦{bookingData.total_price.toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -776,7 +770,7 @@ export default function PaymentPage() {
                     ) : (
                       <>
                         <CreditCard className="w-5 h-5 mr-2" />
-                        Pay ${bookingData.total_price.toLocaleString()} with {selectedMethod === 'paystack' ? 'Paystack' : 'Stripe'}
+                        Pay ₦{bookingData.total_price.toLocaleString()} with {selectedMethod === 'paystack' ? 'Paystack' : 'Stripe'}
                       </>
                     )}
                   </Button>

@@ -185,16 +185,3 @@ export async function awardFirstWishlistAdd() {
   }
 }
 
-/**
- * Awards +250 loyalty points to a referrer when their referral books.
- * Called by the referred guest (must use service role on backend in prod;
- * for now we call from the booking guest client and it'll only work if
- * RLS allows — preferred path is to add this to the inline reward logic
- * inside verifyPaystackPayment / paystackWebhook).
- */
-export async function awardReferrerLoyaltyBonus(_referrerEmail, _bookingId) {
-  // Frontend can't write to another user's loyalty_points (RLS).
-  // The actual award is performed inside verifyPaystackPayment /
-  // paystackWebhook / Checkout instant-confirm using service role.
-  return null;
-}
