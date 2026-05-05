@@ -70,9 +70,7 @@
     "description"
   ],
   "rls": {
-    "create": {
-      "data.user_email": "{{user.email}}"
-    },
+    "create": null,
     "read": {
       "$or": [
         {
