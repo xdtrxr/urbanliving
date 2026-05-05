@@ -35,8 +35,15 @@ Deno.serve(async (req) => {
             }), { status: 409, headers });
         }
 
-        // Find referrer by code (service role bypasses User RLS)
-        const referrers = await base44.asServiceRole.entities.User.filter({ referral_code: refCodeRaw });
+        // Find referrer by code (service role bypasses User RLS).
+        // Try uppercase first (the canonical storage form), then case-insensitive
+        // regex as a fallback for any legacy lowercase rows.
+        let referrers = await base44.asServiceRole.entities.User.filter({ referral_code: refCodeRaw });
+        if (referrers.length === 0) {
+            referrers = await base44.asServiceRole.entities.User.filter({
+                referral_code: { $regex: `^${refCodeRaw}$`, $options: 'i' },
+            });
+        }
         if (referrers.length === 0) {
             return new Response(JSON.stringify({
                 success: false,

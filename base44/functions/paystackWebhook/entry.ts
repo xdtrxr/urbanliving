@@ -16,6 +16,16 @@ async function hmacSha512Hex(secret: string, body: string): Promise<string> {
     return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Constant-time string compare so an attacker can't time-out the HMAC check.
+function safeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) {
+        diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return diff === 0;
+}
+
 async function notifyAdmin(opts: {
     bookingId: string;
     guestName: string;
@@ -64,7 +74,7 @@ Deno.serve(async (req) => {
     const rawBody = await req.text();
     const signatureHeader = req.headers.get('x-paystack-signature') || '';
     const expected = await hmacSha512Hex(secretKey, rawBody);
-    if (expected !== signatureHeader) {
+    if (!safeEqual(expected, signatureHeader)) {
         console.warn('Invalid Paystack signature — ignoring');
         return ack({ skipped: 'invalid_signature' });
     }

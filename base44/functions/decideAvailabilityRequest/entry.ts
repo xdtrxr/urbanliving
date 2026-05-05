@@ -122,25 +122,26 @@ Deno.serve(async (req) => {
             admin_response: adminResponse,
         });
 
-        // On approve, stamp approved_at on the matching pending Booking so the timer starts
-        if (action === 'approve') {
-            try {
-                const matches = await base44.asServiceRole.entities.Booking.filter({
-                    property_id: request.property_id,
-                    check_in: request.check_in,
-                    check_out: request.check_out,
-                    guest_email: request.user_email,
-                    status: 'pending',
-                });
-                const target = matches[0];
-                if (target?.id) {
-                    await base44.asServiceRole.entities.Booking.update(target.id, {
-                        approved_at: new Date().toISOString(),
-                    });
-                }
-            } catch (stampErr) {
-                console.error('approved_at stamp failed:', stampErr);
+        // Find the matching pending Booking. On approve: stamp approved_at so
+        // the payment timer can start. On reject: cancel it so it doesn't
+        // linger in pending forever.
+        try {
+            const matches = await base44.asServiceRole.entities.Booking.filter({
+                property_id: request.property_id,
+                check_in: request.check_in,
+                check_out: request.check_out,
+                guest_email: request.user_email,
+                status: 'pending',
+            });
+            const target = matches[0];
+            if (target?.id) {
+                const update = action === 'approve'
+                    ? { approved_at: new Date().toISOString() }
+                    : { status: 'cancelled' };
+                await base44.asServiceRole.entities.Booking.update(target.id, update);
             }
+        } catch (updateErr) {
+            console.error(`Booking ${action} update failed:`, updateErr);
         }
 
         // Edit the Telegram message in-place so admin sees the in-app decision

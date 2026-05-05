@@ -32,24 +32,41 @@ export default function LoginPage() {
   const [isWorking, setIsWorking] = useState(false);
   const [referralCode, setReferralCode] = useState('');
 
+  // Pull referral code from URL or localStorage so signup can attribute it.
+  // Re-run when query string changes so a freshly clicked ?ref=... gets picked up.
   useEffect(() => {
-    // If already signed in, bounce away
-    base44.auth.me().then(() => navigate('/Search', { replace: true })).catch(() => {});
-
-    // Pull referral code from URL or localStorage so signup can attribute it
     const urlRef = new URLSearchParams(location.search).get('ref');
     const stored = localStorage.getItem('luxeliving_referral_code');
     setReferralCode(urlRef || stored || '');
-  }, [location.search, navigate]);
+  }, [location.search]);
+
+  // Bounce away once on mount if the user is already signed in. Don't re-run
+  // on URL changes — that races with the user typing into the form.
+  useEffect(() => {
+    let cancelled = false;
+    base44.auth.me()
+      .then(() => { if (!cancelled) navigate('/Search', { replace: true }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const redirectAfterAuth = () => {
     const params = new URLSearchParams(location.search);
     const fromUrl = params.get('from_url');
-    if (fromUrl && fromUrl !== window.location.href) {
-      window.location.href = fromUrl;
-    } else {
-      navigate('/Search', { replace: true });
+    if (fromUrl) {
+      try {
+        const target = new URL(fromUrl, window.location.origin);
+        // Only allow same-origin redirects to prevent phishing.
+        if (target.origin === window.location.origin && target.href !== window.location.href) {
+          window.location.href = target.href;
+          return;
+        }
+      } catch {
+        // Malformed URL — fall through to default
+      }
     }
+    navigate('/Search', { replace: true });
   };
 
   const handleProvider = (provider) => {

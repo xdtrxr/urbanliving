@@ -3,6 +3,23 @@ import { createClient } from 'npm:@base44/sdk@0.7.1';
 Deno.serve(async (req) => {
     console.log('=== TELEGRAM WEBHOOK CALLED ===');
 
+    // Verify the secret token Telegram includes when the webhook was registered
+    // with `secret_token=...`. Without this, anyone who knows the URL can forge
+    // approve/reject callback queries.
+    const expectedSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET');
+    if (expectedSecret) {
+        const incomingSecret = req.headers.get('x-telegram-bot-api-secret-token') || '';
+        if (incomingSecret !== expectedSecret) {
+            console.warn('Telegram webhook secret mismatch — rejecting');
+            return new Response(JSON.stringify({ ok: false }), {
+                status: 403,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+    } else {
+        console.warn('TELEGRAM_WEBHOOK_SECRET not configured — webhook is unauthenticated');
+    }
+
     try {
         const update = await req.json();
         console.log('Telegram update:', JSON.stringify(update, null, 2));
@@ -84,44 +101,47 @@ Deno.serve(async (req) => {
 
         console.log(`✅ Request ${requestId} ${newStatus}`);
 
-        // On approval, stamp approved_at on the matching Booking so the payment timer can start.
-        if (action === 'approve') {
-            try {
-                const matchQuery = new URLSearchParams({
-                    property_id: request.property_id,
-                    check_in: request.check_in,
-                    check_out: request.check_out,
-                    guest_email: request.user_email,
-                    status: 'pending',
-                }).toString();
-                const bookingsRes = await fetch(`${baseUrl}/entities/Booking?${matchQuery}`, {
-                    method: 'GET',
-                    headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
-                });
-                if (bookingsRes.ok) {
-                    const matches = await bookingsRes.json();
-                    const target = Array.isArray(matches) ? matches[0] : null;
-                    if (target?.id) {
-                        const stampRes = await fetch(`${baseUrl}/entities/Booking/${target.id}`, {
-                            method: 'PUT',
-                            headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ approved_at: new Date().toISOString() }),
-                        });
-                        if (stampRes.ok) {
-                            console.log(`✅ approved_at stamped on Booking ${target.id}`);
-                        } else {
-                            console.warn('⚠️ Failed to stamp approved_at:', stampRes.status, await stampRes.text());
-                        }
+        // Find the matching pending Booking. On approve, stamp approved_at so
+        // the payment timer can start. On reject, cancel it so it doesn't
+        // linger in pending forever.
+        try {
+            const matchQuery = new URLSearchParams({
+                property_id: request.property_id,
+                check_in: request.check_in,
+                check_out: request.check_out,
+                guest_email: request.user_email,
+                status: 'pending',
+            }).toString();
+            const bookingsRes = await fetch(`${baseUrl}/entities/Booking?${matchQuery}`, {
+                method: 'GET',
+                headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
+            });
+            if (bookingsRes.ok) {
+                const matches = await bookingsRes.json();
+                const target = Array.isArray(matches) ? matches[0] : null;
+                if (target?.id) {
+                    const update = action === 'approve'
+                        ? { approved_at: new Date().toISOString() }
+                        : { status: 'cancelled' };
+                    const stampRes = await fetch(`${baseUrl}/entities/Booking/${target.id}`, {
+                        method: 'PUT',
+                        headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(update),
+                    });
+                    if (stampRes.ok) {
+                        console.log(`✅ Booking ${target.id} updated for ${action}: ${JSON.stringify(update)}`);
                     } else {
-                        console.warn('⚠️ No matching pending booking found for approval');
+                        console.warn(`⚠️ Failed to update booking on ${action}:`, stampRes.status, await stampRes.text());
                     }
                 } else {
-                    console.warn('⚠️ Failed to query bookings for approval stamp:', bookingsRes.status);
+                    console.warn(`⚠️ No matching pending booking found for ${action}`);
                 }
-            } catch (stampError) {
-                console.error('❌ Error stamping approved_at:', stampError);
-                // Don't fail the webhook if stamping fails
+            } else {
+                console.warn('⚠️ Failed to query bookings:', bookingsRes.status);
             }
+        } catch (stampError) {
+            console.error(`❌ Error updating booking on ${action}:`, stampError);
+            // Don't fail the webhook if booking update fails
         }
 
         // Update Telegram message
