@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,25 +48,35 @@ export default function BookingsPage() {
     return id && typeof id === 'string' && id.length > 10 && !id.startsWith("prop_");
   };
 
+  // Use a ref so the polling interval reads the latest bookings without
+  // re-arming the interval on every length change.
+  const bookingsRef = useRef(bookings);
+  useEffect(() => { bookingsRef.current = bookings; }, [bookings]);
+
   useEffect(() => {
-    console.log('🔄 Initial load of bookings page');
     loadBookings();
-    
-    // Poll for updates every 3 seconds when there are pending approvals
+
+    // Poll every 5s, but stop after 60 ticks (5 min) without finding any
+    // pending approvals. User can hit Refresh to re-arm.
+    let ticksWithoutPending = 0;
+    const MAX_IDLE_TICKS = 60;
+
     const interval = setInterval(() => {
-      const hasPendingApprovals = bookings.some(b => 
+      const hasPending = bookingsRef.current.some(b =>
         b.status === 'pending' && b.payment_status === 'unpaid'
       );
-      
-      if (hasPendingApprovals) {
-        console.log('🔄 Auto-refreshing (pending approvals detected)');
-        loadBookings(true); // Silent refresh
+      if (hasPending) {
+        ticksWithoutPending = 0;
+        loadBookings(true);
         loadAvailabilityRequests();
+      } else if (++ticksWithoutPending >= MAX_IDLE_TICKS) {
+        clearInterval(interval);
       }
-    }, 3000); // Reduced from 5s to 3s for faster updates
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [bookings.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadBookings = async (silent = false) => {
     // Show loading spinner only for initial load, not for background refreshes
@@ -164,9 +174,12 @@ export default function BookingsPage() {
   };
 
   const canCancelBooking = (booking) => {
+    // Paid bookings need a refund pipeline — admin handles those manually for now.
+    if (booking.payment_status === 'paid') return false;
+
     const checkIn = parseISO(booking.check_in);
     const hoursUntilCheckIn = (checkIn - new Date()) / (1000 * 60 * 60);
-    
+
     return (
       (booking.status === 'pending' || booking.status === 'confirmed') &&
       hoursUntilCheckIn >= 24
@@ -189,7 +202,7 @@ export default function BookingsPage() {
       
       await loadBookings();
       
-      alert("Booking cancelled successfully. You may be eligible for a refund based on the cancellation policy.");
+      alert("Booking cancelled successfully.");
     } catch (error) {
       console.error("Error cancelling booking:", error);
       alert("Failed to cancel booking. Please try again or contact support.");
@@ -531,6 +544,13 @@ export default function BookingsPage() {
                         {cancellingBookingId === booking.id ? 'Cancelling...' : 'Cancel'}
                       </Button>
                     )}
+                    {booking.payment_status === 'paid' && booking.status !== 'cancelled' && (
+                      <Link to={createPageUrl('Support')}>
+                        <Button variant="outline" size="sm" className="rounded-xl">
+                          Contact Support to Cancel
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -703,7 +723,7 @@ export default function BookingsPage() {
                   </div>
                 )}
                 <p className="mt-3 text-amber-600">
-                  <strong>Cancellation Policy:</strong> Refunds are processed based on the cancellation policy. You may be eligible for a full or partial refund.
+                  Only unpaid pending or unpaid confirmed bookings can be cancelled here. To cancel a paid booking, contact support.
                 </p>
               </AlertDialogDescription>
             </AlertDialogHeader>

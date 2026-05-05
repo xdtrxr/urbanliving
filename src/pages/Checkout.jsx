@@ -10,7 +10,6 @@ import { Calendar, MapPin, Users, ArrowLeft, CheckCircle, Loader2, Clock, AlertC
 import { format, differenceInDays } from 'date-fns';
 import { createPageUrl } from '@/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { awardBookingMilestones } from '@/components/utils/loyaltyService';
 import {
   Dialog,
   DialogContent,
@@ -41,7 +40,6 @@ export default function CheckoutPage() {
   const [totalPrice, setTotalPrice] = useState(0);
   const [nights, setNights] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [isBooking, setIsBooking] = useState(false);
   
   // Phone number modal state
   const [showPhoneNumberModal, setShowPhoneNumberModal] = useState(false);
@@ -57,39 +55,6 @@ export default function CheckoutPage() {
   const [adminResponse, setAdminResponse] = useState('');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [createdBookingId, setCreatedBookingId] = useState(null);
-
-  const processReferralReward = async (bookingData) => {
-    try {
-      const result = await base44.functions.invoke('processReferralReward', {
-        booking_id: bookingData.id,
-      });
-      const data = result?.data?.data;
-      if (result?.data?.success && data?.amount_awarded_ngn) {
-        return { referrerEmail: data.referrer_email, amountAwardedNGN: data.amount_awarded_ngn };
-      }
-      return null;
-    } catch (error) {
-      console.error('❌ Referral reward call failed:', error);
-      return null;
-    }
-  };
-
-  const logBookingToGoogleSheet = async (bookingId) => {
-    try {
-      console.log('📊 Logging booking to Google Sheet...');
-      const response = await base44.functions.invoke('logBookingToGoogleSheet', {
-        booking_id: bookingId
-      });
-      
-      if (response.data && response.data.success) {
-        console.log('✅ Successfully logged to Google Sheet');
-      } else {
-        console.error('⚠️ Failed to log to Google Sheet:', response.data?.error || 'Unknown error');
-      }
-    } catch (error) {
-      console.error('❌ Error logging to Google Sheet:', error);
-    }
-  };
 
   const handleSavePhoneNumber = async () => {
     setPhoneError('');
@@ -112,107 +77,25 @@ export default function CheckoutPage() {
     setIsSavingPhone(false);
   };
 
-  const handleBooking = async () => {
-    if (!user?.phone_number) {
-      setShowPhoneNumberModal(true);
+  // Once admin has approved availability, route the user to the real
+  // PaymentPage (Paystack init + server-side verify). No client-side fake-pay.
+  const handleProceedToPayment = () => {
+    const bookingId = existingBooking?.id || createdBookingId;
+    if (!bookingId) {
+      alert('Booking is still being prepared. Please wait a moment and try again.');
       return;
     }
-
-    if (existingBooking) {
-      setIsBooking(true);
-      try {
-        console.log('🚀 Completing pre-approved booking:', existingBooking.id);
-        
-        await base44.entities.Booking.update(existingBooking.id, {
-          status: 'confirmed',
-          payment_status: 'paid',
-          payment_method: 'paystack'
-        });
-        
-        const milestonesPre = await awardBookingMilestones(existingBooking);
-        const loyaltyPre = milestonesPre.find(m => m.kind === 'booking') || { points: 0 };
-        const referralResult = await processReferralReward(existingBooking);
-
-        logBookingToGoogleSheet(existingBooking.id);
-
-        let successMessage = `🎉 Booking confirmed! You earned ${loyaltyPre.points} Luxe Points!`;
-        const monthly = milestonesPre.find(m => m.kind === 'monthly_3');
-        const firstBooking = milestonesPre.find(m => m.kind === 'first_booking');
-        if (firstBooking) successMessage += `\n🏆 +${firstBooking.points} first-booking bonus!`;
-        if (monthly) successMessage += `\n⭐ +${monthly.points} for 3 bookings this month!`;
-        if (referralResult) {
-          successMessage += `\n\n✨ Your referrer earned ₦${referralResult.amountAwardedNGN.toLocaleString()} thanks to you!`;
-        }
-        
-        alert(successMessage);
-        navigate(createPageUrl('Bookings'));
-        
-      } catch (error) {
-        console.error('❌ Booking error:', error);
-        alert('Failed to complete booking. Please try again.');
-      }
-      setIsBooking(false);
-      return;
-    }
-
     if (availabilityStatus !== 'available') {
-      alert('Please check availability first before booking.');
+      alert('This booking is still awaiting admin approval.');
       return;
     }
-
-    if (!bookingDetails.checkIn || !bookingDetails.checkOut) {
-      alert('Please select check-in and check-out dates');
-      return;
-    }
-
-    if (!user || !user.email) {
-      alert('User information is missing. Please log in again.');
-      return;
-    }
-
-    setIsBooking(true);
-    try {
-      console.log('🚀 Starting Paystack booking process...');
-      
-      const bookingData = await base44.entities.Booking.create({
-        property_id: property.id,
-        guest_name: user.full_name || 'Guest User',
-        guest_email: user.email,
-        check_in: format(bookingDetails.checkIn, 'yyyy-MM-dd'),
-        check_out: format(bookingDetails.checkOut, 'yyyy-MM-dd'),
-        guests: bookingDetails.guests,
-        total_price: totalPrice,
-        special_requests: bookingDetails.specialRequests || '',
-        status: 'confirmed',
-        payment_status: 'paid',
-        payment_method: 'paystack'
-      });
-      
-      console.log('✅ Booking created:', bookingData.id);
-      
-      const milestones = await awardBookingMilestones(bookingData);
-      const loyaltyResult = milestones.find(m => m.kind === 'booking') || { points: 0 };
-      const firstBookingMs = milestones.find(m => m.kind === 'first_booking');
-      const monthlyMs = milestones.find(m => m.kind === 'monthly_3');
-      const referralResult = await processReferralReward(bookingData);
-      
-      logBookingToGoogleSheet(bookingData.id);
-      
-      let successMessage = `🎉 Booking confirmed! You earned ${loyaltyResult.points || 0} Luxe Points!`;
-      if (firstBookingMs) successMessage += `\n🏆 +${firstBookingMs.points} first-booking bonus!`;
-      if (monthlyMs) successMessage += `\n⭐ +${monthlyMs.points} for 3 bookings this month!`;
-      if (referralResult) {
-        successMessage += `\n\n✨ Your referrer earned ₦${referralResult.amountAwardedNGN.toLocaleString()} thanks to you!`;
-      }
-      
-      alert(successMessage);
-      navigate(createPageUrl('Bookings'));
-      
-    } catch (error) {
-      console.error('❌ Booking error:', error);
-      alert('Failed to complete booking. Please try again.');
-    }
-    setIsBooking(false);
+    const params = new URLSearchParams({
+      booking_id: bookingId,
+      total: String(totalPrice),
+      property_title: property?.title || '',
+      guest_email: user?.email || '',
+    }).toString();
+    navigate(`${createPageUrl('PaymentPage')}?${params}`);
   };
 
   const handleCheckAvailability = async () => {
@@ -596,7 +479,6 @@ export default function CheckoutPage() {
             size="icon"
             onClick={() => navigate(-1)}
             className="rounded-full"
-            disabled={isBooking}
           >
             <ArrowLeft className="w-4 h-4" />
           </Button>
@@ -642,7 +524,7 @@ export default function CheckoutPage() {
                       }}
                       min={format(new Date(), 'yyyy-MM-dd')}
                       className="mt-1"
-                      disabled={isBooking || isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
+                      disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                     />
                   </div>
                   <div>
@@ -655,7 +537,7 @@ export default function CheckoutPage() {
                       }}
                       min={bookingDetails.checkIn ? format(new Date(new Date(bookingDetails.checkIn).getTime() + 24 * 60 * 60 * 1000), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')}
                       className="mt-1"
-                      disabled={isBooking || isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
+                      disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                     />
                   </div>
                 </div>
@@ -669,7 +551,7 @@ export default function CheckoutPage() {
                     value={bookingDetails.specialRequests}
                     onChange={(e) => setBookingDetails(prev => ({ ...prev, specialRequests: e.target.value }))}
                     className="mt-1"
-                    disabled={isBooking || isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
+                    disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                   />
                 </div>
 
@@ -678,7 +560,7 @@ export default function CheckoutPage() {
                     {availabilityStatus !== 'available' && (
                       <Button
                         onClick={handleCheckAvailability}
-                        disabled={isCheckingAvailability || !bookingDetails.checkIn || !bookingDetails.checkOut || isBooking || availabilityStatus === 'pending'}
+                        disabled={isCheckingAvailability || !bookingDetails.checkIn || !bookingDetails.checkOut || availabilityStatus === 'pending'}
                         variant="outline"
                         className="w-full mb-3"
                       >
@@ -769,26 +651,17 @@ export default function CheckoutPage() {
                 )}
 
                 <Button
-                  onClick={handleBooking}
-                  disabled={availabilityStatus !== 'available' || nights <= 0 || isBooking}
+                  onClick={handleProceedToPayment}
+                  disabled={availabilityStatus !== 'available' || nights <= 0}
                   className={`w-full py-3 rounded-xl font-semibold transition-all ${
                     availabilityStatus === 'available' && nights > 0
                       ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl'
                       : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                   }`}
                 >
-                  {isBooking ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Processing Payment...
-                    </>
-                  ) : availabilityStatus !== 'available' ? (
-                    existingBooking ? 'Loading...' : 'Check Availability First'
-                  ) : (
-                    <>
-                      Complete Payment (₦{totalPrice.toLocaleString()})
-                    </>
-                  )}
+                  {availabilityStatus !== 'available'
+                    ? (existingBooking ? 'Loading...' : 'Check Availability First')
+                    : `Proceed to Payment (₦${totalPrice.toLocaleString()})`}
                 </Button>
               </CardContent>
             </Card>

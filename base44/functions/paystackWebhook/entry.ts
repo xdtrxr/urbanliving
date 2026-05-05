@@ -1,5 +1,10 @@
 import { createClient } from 'npm:@base44/sdk@0.7.1';
 
+// IMPORTANT: This function and base44/functions/verifyPaystackPayment/entry.ts
+// share the post-payment booking-update logic (mark paid, notify admin, inline
+// referral cash + loyalty bonus). Base44 functions are isolated dirs, so the
+// logic is duplicated. Keep them in lockstep when changing either path.
+
 const REFERRAL_RATE = 0.05;
 const REFERRER_LOYALTY_BONUS = 250;
 
