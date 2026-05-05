@@ -43,11 +43,22 @@
     "role"
   ],
   "rls": {
-    "read": {
-      "user_email": "{{user.email}}"
+    "create": {
+      "data.user_email": "{{user.email}}"
     },
-    "write": {
-      "user_email": "{{user.email}}"
-    }
+    "read": {
+      "$or": [
+        {
+          "data.user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": null,
+    "delete": null
   }
 }
