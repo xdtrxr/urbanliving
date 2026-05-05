@@ -88,13 +88,35 @@
     "total_price"
   ],
   "rls": {
+    "create": null,
     "read": {
-      "guest_email": "{{user.email}}"
-    },
-    "write": {
       "$or": [
         {
-          "guest_email": "{{user.email}}"
+          "data.guest_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.guest_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "data.guest_email": "{{user.email}}"
         },
         {
           "user_condition": {
