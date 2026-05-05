@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
 
 const REWARD_RATE = 0.05;
+const REFERRER_LOYALTY_BONUS = 250;
 
 Deno.serve(async (req) => {
     const headers = {
@@ -74,21 +75,36 @@ Deno.serve(async (req) => {
 
         const amountNGN = Math.round((Number(booking.total_price) || 0) * REWARD_RATE);
         const newBalance = (Number(referrer.referral_balance_ngn) || 0) + amountNGN;
+        const newLoyalty = (Number(referrer.loyalty_points) || 0) + REFERRER_LOYALTY_BONUS;
 
         await base44.asServiceRole.entities.User.update(referrer.id, {
             referral_balance_ngn: newBalance,
+            loyalty_points: newLoyalty,
         });
         await base44.asServiceRole.entities.Referral.update(referral.id, {
             status: 'booking_completed',
             booking_id: booking.id,
             amount_earned_ngn: amountNGN,
         });
+        // Loyalty transaction record for the referrer's audit trail
+        try {
+            await base44.asServiceRole.entities.LoyaltyTransaction.create({
+                user_email: referrer.email,
+                points_earned: REFERRER_LOYALTY_BONUS,
+                transaction_type: 'referral',
+                booking_id: booking.id,
+                description: `REFERRAL_BONUS — Referred ${guest.email} who booked`,
+            });
+        } catch (loyaltyErr) {
+            console.warn('Referrer loyalty transaction log failed (non-fatal):', loyaltyErr);
+        }
 
         return new Response(JSON.stringify({
             success: true,
             data: {
                 referrer_email: referrer.email,
                 amount_awarded_ngn: amountNGN,
+                referrer_loyalty_bonus: REFERRER_LOYALTY_BONUS,
                 referral_id: referral.id,
             },
         }), { status: 200, headers });

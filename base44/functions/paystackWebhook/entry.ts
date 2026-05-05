@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@base44/sdk@0.7.1';
 
 const REFERRAL_RATE = 0.05;
+const REFERRER_LOYALTY_BONUS = 250;
 
 async function hmacSha512Hex(secret: string, body: string): Promise<string> {
     const enc = new TextEncoder();
@@ -153,7 +154,22 @@ Deno.serve(async (req) => {
                     if (referral.status !== 'booking_completed') {
                         const amountNGN = Math.round((Number(booking.total_price) || 0) * REFERRAL_RATE);
                         const newBalance = (Number(referrer.referral_balance_ngn) || 0) + amountNGN;
-                        await sdk.asServiceRole.entities.User.update(referrer.id, { referral_balance_ngn: newBalance });
+                        const newLoyalty = (Number(referrer.loyalty_points) || 0) + REFERRER_LOYALTY_BONUS;
+                        await sdk.asServiceRole.entities.User.update(referrer.id, {
+                            referral_balance_ngn: newBalance,
+                            loyalty_points: newLoyalty,
+                        });
+                        try {
+                            await sdk.asServiceRole.entities.LoyaltyTransaction.create({
+                                user_email: referrer.email,
+                                points_earned: REFERRER_LOYALTY_BONUS,
+                                transaction_type: 'referral',
+                                booking_id: booking.id,
+                                description: `REFERRAL_BONUS — Referred ${guest.email} who booked (webhook)`,
+                            });
+                        } catch (loyaltyErr) {
+                            console.warn('Referrer loyalty log failed (non-fatal):', loyaltyErr);
+                        }
                         await sdk.asServiceRole.entities.Referral.update(referral.id, {
                             status: 'booking_completed',
                             booking_id: booking.id,

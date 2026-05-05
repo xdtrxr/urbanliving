@@ -9,6 +9,7 @@ import PropertyFilters from "../components/search/PropertyFilters";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
+import { awardFirstWishlistAdd } from "@/components/utils/loyaltyService";
 
 export default function SearchPage() {
   const { properties, isLoading, error, metadata, search, clearCache } = usePropertySearch();
@@ -202,7 +203,11 @@ Return ONLY the JSON, no other text.
       await base44.auth.updateMe({ wishlist: newWishlist });
       setWishlist(newWishlist);
       setUser(prev => ({ ...prev, wishlist: newWishlist }));
-      
+
+      // First wishlist add bonus (idempotent server-side check)
+      if (newWishlist.length > currentWishlist.length) {
+        try { await awardFirstWishlistAdd(); } catch { /* non-fatal */ }
+      }
     } catch (error) {
       console.error("Failed to update wishlist:", error);
       alert("Failed to update wishlist. Please try again.");

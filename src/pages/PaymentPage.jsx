@@ -9,6 +9,7 @@ import { Lock, ShieldCheck, CreditCard, Loader2, CheckCircle, AlertTriangle, Arr
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
+import { awardBookingMilestones } from '@/components/utils/loyaltyService';
 
 // Payment provider logos
 const PaystackLogo = () => (
@@ -259,6 +260,15 @@ export default function PaymentPage() {
             throw new Error(result?.data?.error || 'Payment verification failed');
           }
           console.log('✅ Payment verified server-side');
+          // Award client-driven loyalty milestones (5% + first-booking + 3-in-month)
+          try {
+            await awardBookingMilestones({
+              id: bookingData.id,
+              total_price: bookingData.total_price,
+            });
+          } catch (e) {
+            console.warn('Loyalty milestone award failed (non-fatal):', e);
+          }
         } else {
           // Non-Paystack methods (e.g. Stripe simulation) still go via direct update.
           await base44.entities.Booking.update(bookingData.id, {

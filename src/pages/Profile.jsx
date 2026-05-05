@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserCircle, Mail, MapPin, Languages, Save, Camera, Upload, Phone } from "lucide-react";
 import ReferralCard from "../components/profile/ReferralCard";
+import { awardProfileCompletion } from "@/components/utils/loyaltyService";
 
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
@@ -90,8 +91,15 @@ export default function ProfilePage() {
     setIsSaving(true);
     try {
       await base44.auth.updateMe(profileData);
-      alert('Profile updated successfully!');
-      await loadUserData(); // Reload data
+      let message = 'Profile updated successfully!';
+      try {
+        const milestone = await awardProfileCompletion();
+        if (milestone) message += `\n\n🏆 +${milestone.points} loyalty points for completing your profile!`;
+      } catch (e) {
+        console.warn('Profile-completion bonus failed (non-fatal):', e);
+      }
+      alert(message);
+      await loadUserData();
     } catch (error) {
       console.error("Error saving profile:", error);
       alert('Failed to save profile. Please try again.');

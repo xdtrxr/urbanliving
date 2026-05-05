@@ -10,6 +10,7 @@ import { Calendar, MapPin, Users, ArrowLeft, CheckCircle, Loader2, Clock, AlertC
 import { format, differenceInDays } from 'date-fns';
 import { createPageUrl } from '@/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { awardBookingMilestones } from '@/components/utils/loyaltyService';
 import {
   Dialog,
   DialogContent,
@@ -56,47 +57,6 @@ export default function CheckoutPage() {
   const [adminResponse, setAdminResponse] = useState('');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [createdBookingId, setCreatedBookingId] = useState(null);
-
-  const calculateLoyaltyTier = (points) => {
-    if (points >= 10000) return 'Diamond';
-    if (points >= 5000) return 'Platinum';
-    if (points >= 2500) return 'Gold';
-    if (points >= 1000) return 'Silver';
-    return 'Bronze';
-  };
-
-  const awardBookingPoints = async (bookingData) => {
-    try {
-      console.log('🎁 Starting loyalty points award process...');
-      
-      const freshUser = await base44.auth.me();
-      const pointsEarned = Math.floor(bookingData.total_price * 0.05);
-      const newTotalPoints = (freshUser.loyalty_points || 0) + pointsEarned;
-      const newTier = calculateLoyaltyTier(newTotalPoints);
-      
-      console.log(`💰 Awarding ${pointsEarned} points (5% of ${bookingData.total_price})`);
-      
-      await base44.auth.updateMe({
-        loyalty_points: newTotalPoints,
-        loyalty_tier: newTier
-      });
-      
-      await base44.entities.LoyaltyTransaction.create({
-        user_email: freshUser.email,
-        points_earned: pointsEarned,
-        transaction_type: 'booking',
-        booking_id: bookingData.id,
-        description: `Earned ${pointsEarned} points from booking at ${property.title}`
-      });
-      
-      console.log('✅ Loyalty points awarded successfully');
-      
-      return { pointsEarned, newTotalPoints, newTier };
-    } catch (error) {
-      console.error('❌ Error awarding loyalty points:', error);
-      throw error;
-    }
-  };
 
   const processReferralReward = async (bookingData) => {
     try {
@@ -169,12 +129,17 @@ export default function CheckoutPage() {
           payment_method: 'paystack'
         });
         
-        const loyaltyResult = await awardBookingPoints(existingBooking);
+        const milestonesPre = await awardBookingMilestones(existingBooking);
+        const loyaltyPre = milestonesPre.find(m => m.kind === 'booking') || { points: 0 };
         const referralResult = await processReferralReward(existingBooking);
-        
+
         logBookingToGoogleSheet(existingBooking.id);
-        
-        let successMessage = `🎉 Booking confirmed! You earned ${loyaltyResult.pointsEarned} Luxe Points!`;
+
+        let successMessage = `🎉 Booking confirmed! You earned ${loyaltyPre.points} Luxe Points!`;
+        const monthly = milestonesPre.find(m => m.kind === 'monthly_3');
+        const firstBooking = milestonesPre.find(m => m.kind === 'first_booking');
+        if (firstBooking) successMessage += `\n🏆 +${firstBooking.points} first-booking bonus!`;
+        if (monthly) successMessage += `\n⭐ +${monthly.points} for 3 bookings this month!`;
         if (referralResult) {
           successMessage += `\n\n✨ Your referrer earned ₦${referralResult.amountAwardedNGN.toLocaleString()} thanks to you!`;
         }
@@ -225,12 +190,17 @@ export default function CheckoutPage() {
       
       console.log('✅ Booking created:', bookingData.id);
       
-      const loyaltyResult = await awardBookingPoints(bookingData);
+      const milestones = await awardBookingMilestones(bookingData);
+      const loyaltyResult = milestones.find(m => m.kind === 'booking') || { points: 0 };
+      const firstBookingMs = milestones.find(m => m.kind === 'first_booking');
+      const monthlyMs = milestones.find(m => m.kind === 'monthly_3');
       const referralResult = await processReferralReward(bookingData);
       
       logBookingToGoogleSheet(bookingData.id);
       
-      let successMessage = `🎉 Booking confirmed! You earned ${loyaltyResult.pointsEarned} Luxe Points!`;
+      let successMessage = `🎉 Booking confirmed! You earned ${loyaltyResult.points || 0} Luxe Points!`;
+      if (firstBookingMs) successMessage += `\n🏆 +${firstBookingMs.points} first-booking bonus!`;
+      if (monthlyMs) successMessage += `\n⭐ +${monthlyMs.points} for 3 bookings this month!`;
       if (referralResult) {
         successMessage += `\n\n✨ Your referrer earned ₦${referralResult.amountAwardedNGN.toLocaleString()} thanks to you!`;
       }

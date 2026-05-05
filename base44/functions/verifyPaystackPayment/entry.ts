@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
 
 const PAYSTACK_VERIFY_URL = 'https://api.paystack.co/transaction/verify';
 const REFERRAL_RATE = 0.05;
+const REFERRER_LOYALTY_BONUS = 250;
 
 async function notifyAdmin(opts: {
     bookingId: string;
@@ -163,13 +164,28 @@ Deno.serve(async (req) => {
                     if (referral.status !== 'booking_completed') {
                         const amountNGN = Math.round((Number(booking.total_price) || 0) * REFERRAL_RATE);
                         const newBalance = (Number(referrer.referral_balance_ngn) || 0) + amountNGN;
-                        await base44.asServiceRole.entities.User.update(referrer.id, { referral_balance_ngn: newBalance });
+                        const newLoyalty = (Number(referrer.loyalty_points) || 0) + REFERRER_LOYALTY_BONUS;
+                        await base44.asServiceRole.entities.User.update(referrer.id, {
+                            referral_balance_ngn: newBalance,
+                            loyalty_points: newLoyalty,
+                        });
                         await base44.asServiceRole.entities.Referral.update(referral.id, {
                             status: 'booking_completed',
                             booking_id: booking.id,
                             amount_earned_ngn: amountNGN,
                         });
-                        console.log(`🎁 Referrer ${referrer.email} awarded ₦${amountNGN}`);
+                        try {
+                            await base44.asServiceRole.entities.LoyaltyTransaction.create({
+                                user_email: referrer.email,
+                                points_earned: REFERRER_LOYALTY_BONUS,
+                                transaction_type: 'referral',
+                                booking_id: booking.id,
+                                description: `REFERRAL_BONUS — Referred ${guest.email} who booked`,
+                            });
+                        } catch (loyaltyErr) {
+                            console.warn('Referrer loyalty log failed (non-fatal):', loyaltyErr);
+                        }
+                        console.log(`🎁 Referrer ${referrer.email} awarded ₦${amountNGN} + ${REFERRER_LOYALTY_BONUS} loyalty points`);
                     }
                 }
             }
