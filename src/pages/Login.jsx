@@ -72,7 +72,18 @@ export default function LoginPage() {
   const handleProvider = (provider) => {
     setError(null);
     try {
-      base44.auth.loginWithProvider(provider, '/Search');
+      // Return to the originally-requested page after auth, falling back to /Search.
+      // Same-origin only (already enforced when we read from_url).
+      let returnPath = '/Search';
+      const params = new URLSearchParams(location.search);
+      const fromUrl = params.get('from_url');
+      if (fromUrl) {
+        try {
+          const target = new URL(fromUrl, window.location.origin);
+          if (target.origin === window.location.origin) returnPath = target.pathname + target.search;
+        } catch { /* keep default */ }
+      }
+      base44.auth.loginWithProvider(provider, returnPath);
     } catch (err) {
       console.error(`${provider} login failed:`, err);
       setError(err.message || `Failed to start ${provider} sign-in`);
