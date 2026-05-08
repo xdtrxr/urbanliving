@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { User as UserEntity } from "@/entities/User";
 import ReferralTracker from "@/components/utils/ReferralTracker";
+import { useAuth } from "@/lib/AuthContext";
+import { LogIn } from "lucide-react";
 
 const navigationItems = [
   {
@@ -90,6 +92,7 @@ const navigationItems = [
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const [user, setUser] = React.useState(null);
+  const { logout: authLogout } = useAuth();
 
   React.useEffect(() => {
     loadUser();
@@ -104,9 +107,10 @@ export default function Layout({ children, currentPageName }) {
     }
   };
 
-  const handleLogout = async () => {
-    await UserEntity.logout();
-    window.location.reload();
+  const handleLogout = () => {
+    // Use AuthContext.logout — clears the SDK token and lands the user
+    // on our standalone /login (no Base44-hosted redirect).
+    authLogout(true);
   };
 
   // Add admin link if user is admin
@@ -265,16 +269,27 @@ export default function Layout({ children, currentPageName }) {
                 <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-colors duration-200 flex-shrink-0" />
                 <h1 className="text-xl font-bold text-slate-900 md:hidden">Luxeliving</h1>
               </div>
-              {user && (
-                <Button 
-                  onClick={handleLogout} 
-                  variant="ghost" 
-                  size="icon" 
+              {user ? (
+                <Button
+                  onClick={handleLogout}
+                  variant="ghost"
+                  size="icon"
                   className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full"
                   title="Sign Out"
                 >
                   <LogOut className="w-5 h-5" />
                 </Button>
+              ) : (
+                <Link to="/login">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-full font-medium"
+                  >
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Sign in
+                  </Button>
+                </Link>
               )}
             </div>
           </header>
