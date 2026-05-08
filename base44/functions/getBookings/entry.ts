@@ -30,27 +30,6 @@ function computeBucket(b: any, nowMs: number): Bucket {
     return 'current';
 }
 
-async function notifyExpiry(b: any) {
-    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
-    const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
-    if (!token || !chatId) return;
-    const message =
-        `⏰ *PAYMENT TIMER EXPIRED*\n\n` +
-        `Booking \`${b.id}\` was auto-cancelled.\n` +
-        `• Guest: ${b.guest_name} (${b.guest_email})\n` +
-        `• Property: \`${b.property_id}\`\n` +
-        `• Dates: ${b.check_in} → ${b.check_out}\n` +
-        `• Total: ₦${(b.total_price || 0).toLocaleString()}`;
-    try {
-        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' }),
-        });
-    } catch (err) {
-        console.error('Telegram expiry notify failed:', err);
-    }
-}
 
 Deno.serve(async (req) => {
     const headers = {
@@ -88,25 +67,16 @@ Deno.serve(async (req) => {
         const nowMs = Date.now();
         const enriched: any[] = [];
 
+        // Read-only enrichment. Auto-cancel of expired bookings runs in the
+        // autoCancelExpiredBookings scheduled function (Deno.cron every 5 min).
         for (const b of bookings) {
             const deadlineMs = computeDeadlineMs(b);
-            let mutated = { ...b };
-
-            // Auto-cancel pending bookings past their deadline
-            if (b.status === 'pending' && deadlineMs !== null && nowMs > deadlineMs) {
-                try {
-                    await base44.asServiceRole.entities.Booking.update(b.id, { status: 'cancelled' });
-                    mutated.status = 'cancelled';
-                    console.log(`⏰ Auto-cancelled expired booking ${b.id}`);
-                    await notifyExpiry(mutated);
-                } catch (err) {
-                    console.error(`Failed to auto-cancel booking ${b.id}:`, err);
-                }
-            }
-
-            mutated.bucket = computeBucket(mutated, nowMs);
-            mutated.payment_deadline = deadlineMs ? new Date(deadlineMs).toISOString() : null;
-            enriched.push(mutated);
+            const enrichedBooking = {
+                ...b,
+                bucket: computeBucket(b, nowMs),
+                payment_deadline: deadlineMs ? new Date(deadlineMs).toISOString() : null,
+            };
+            enriched.push(enrichedBooking);
         }
 
         const counts = enriched.reduce((acc: Record<string, number>, b) => {

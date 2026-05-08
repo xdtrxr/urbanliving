@@ -137,6 +137,19 @@ Deno.serve(async (req) => {
             paid_at: nowIso,
         });
 
+        // Idempotency guard against the verify+webhook race: re-read and
+        // confirm transaction_hash matches OUR reference. If another path
+        // (typically the Paystack webhook) wrote first, skip notify + referral
+        // so we don't double-fire them.
+        const after = await base44.asServiceRole.entities.Booking.get(booking.id);
+        if (after?.transaction_hash !== reference) {
+            console.log(`Lost the race to mark booking ${booking.id} paid (winner ref: ${after?.transaction_hash}). Skipping side-effects.`);
+            return new Response(JSON.stringify({
+                success: true,
+                data: { booking_id: booking.id, paid_at: after?.paid_at || nowIso, already_processed_by: 'webhook' },
+            }), { status: 200, headers });
+        }
+
         await notifyAdmin({
             bookingId: booking.id,
             guestName: booking.guest_name,

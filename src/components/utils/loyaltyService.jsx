@@ -19,12 +19,11 @@ function startOfCalendarMonthIso(d = new Date()) {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
 }
 
-async function hasTransactionWith(userEmail, predicate) {
+async function fetchTransactions(userEmail) {
   try {
-    const tx = await base44.entities.LoyaltyTransaction.filter({ user_email: userEmail });
-    return tx.some(predicate);
+    return await base44.entities.LoyaltyTransaction.filter({ user_email: userEmail });
   } catch {
-    return false;
+    return [];
   }
 }
 
@@ -54,10 +53,11 @@ export async function awardBookingMilestones(bookingData) {
   const awarded = [];
   try {
     let user = await base44.auth.me();
+    // Single fetch up-front; refresh ONCE between writes.
+    let tx = await fetchTransactions(user.email);
 
     // 1. 5% of booking total (idempotent on booking_id)
-    const alreadyForThisBooking = await hasTransactionWith(
-      user.email,
+    const alreadyForThisBooking = tx.some(
       (t) => t.transaction_type === 'booking' && t.booking_id === bookingData.id,
     );
     if (!alreadyForThisBooking) {
@@ -73,42 +73,36 @@ export async function awardBookingMilestones(bookingData) {
         });
         awarded.push({ kind: 'booking', ...r });
         user = await base44.auth.me();
+        tx = await fetchTransactions(user.email);
       }
     }
 
     // 2. First booking ever bonus (+500), idempotent on description marker
-    const alreadyFirst = await hasTransactionWith(
-      user.email,
+    const alreadyFirst = tx.some(
       (t) => t.transaction_type === 'milestone' && t.description?.includes('FIRST_BOOKING'),
     );
-    if (!alreadyFirst) {
-      // Only fire if the user has at least one booking transaction now
-      const hasBookingTx = await hasTransactionWith(
-        user.email,
-        (t) => t.transaction_type === 'booking',
-      );
-      if (hasBookingTx) {
-        const r = await applyPoints({
-          user,
-          points: 500,
-          transactionType: 'milestone',
-          description: 'FIRST_BOOKING — Welcome bonus for your first booking',
-          bookingId: bookingData.id,
-          log: true,
-        });
-        awarded.push({ kind: 'first_booking', ...r });
-        user = await base44.auth.me();
-      }
+    const hasBookingTx = tx.some((t) => t.transaction_type === 'booking');
+    if (!alreadyFirst && hasBookingTx) {
+      const r = await applyPoints({
+        user,
+        points: 500,
+        transactionType: 'milestone',
+        description: 'FIRST_BOOKING — Welcome bonus for your first booking',
+        bookingId: bookingData.id,
+        log: true,
+      });
+      awarded.push({ kind: 'first_booking', ...r });
+      user = await base44.auth.me();
+      tx = await fetchTransactions(user.email);
     }
 
     // 3. 3 bookings in this calendar month (+1000), once per month
     const monthStart = startOfCalendarMonthIso();
-    const allTx = await base44.entities.LoyaltyTransaction.filter({ user_email: user.email });
-    const bookingTxThisMonth = allTx.filter(
+    const bookingTxThisMonth = tx.filter(
       (t) => t.transaction_type === 'booking' && t.created_date && t.created_date >= monthStart,
     );
     const monthlyBonusKey = `MONTHLY_3_${monthStart.slice(0, 7)}`; // YYYY-MM
-    const alreadyMonthlyBonus = allTx.some(
+    const alreadyMonthlyBonus = tx.some(
       (t) => t.transaction_type === 'milestone' && t.description?.includes(monthlyBonusKey),
     );
     if (bookingTxThisMonth.length >= 3 && !alreadyMonthlyBonus) {
@@ -142,8 +136,8 @@ export async function awardProfileCompletion() {
     });
     if (!complete) return null;
 
-    const already = await hasTransactionWith(
-      user.email,
+    const tx = await fetchTransactions(user.email);
+    const already = tx.some(
       (t) => t.transaction_type === 'milestone' && t.description?.includes('PROFILE_COMPLETED'),
     );
     if (already) return null;
@@ -167,8 +161,8 @@ export async function awardProfileCompletion() {
 export async function awardFirstWishlistAdd() {
   try {
     const user = await base44.auth.me();
-    const already = await hasTransactionWith(
-      user.email,
+    const tx = await fetchTransactions(user.email);
+    const already = tx.some(
       (t) => t.transaction_type === 'milestone' && t.description?.includes('FIRST_WISHLIST'),
     );
     if (already) return null;

@@ -137,6 +137,15 @@ Deno.serve(async (req) => {
             paid_at: nowIso,
         });
 
+        // Idempotency guard against the verify+webhook race: re-read and
+        // only proceed with notify + referral if transaction_hash is OUR
+        // reference. Otherwise verifyPaystackPayment already handled it.
+        const after = await sdk.asServiceRole.entities.Booking.get(booking.id);
+        if (after?.transaction_hash !== reference) {
+            console.log(`Lost race to mark booking ${booking.id} paid (winner ref: ${after?.transaction_hash}). Skipping.`);
+            return ack({ skipped: 'lost_race', booking_id: booking.id });
+        }
+
         await notifyAdmin({
             bookingId: booking.id,
             guestName: booking.guest_name,

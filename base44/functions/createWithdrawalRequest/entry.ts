@@ -61,8 +61,8 @@ Deno.serve(async (req) => {
         });
 
         if (pendingWithdrawals.length > 0) {
-            return Response.json({ 
-                error: 'You have a pending withdrawal request. Please wait for it to complete.' 
+            return Response.json({
+                error: 'You have a pending withdrawal request. Please wait for it to complete.'
             }, { status: 400 });
         }
 
@@ -75,9 +75,32 @@ Deno.serve(async (req) => {
             requested_at: new Date().toISOString()
         });
 
+        // Race defence: a concurrent withdrawal could have slipped past the
+        // pending-check above. Re-read the user, verify pending count is now 1,
+        // and only deduct if everything still adds up. If we lost the race,
+        // mark this request as failed and surface a clear error.
+        const freshUser = await base44.asServiceRole.entities.User.filter({ email: user.email });
+        const liveBalance = freshUser[0]?.referral_balance_ngn || 0;
+        const livePending = await base44.entities.WithdrawalRequest.filter({
+            user_email: user.email,
+            status: { $in: ['pending', 'processing'] }
+        });
+
+        if (livePending.length > 1 || liveBalance < amount) {
+            await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawalRequest.id, {
+                status: 'failed',
+                error_message: 'Concurrent withdrawal detected — request rejected.',
+                processed_at: new Date().toISOString(),
+            });
+            return Response.json({
+                success: false,
+                error: 'A concurrent withdrawal request was detected. Please try again in a moment.'
+            }, { status: 409 });
+        }
+
         // Deduct amount from user's balance (mark as reserved)
-        const newBalance = userBalance - amount;
-        await base44.auth.updateMe({
+        const newBalance = liveBalance - amount;
+        await base44.asServiceRole.entities.User.update(freshUser[0].id, {
             referral_balance_ngn: newBalance
         });
 
