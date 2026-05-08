@@ -162,6 +162,7 @@ export default function Layout({ children, currentPageName }) {
       `}</style>
       
       <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
+        {user && (
         <Sidebar collapsible="icon" className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl">
           <SidebarHeader className="border-b border-slate-100 p-4">
             <div className="flex items-center gap-3 justify-center group-data-[collapsible=icon]:justify-center">
@@ -261,12 +262,15 @@ export default function Layout({ children, currentPageName }) {
             </div>
           </SidebarContent>
         </Sidebar>
+        )}
 
         <main className="flex-1 flex flex-col relative">
           <header className="absolute top-4 sm:top-6 left-4 sm:left-6 right-4 sm:right-6 z-10 bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-lg rounded-2xl px-4 py-2">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-colors duration-200 flex-shrink-0" />
+                {user && (
+                  <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-colors duration-200 flex-shrink-0" />
+                )}
                 <h1 className="text-xl font-bold text-slate-900 md:hidden">Luxeliving</h1>
               </div>
               {user ? (
