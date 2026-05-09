@@ -11,7 +11,7 @@ A luxury short-stay property booking platform built for the Nigerian market, fea
 - **AI Concierge (Agent Luxe)** — Chat with an AI assistant for personalised property recommendations and booking help
 - **Availability Requests** — Submit booking requests that are reviewed and approved/rejected by admin via Telegram
 - **Paystack Payments** — Secure Nigerian payment processing for confirmed bookings
-- **Loyalty Rewards** — Earn Luxe Points (5% of booking value) on every confirmed stay
+- **Loyalty Rewards** — Earn Urban Points (5% of booking value) on every confirmed stay
 - **NFT Collectibles** — Earn digital collectibles tied to booking milestones
 - **Referral Programme** — Share a unique referral link and earn ₦ when friends complete their first booking
 - **Trip Planner** — AI-generated itineraries linked to confirmed bookings
@@ -143,7 +143,7 @@ You can find the function URL in **Base44 Dashboard → Code → Functions → t
 
 ## Loyalty & Rewards
 
-- **Points:** 5% of booking total price = Luxe Points earned
+- **Points:** 5% of booking total price = Urban Points earned
 - **Tiers:** Bronze → Silver (1,000 pts) → Gold (2,500 pts) → Platinum (5,000 pts) → Diamond (10,000 pts)
 - **NFTs:** Digital collectibles awarded at booking milestones
 - **Quests:** Complete social tasks (follow, engage) for bonus points

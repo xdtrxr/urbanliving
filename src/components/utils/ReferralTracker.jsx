@@ -25,7 +25,7 @@ export default function ReferralTracker() {
         if (refCode) {
           console.log('🔗 Referral code detected in URL:', refCode);
           // Store in localStorage for later (after signup)
-          localStorage.setItem('luxeliving_referral_code', refCode);
+          localStorage.setItem('urbanstays_referral_code', refCode);
           console.log('💾 Referral code saved to localStorage');
         }
         
@@ -41,7 +41,7 @@ export default function ReferralTracker() {
         
         // Step 3: If user is logged in and doesn't have referred_by_code
         if (user && !user.referred_by_code) {
-          const storedRefCode = localStorage.getItem('luxeliving_referral_code');
+          const storedRefCode = localStorage.getItem('urbanstays_referral_code');
 
           if (storedRefCode) {
             console.log('🎯 Attributing stored referral code for user:', user.email);
@@ -58,7 +58,7 @@ export default function ReferralTracker() {
               console.error('❌ Error attributing referral:', error);
             }
             // Clear regardless — single attempt per visit
-            localStorage.removeItem('luxeliving_referral_code');
+            localStorage.removeItem('urbanstays_referral_code');
           }
         }
       } catch (error) {

@@ -19,7 +19,7 @@ const faqItems = [
   },
   {
     question: "How does the loyalty program work?",
-    answer: "Our loyalty program rewards you with 'Luxe Points' for every booking you complete. You can also earn points through referrals and special promotions. These points can be redeemed for discounts on future bookings. Your loyalty status and points are visible on your Dashboard."
+    answer: "Our loyalty program rewards you with 'Urban Points' for every booking you complete. You can also earn points through referrals and special promotions. These points can be redeemed for discounts on future bookings. Your loyalty status and points are visible on your Dashboard."
   },
   {
     question: "What are NFT Travel Tokens?",

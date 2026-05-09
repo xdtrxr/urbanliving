@@ -40,7 +40,7 @@ export default function LoginPage() {
   // Re-run when query string changes so a freshly clicked ?ref=... gets picked up.
   useEffect(() => {
     const urlRef = new URLSearchParams(location.search).get('ref');
-    const stored = localStorage.getItem('luxeliving_referral_code');
+    const stored = localStorage.getItem('urbanstays_referral_code');
     setReferralCode(urlRef || stored || '');
   }, [location.search]);
 

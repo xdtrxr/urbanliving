@@ -139,7 +139,7 @@ export default function DashboardPage() {
       // Show if: user doesn't have referred_by_code AND hasn't seen the prompt
       if (!userData.referred_by_code && !userData.referral_prompt_seen) {
           console.log('👀 Checking for stored referral code...');
-          const storedRefCode = localStorage.getItem('luxeliving_referral_code');
+          const storedRefCode = localStorage.getItem('urbanstays_referral_code');
           if (storedRefCode) {
               console.log('📋 Found stored referral code, showing prompt');
               setShowReferralPrompt(true);

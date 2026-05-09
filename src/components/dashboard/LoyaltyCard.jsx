@@ -91,7 +91,7 @@ export default function LoyaltyCard({ user }) {
             <div className="text-3xl font-bold text-slate-900 mb-1 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-gold-600 group-hover:to-amber-600 group-hover:bg-clip-text transition-all duration-300">
               {points.toLocaleString()}
             </div>
-            <p className="text-sm text-slate-600 group-hover:text-slate-700 transition-colors duration-300">Luxe Points</p>
+            <p className="text-sm text-slate-600 group-hover:text-slate-700 transition-colors duration-300">Urban Points</p>
           </div>
 
           {tierInfo.nextTier && (

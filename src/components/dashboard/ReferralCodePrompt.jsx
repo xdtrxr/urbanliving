@@ -12,7 +12,7 @@ export default function ReferralCodePrompt({ user, onSubmitted }) {
 
     useEffect(() => {
         // Check for referral code in localStorage first (set by ReferralTracker)
-        const storedCode = localStorage.getItem('luxeliving_referral_code');
+        const storedCode = localStorage.getItem('urbanstays_referral_code');
         if (storedCode) {
             console.log('📋 Found stored referral code in localStorage:', storedCode);
             setCode(storedCode);
@@ -45,7 +45,7 @@ export default function ReferralCodePrompt({ user, onSubmitted }) {
 
             if (data?.success) {
                 console.log('✅ Referral attributed:', data.data);
-                localStorage.removeItem('luxeliving_referral_code');
+                localStorage.removeItem('urbanstays_referral_code');
                 alert('🎉 Referral code applied! Your referrer will earn rewards when you make your first booking!');
                 onSubmitted();
                 setOpen(false);
@@ -73,7 +73,7 @@ export default function ReferralCodePrompt({ user, onSubmitted }) {
         try {
             await base44.auth.updateMe({ referral_prompt_seen: true });
             // Clear stored code if user skips
-            localStorage.removeItem('luxeliving_referral_code');
+            localStorage.removeItem('urbanstays_referral_code');
             onSubmitted();
             setOpen(false);
         } catch (error) {

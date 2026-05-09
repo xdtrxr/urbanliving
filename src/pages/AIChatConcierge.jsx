@@ -231,7 +231,7 @@ export default function AIChatConciergePage() {
         await base44.entities.Quest.update(quest.id, { status: 'claimed' });
 
         setTimeout(() => {
-          alert(`🎉 Daily quest completed! You earned ${quest.points_reward} Luxe Points for chatting with Agent Nova today!`);
+          alert(`🎉 Daily quest completed! You earned ${quest.points_reward} Urban Points for chatting with Agent Nova today!`);
         }, 1500);
       }
     } catch (error) {

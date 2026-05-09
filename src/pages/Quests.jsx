@@ -143,7 +143,7 @@ const isQuestCompletedToday = (quest) => {
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // LocalStorage helpers for quest state persistence
-const STORAGE_KEY = 'luxeliving_quest_state';
+const STORAGE_KEY = 'urbanstays_quest_state';
 
 const saveQuestStateToStorage = (userEmail, questsMap) => {
   try {
@@ -633,7 +633,7 @@ export default function QuestsPage() {
       
       console.log('✅ Local state updated and saved to localStorage');
       
-      alert(`🎉 Quest Completed!\n\nYou earned ${freshQuest.points_reward} Luxe Points!\n\nNew Balance: ${newPoints} points\nNew Tier: ${newTier}`);
+      alert(`🎉 Quest Completed!\n\nYou earned ${freshQuest.points_reward} Urban Points!\n\nNew Balance: ${newPoints} points\nNew Tier: ${newTier}`);
       
     } catch (err) {
       console.error('❌ ========== QUEST COMPLETION FAILED ==========');
@@ -793,7 +793,7 @@ export default function QuestsPage() {
             <h1 className="text-4xl font-bold text-slate-900">Quest Center</h1>
           </div>
           <p className="text-xl text-slate-600">
-            Complete quests to earn Luxe Points and unlock exclusive rewards!
+            Complete quests to earn Urban Points and unlock exclusive rewards!
           </p>
         </motion.div>
 
@@ -849,7 +849,7 @@ export default function QuestsPage() {
                 <div className="text-6xl mb-4">🎉</div>
                 <h2 className="text-3xl font-bold text-amber-900 mb-4">All Quests Complete!</h2>
                 <p className="text-amber-800 text-lg mb-6">
-                  You've earned <strong>{metrics.totalPoints} Luxe Points</strong>!
+                  You've earned <strong>{metrics.totalPoints} Urban Points</strong>!
                 </p>
                 <Badge className="bg-amber-100 text-amber-800 px-6 py-3 text-lg font-bold">
                   <Trophy className="w-5 h-5 mr-2 inline" />

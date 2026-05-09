@@ -37,7 +37,7 @@ export default function ReferralTestPage() {
       addTestResult(`✅ Found ${referralData.length} referrals`, 'success', referralData);
 
       // Check localStorage for stored referral code
-      const storedCode = localStorage.getItem('luxeliving_referral_code');
+      const storedCode = localStorage.getItem('urbanstays_referral_code');
       if (storedCode) {
         addTestResult('📋 Stored referral code in localStorage', 'info', { storedCode });
       } else {
