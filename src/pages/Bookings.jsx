@@ -34,6 +34,347 @@ const approvalStatusColors = {
   rejected: "bg-red-100 text-red-800 border-red-200"
 };
 
+const isValidSystemId = (id) => id && typeof id === 'string' && id.length > 10 && !id.startsWith("prop_");
+
+const formatRemaining = (ms) => {
+  if (ms == null) return '';
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}m ${s.toString().padStart(2, '0')}s`;
+};
+
+// Defined at module scope so React keeps the same component reference across
+// parent re-renders (the polling re-render was unmounting/remounting cards
+// which made the page look like it was blinking and reset the countdown timer).
+const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, property, availabilityRequest }) {
+  const checkIn = parseISO(booking.check_in);
+  const checkOut = parseISO(booking.check_out);
+  const approvalStatus = availabilityRequest?.status || 'pending';
+
+  const [deadlineMs] = useState(() => {
+    const t = Date.parse(booking.payment_deadline || '');
+    return Number.isNaN(t) ? null : t;
+  });
+  const [msLeft, setMsLeft] = useState(() => deadlineMs ? Math.max(0, deadlineMs - Date.now()) : null);
+  useEffect(() => {
+    if (!deadlineMs) return;
+    const tick = () => setMsLeft(Math.max(0, deadlineMs - Date.now()));
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [deadlineMs]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+    >
+      <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+        <div className="md:flex">
+          {property ? (
+            <div className="md:w-1/3">
+              <img
+                src={property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400'}
+                alt={property.title}
+                className="w-full h-48 md:h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="md:w-1/3 bg-slate-100 flex items-center justify-center h-48 md:h-full">
+              <MapPin className="w-16 h-16 text-slate-300" />
+            </div>
+          )}
+          <div className="md:w-2/3 p-6">
+            <CardHeader className="p-0 mb-4">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <CardTitle className="text-xl font-bold text-slate-900 mb-2">
+                    {property ? property.title : "Property details unavailable"}
+                  </CardTitle>
+                  {property && (
+                    <div className="flex items-center gap-2 text-slate-600 mb-3">
+                      <MapPin className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        {property.location?.city}, {property.location?.country}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <Badge className={`${approvalStatusColors[approvalStatus]} border font-medium`}>
+                    {approvalStatus === 'pending' && '⏳ Awaiting Approval'}
+                    {approvalStatus === 'approved' && '✅ Approved'}
+                    {approvalStatus === 'rejected' && '❌ Rejected'}
+                  </Badge>
+                  {approvalStatus === 'approved' && msLeft != null && msLeft > 0 && (
+                    <Badge className={`border font-medium ${
+                      msLeft < 5 * 60 * 1000
+                        ? 'bg-red-100 text-red-800 border-red-200'
+                        : 'bg-amber-100 text-amber-800 border-amber-200'
+                    }`}>
+                      <Clock className="w-3 h-3 mr-1 inline" />
+                      Pay in {formatRemaining(msLeft)}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-0 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <p className="text-slate-500">Check-in</p>
+                    <p className="font-semibold text-slate-900">{format(checkIn, "MMM d, yyyy")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <p className="text-slate-500">Check-out</p>
+                    <p className="font-semibold text-slate-900">{format(checkOut, "MMM d, yyyy")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <p className="text-slate-500">Guests</p>
+                    <p className="font-semibold text-slate-900">{booking.guests}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <p className="text-slate-500">Total</p>
+                    <p className="font-semibold text-slate-900">₦{booking.total_price.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              {availabilityRequest?.admin_response && (
+                <div className={`rounded-xl p-4 ${
+                  approvalStatus === 'approved' ? 'bg-green-50 border border-green-200' :
+                  approvalStatus === 'rejected' ? 'bg-red-50 border border-red-200' :
+                  'bg-amber-50 border border-amber-200'
+                }`}>
+                  <p className="text-sm font-semibold mb-1">
+                    {approvalStatus === 'approved' ? '✅ Admin Response' :
+                     approvalStatus === 'rejected' ? '❌ Admin Response' :
+                     'ℹ️ Admin Response'}
+                  </p>
+                  <p className="text-sm">{availabilityRequest.admin_response}</p>
+                </div>
+              )}
+
+              {approvalStatus === 'pending' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <Loader2 className="w-5 h-5 text-amber-600 animate-spin flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900 mb-1">Availability Check in Progress</p>
+                      <p className="text-xs text-amber-700">
+                        Your booking request is being reviewed by our team. You'll be notified once approved, and you can proceed to payment.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {approvalStatus === 'rejected' && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-red-900 mb-1">Booking Request Declined</p>
+                      <p className="text-xs text-red-700">
+                        Unfortunately, this property is not available for your selected dates. Please try different dates or explore other properties.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-4 border-t border-slate-200">
+                <div className="text-sm text-slate-500">
+                  Requested on {format(new Date(booking.created_date), "MMM d, yyyy 'at' h:mm a")}
+                </div>
+                <div className="flex gap-3">
+                  {property && (
+                    <Link to={createPageUrl(`Property?id=${property.id}`)}>
+                      <Button variant="outline" size="sm" className="rounded-xl">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        View Property
+                      </Button>
+                    </Link>
+                  )}
+                  {approvalStatus === 'approved' && (
+                    <Link to={createPageUrl(`Checkout?bookingId=${booking.id}`)}>
+                      <Button size="sm" className="rounded-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg">
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Proceed to Payment
+                      </Button>
+                    </Link>
+                  )}
+                  {approvalStatus === 'rejected' && (
+                    <Link to={createPageUrl('Search')}>
+                      <Button size="sm" className="rounded-xl bg-slate-900 hover:bg-slate-800">
+                        Find Another Property
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+});
+
+const BookingCard = React.memo(function BookingCard({ booking, property, isCancellable, cancellingBookingId, onCancelClick }) {
+  const checkIn = parseISO(booking.check_in);
+  const checkOut = parseISO(booking.check_out);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+    >
+      <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+        <div className="md:flex">
+          {property ? (
+            <div className="md:w-1/3">
+              <img
+                src={property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400'}
+                alt={property.title}
+                className="w-full h-48 md:h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="md:w-1/3 bg-slate-100 flex items-center justify-center h-48 md:h-full">
+              <MapPin className="w-16 h-16 text-slate-300" />
+            </div>
+          )}
+          <div className="md:w-2/3 p-6">
+            <CardHeader className="p-0 mb-4">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <CardTitle className="text-xl font-bold text-slate-900 mb-2">
+                    {property ? property.title : "Property details unavailable"}
+                  </CardTitle>
+                  {property && (
+                    <div className="flex items-center gap-2 text-slate-600 mb-3">
+                      <MapPin className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        {property.location?.city}, {property.location?.country}
+                      </span>
+                    </div>
+                  )}
+                  {!property && booking.property_id && !isValidSystemId(booking.property_id) && (
+                    <p className="text-xs text-red-500">Invalid property ID: {booking.property_id}</p>
+                  )}
+                </div>
+                <Badge className={`${statusColors[booking.status]} border font-medium`}>
+                  {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                </Badge>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-0 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <p className="text-slate-500">Check-in</p>
+                    <p className="font-semibold text-slate-900">{format(checkIn, "MMM d, yyyy")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <p className="text-slate-500">Check-out</p>
+                    <p className="font-semibold text-slate-900">{format(checkOut, "MMM d, yyyy")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <p className="text-slate-500">Guests</p>
+                    <p className="font-semibold text-slate-900">{booking.guests}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  <div>
+                    <p className="text-slate-500">Total</p>
+                    <p className="font-semibold text-slate-900">₦{booking.total_price.toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              {booking.special_requests && (
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-slate-700 mb-1">Special Requests</p>
+                  <p className="text-sm text-slate-600">{booking.special_requests}</p>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-4 border-t border-slate-200">
+                <div className="text-sm text-slate-500">
+                  Booked on {format(new Date(booking.created_date), "MMM d, yyyy")}
+                </div>
+                <div className="flex gap-3">
+                  {property && (
+                    <Link to={createPageUrl(`Property?id=${property.id}`)}>
+                      <Button variant="outline" size="sm" className="rounded-xl">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        View Property
+                      </Button>
+                    </Link>
+                  )}
+                  {booking.status === 'confirmed' && (
+                    <Link to={createPageUrl(`TripPlanner?booking_id=${booking.id}`)}>
+                      <Button size="sm" className="rounded-xl bg-slate-900 hover:bg-slate-800">
+                        <Compass className="w-4 h-4 mr-2" />
+                        Plan Trip
+                      </Button>
+                    </Link>
+                  )}
+                  {isCancellable && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onCancelClick(booking)}
+                      disabled={cancellingBookingId === booking.id}
+                      className="rounded-xl border-red-200 text-red-600 hover:bg-red-50"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      {cancellingBookingId === booking.id ? 'Cancelling...' : 'Cancel'}
+                    </Button>
+                  )}
+                  {booking.payment_status === 'paid' && booking.status !== 'cancelled' && (
+                    <Link to={createPageUrl('Support')}>
+                      <Button variant="outline" size="sm" className="rounded-xl">
+                        Contact Support to Cancel
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        </div>
+      </Card>
+    </motion.div>
+  );
+});
+
 export default function BookingsPage() {
   const [bookings, setBookings] = useState([]);
   const [properties, setProperties] = useState({});
@@ -213,353 +554,6 @@ export default function BookingsPage() {
     }
   };
 
-  const PendingApprovalCard = ({ booking }) => {
-    const property = isValidSystemId(booking.property_id) ? properties[booking.property_id] : null;
-    const checkIn = parseISO(booking.check_in);
-    const checkOut = parseISO(booking.check_out);
-    const availabilityRequest = getAvailabilityRequest(booking);
-    const approvalStatus = availabilityRequest?.status || 'pending';
-
-    // Live countdown to payment deadline (only when admin has approved)
-    const [deadlineMs] = useState(() => {
-      const t = Date.parse(booking.payment_deadline || '');
-      return Number.isNaN(t) ? null : t;
-    });
-    const [msLeft, setMsLeft] = useState(() => deadlineMs ? Math.max(0, deadlineMs - Date.now()) : null);
-    useEffect(() => {
-      if (!deadlineMs) return;
-      const tick = () => setMsLeft(Math.max(0, deadlineMs - Date.now()));
-      const id = setInterval(tick, 1000);
-      return () => clearInterval(id);
-    }, [deadlineMs]);
-    const formatLeft = (ms) => {
-      if (ms == null) return '';
-      const totalSec = Math.floor(ms / 1000);
-      const m = Math.floor(totalSec / 60);
-      const s = totalSec % 60;
-      return `${m}m ${s.toString().padStart(2, '0')}s`;
-    };
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-      >
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
-          <div className="md:flex">
-            {property ? (
-              <div className="md:w-1/3">
-                <img
-                  src={property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400'}
-                  alt={property.title}
-                  className="w-full h-48 md:h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className="md:w-1/3 bg-slate-100 flex items-center justify-center h-48 md:h-full">
-                <MapPin className="w-16 h-16 text-slate-300" />
-              </div>
-            )}
-            <div className="md:w-2/3 p-6">
-              <CardHeader className="p-0 mb-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <CardTitle className="text-xl font-bold text-slate-900 mb-2">
-                      {property ? property.title : "Property details unavailable"}
-                    </CardTitle>
-                    {property && (
-                      <div className="flex items-center gap-2 text-slate-600 mb-3">
-                        <MapPin className="w-4 h-4" />
-                        <span className="text-sm font-medium">
-                          {property.location?.city}, {property.location?.country}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <Badge className={`${approvalStatusColors[approvalStatus]} border font-medium`}>
-                      {approvalStatus === 'pending' && '⏳ Awaiting Approval'}
-                      {approvalStatus === 'approved' && '✅ Approved'}
-                      {approvalStatus === 'rejected' && '❌ Rejected'}
-                    </Badge>
-                    {approvalStatus === 'approved' && msLeft != null && msLeft > 0 && (
-                      <Badge className={`border font-medium ${
-                        msLeft < 5 * 60 * 1000
-                          ? 'bg-red-100 text-red-800 border-red-200'
-                          : 'bg-amber-100 text-amber-800 border-amber-200'
-                      }`}>
-                        <Clock className="w-3 h-3 mr-1 inline" />
-                        Pay in {formatLeft(msLeft)}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="p-0 space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-500" />
-                    <div>
-                      <p className="text-slate-500">Check-in</p>
-                      <p className="font-semibold text-slate-900">
-                        {format(checkIn, "MMM d, yyyy")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-500" />
-                    <div>
-                      <p className="text-slate-500">Check-out</p>
-                      <p className="font-semibold text-slate-900">
-                        {format(checkOut, "MMM d, yyyy")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-slate-500" />
-                    <div>
-                      <p className="text-slate-500">Guests</p>
-                      <p className="font-semibold text-slate-900">{booking.guests}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-slate-500" />
-                    <div>
-                      <p className="text-slate-500">Total</p>
-                      <p className="font-semibold text-slate-900">₦{booking.total_price.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {availabilityRequest?.admin_response && (
-                  <div className={`rounded-xl p-4 ${
-                    approvalStatus === 'approved' ? 'bg-green-50 border border-green-200' :
-                    approvalStatus === 'rejected' ? 'bg-red-50 border border-red-200' :
-                    'bg-amber-50 border border-amber-200'
-                  }`}>
-                    <p className="text-sm font-semibold mb-1">
-                      {approvalStatus === 'approved' ? '✅ Admin Response' :
-                       approvalStatus === 'rejected' ? '❌ Admin Response' :
-                       'ℹ️ Admin Response'}
-                    </p>
-                    <p className="text-sm">{availabilityRequest.admin_response}</p>
-                  </div>
-                )}
-
-                {approvalStatus === 'pending' && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                    <div className="flex items-start gap-3">
-                      <Loader2 className="w-5 h-5 text-amber-600 animate-spin flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-semibold text-amber-900 mb-1">Availability Check in Progress</p>
-                        <p className="text-xs text-amber-700">
-                          Your booking request is being reviewed by our team. You'll be notified once approved, and you can proceed to payment.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {approvalStatus === 'rejected' && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm font-semibold text-red-900 mb-1">Booking Request Declined</p>
-                        <p className="text-xs text-red-700">
-                          Unfortunately, this property is not available for your selected dates. Please try different dates or explore other properties.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-                  <div className="text-sm text-slate-500">
-                    Requested on {format(new Date(booking.created_date), "MMM d, yyyy 'at' h:mm a")}
-                  </div>
-                  <div className="flex gap-3">
-                    {property && (
-                      <Link to={createPageUrl(`Property?id=${property.id}`)}>
-                        <Button variant="outline" size="sm" className="rounded-xl">
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          View Property
-                        </Button>
-                      </Link>
-                    )}
-                    {approvalStatus === 'approved' && (
-                      <Link to={createPageUrl(`Checkout?bookingId=${booking.id}`)}>
-                        <Button size="sm" className="rounded-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg">
-                          <CreditCard className="w-4 h-4 mr-2" />
-                          Proceed to Payment
-                        </Button>
-                      </Link>
-                    )}
-                    {approvalStatus === 'rejected' && (
-                      <Link to={createPageUrl('Search')}>
-                        <Button size="sm" className="rounded-xl bg-slate-900 hover:bg-slate-800">
-                          Find Another Property
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-    );
-  };
-
-  const BookingCard = ({ booking }) => {
-    const property = isValidSystemId(booking.property_id) ? properties[booking.property_id] : null;
-    const checkIn = parseISO(booking.check_in);
-    const checkOut = parseISO(booking.check_out);
-    const isCancellable = canCancelBooking(booking);
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-      >
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
-          <div className="md:flex">
-            {property ? (
-              <div className="md:w-1/3">
-                <img
-                  src={property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400'}
-                  alt={property.title}
-                  className="w-full h-48 md:h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div className="md:w-1/3 bg-slate-100 flex items-center justify-center h-48 md:h-full">
-                <MapPin className="w-16 h-16 text-slate-300" />
-              </div>
-            )}
-            <div className="md:w-2/3 p-6">
-              <CardHeader className="p-0 mb-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <CardTitle className="text-xl font-bold text-slate-900 mb-2">
-                      {property ? property.title : "Property details unavailable"}
-                    </CardTitle>
-                    {property && (
-                      <div className="flex items-center gap-2 text-slate-600 mb-3">
-                        <MapPin className="w-4 h-4" />
-                        <span className="text-sm font-medium">
-                          {property.location?.city}, {property.location?.country}
-                        </span>
-                      </div>
-                    )}
-                    {!property && booking.property_id && !isValidSystemId(booking.property_id) && (
-                      <p className="text-xs text-red-500">Invalid property ID: {booking.property_id}</p>
-                    )}
-                  </div>
-                  <Badge className={`${statusColors[booking.status]} border font-medium`}>
-                    {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                  </Badge>
-                </div>
-              </CardHeader>
-
-              <CardContent className="p-0 space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-500" />
-                    <div>
-                      <p className="text-slate-500">Check-in</p>
-                      <p className="font-semibold text-slate-900">
-                        {format(checkIn, "MMM d, yyyy")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-500" />
-                    <div>
-                      <p className="text-slate-500">Check-out</p>
-                      <p className="font-semibold text-slate-900">
-                        {format(checkOut, "MMM d, yyyy")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-slate-500" />
-                    <div>
-                      <p className="text-slate-500">Guests</p>
-                      <p className="font-semibold text-slate-900">{booking.guests}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-slate-500" />
-                    <div>
-                      <p className="text-slate-500">Total</p>
-                      <p className="font-semibold text-slate-900">₦{booking.total_price.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {booking.special_requests && (
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-sm font-semibold text-slate-700 mb-1">Special Requests</p>
-                    <p className="text-sm text-slate-600">{booking.special_requests}</p>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-                  <div className="text-sm text-slate-500">
-                    Booked on {format(new Date(booking.created_date), "MMM d, yyyy")}
-                  </div>
-                  <div className="flex gap-3">
-                    {property && (
-                      <Link to={createPageUrl(`Property?id=${property.id}`)}>
-                        <Button variant="outline" size="sm" className="rounded-xl">
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          View Property
-                        </Button>
-                      </Link>
-                    )}
-                    {booking.status === 'confirmed' && (
-                      <Link to={createPageUrl(`TripPlanner?booking_id=${booking.id}`)}>
-                        <Button size="sm" className="rounded-xl bg-slate-900 hover:bg-slate-800">
-                          <Compass className="w-4 h-4 mr-2" />
-                          Plan Trip
-                        </Button>
-                      </Link>
-                    )}
-                    {isCancellable && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCancelClick(booking)}
-                        disabled={cancellingBookingId === booking.id}
-                        className="rounded-xl border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        {cancellingBookingId === booking.id ? 'Cancelling...' : 'Cancel'}
-                      </Button>
-                    )}
-                    {booking.payment_status === 'paid' && booking.status !== 'cancelled' && (
-                      <Link to={createPageUrl('Support')}>
-                        <Button variant="outline" size="sm" className="rounded-xl">
-                          Contact Support to Cancel
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-    );
-  };
 
   const grouped = groupByBucket();
   const pendingApproval = grouped['pending-approval'];
@@ -625,7 +619,14 @@ export default function BookingsPage() {
           <TabsContent value="pending-approval" className="space-y-6">
             <AnimatePresence>
               {pendingApproval.length > 0 ? (
-                pendingApproval.map(booking => <PendingApprovalCard key={booking.id} booking={booking} />)
+                pendingApproval.map(booking => (
+                  <PendingApprovalCard
+                    key={booking.id}
+                    booking={booking}
+                    property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
+                    availabilityRequest={getAvailabilityRequest(booking)}
+                  />
+                ))
               ) : (
                 <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-12 text-center">
                   <div className="text-6xl mb-6">⏳</div>
@@ -647,7 +648,16 @@ export default function BookingsPage() {
           <TabsContent value="upcoming" className="space-y-6">
             <AnimatePresence>
               {upcoming.length > 0 ? (
-                upcoming.map(booking => <BookingCard key={booking.id} booking={booking} />)
+                upcoming.map(booking => (
+                  <BookingCard
+                    key={booking.id}
+                    booking={booking}
+                    property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
+                    isCancellable={canCancelBooking(booking)}
+                    cancellingBookingId={cancellingBookingId}
+                    onCancelClick={handleCancelClick}
+                  />
+                ))
               ) : (
                 <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-12 text-center">
                   <div className="text-6xl mb-6">📅</div>
@@ -666,7 +676,16 @@ export default function BookingsPage() {
           <TabsContent value="current" className="space-y-6">
             <AnimatePresence>
               {current.length > 0 ? (
-                current.map(booking => <BookingCard key={booking.id} booking={booking} />)
+                current.map(booking => (
+                  <BookingCard
+                    key={booking.id}
+                    booking={booking}
+                    property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
+                    isCancellable={canCancelBooking(booking)}
+                    cancellingBookingId={cancellingBookingId}
+                    onCancelClick={handleCancelClick}
+                  />
+                ))
               ) : (
                 <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-8 text-center">
                   <div className="text-6xl mb-4">🏠</div>
@@ -680,7 +699,16 @@ export default function BookingsPage() {
           <TabsContent value="past" className="space-y-6">
             <AnimatePresence>
               {past.length > 0 ? (
-                past.map(booking => <BookingCard key={booking.id} booking={booking} />)
+                past.map(booking => (
+                  <BookingCard
+                    key={booking.id}
+                    booking={booking}
+                    property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
+                    isCancellable={canCancelBooking(booking)}
+                    cancellingBookingId={cancellingBookingId}
+                    onCancelClick={handleCancelClick}
+                  />
+                ))
               ) : (
                 <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-8 text-center">
                   <div className="text-6xl mb-4">🕰️</div>
@@ -694,7 +722,16 @@ export default function BookingsPage() {
           <TabsContent value="cancelled" className="space-y-6">
             <AnimatePresence>
               {cancelledBookings.length > 0 ? (
-                cancelledBookings.map(booking => <BookingCard key={booking.id} booking={booking} />)
+                cancelledBookings.map(booking => (
+                  <BookingCard
+                    key={booking.id}
+                    booking={booking}
+                    property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
+                    isCancellable={canCancelBooking(booking)}
+                    cancellingBookingId={cancellingBookingId}
+                    onCancelClick={handleCancelClick}
+                  />
+                ))
               ) : (
                 <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-8 text-center">
                   <div className="text-6xl mb-4">✅</div>

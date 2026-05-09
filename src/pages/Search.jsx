@@ -68,14 +68,16 @@ export default function SearchPage() {
     setFilteredProperties(properties);
   }, [properties]);
 
-  // Re-fetch when filter panel changes (debounced) so price/amenities round-trip to the DB.
+  // Re-fetch on any search-related change (debounced) so location, guests,
+  // bedrooms, price, type, and amenities all round-trip to the DB without
+  // requiring the user to click the Search button.
   useEffect(() => {
     const id = setTimeout(() => {
       search(buildSearchParams());
     }, 400);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.minPrice, filters.maxPrice, filters.propertyType, filters.amenities]);
+  }, [searchQuery, guests, bedrooms, filters.minPrice, filters.maxPrice, filters.propertyType, filters.amenities]);
 
   const handleAIRecommendations = async () => {
     if (!isAuthenticated) {
