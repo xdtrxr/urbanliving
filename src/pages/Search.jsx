@@ -78,8 +78,9 @@ export default function SearchPage() {
   }, [filters.minPrice, filters.maxPrice, filters.propertyType, filters.amenities]);
 
   const handleAIRecommendations = async () => {
-    if (!user) {
-      alert("Please log in to get personalized AI recommendations");
+    if (!isAuthenticated) {
+      // Send signed-out users to login, returning here after auth.
+      window.location.href = `/login?from_url=${encodeURIComponent(window.location.href)}`;
       return;
     }
 
