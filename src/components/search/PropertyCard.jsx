@@ -7,6 +7,7 @@ import { Heart, Star, MapPin, Users, Bed, Bath, Wifi, Car, Utensils, Shield } fr
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 
 const amenityIcons = {
   wifi: Wifi,
@@ -23,6 +24,7 @@ const currencySymbols = {
 };
 
 export default function PropertyCard({ property, onToggleWishlist, isWishlisted = false }) {
+  const { isAuthenticated } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
   const [localIsWishlisted, setLocalIsWishlisted] = useState(isWishlisted);
 
@@ -159,11 +161,19 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
               </Button>
             </Link>
             
-            <Link to={createPageUrl(`Checkout?property=${property.id}&checkIn=2024-02-15&checkOut=2024-02-18&guests=2`)}>
-              <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg">
-                Book Now
-              </Button>
-            </Link>
+            {isAuthenticated ? (
+              <Link to={createPageUrl(`Checkout?property=${property.id}&checkIn=2024-02-15&checkOut=2024-02-18&guests=2`)}>
+                <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg">
+                  Book Now
+                </Button>
+              </Link>
+            ) : (
+              <Link to={`/login?from_url=${encodeURIComponent(window.location.origin + createPageUrl(`Property?id=${property.id}`))}`}>
+                <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg">
+                  Sign in to Book
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </CardContent>

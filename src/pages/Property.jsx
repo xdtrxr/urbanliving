@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useAuth } from '@/lib/AuthContext';
 
 const amenityIcons = {
   wifi: Wifi,
@@ -27,6 +28,7 @@ const currencySymbols = {
 };
 
 export default function PropertyPage() {
+  const { isAuthenticated } = useAuth();
     const [property, setProperty] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [media, setMedia] = useState([]);
@@ -230,13 +232,23 @@ export default function PropertyPage() {
                                         </div>
                                     )}
 
-                                    <Link to={createPageUrl(`Checkout?property=${property.id}`)}>
-                                        <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
-                                            Book Now
-                                        </Button>
-                                    </Link>
+                                    {isAuthenticated ? (
+                                        <Link to={createPageUrl(`Checkout?property=${property.id}`)}>
+                                            <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
+                                                Book Now
+                                            </Button>
+                                        </Link>
+                                    ) : (
+                                        <Link to={`/login?from_url=${encodeURIComponent(window.location.href)}`}>
+                                            <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
+                                                Sign in to Book
+                                            </Button>
+                                        </Link>
+                                    )}
 
-                                    <p className="text-xs text-center text-slate-500 mt-4">You won't be charged yet</p>
+                                    <p className="text-xs text-center text-slate-500 mt-4">
+                                        {isAuthenticated ? "You won't be charged yet" : 'Create an account or sign in to book.'}
+                                    </p>
                                 </Card>
                             </div>
                         </div>

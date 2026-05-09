@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { awardFirstWishlistAdd } from "@/components/utils/loyaltyService";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function SearchPage() {
+  const { isAuthenticated } = useAuth();
   const { properties, isLoading, error, metadata, search, clearCache } = usePropertySearch();
   const [filteredProperties, setFilteredProperties] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -294,7 +296,11 @@ Return ONLY the JSON, no other text.
           <div className="flex-1">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-slate-900">
-                {isLoading ? "Loading properties..." : `${filteredProperties.length} Properties Found`}
+                {isLoading
+                  ? "Loading properties..."
+                  : isAuthenticated
+                    ? `${filteredProperties.length} Properties Found`
+                    : "Available Properties"}
               </h2>
               {searchQuery && (
                 <div className="text-slate-600">
@@ -312,7 +318,7 @@ Return ONLY the JSON, no other text.
 
             {!isLoading && (
               <AnimatePresence>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${isAuthenticated ? '' : 'xl:grid-cols-4'}`}>
                   {filteredProperties.map((property, index) => (
                     <motion.div
                       key={property.id || index}

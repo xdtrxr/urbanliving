@@ -170,7 +170,7 @@ export default function Layout({ children, currentPageName }) {
                 <Home className="w-4 h-4 text-amber-400" />
               </div>
               <div className="sidebar-header-text group-data-[collapsible=icon]:hidden">
-                <h2 className="font-bold text-slate-900 text-base tracking-tight">Luxeliving</h2>
+                <h2 className="font-bold text-slate-900 text-base tracking-tight">Urban Stays</h2>
                 <p className="text-xs text-slate-500 font-medium">Luxury Stays Worldwide</p>
               </div>
             </div>
@@ -271,7 +271,14 @@ export default function Layout({ children, currentPageName }) {
                 {user && (
                   <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-colors duration-200 flex-shrink-0" />
                 )}
-                <h1 className="text-xl font-bold text-slate-900 md:hidden">Luxeliving</h1>
+                {/* When sidebar is hidden (signed out) the desktop has no brand,
+                    so always show the wordmark for unauthenticated users. */}
+                <h1 className={`text-xl font-bold text-slate-900 ${user ? 'md:hidden' : ''} flex items-center gap-2`}>
+                  <span className="w-7 h-7 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-lg flex items-center justify-center">
+                    <Home className="w-4 h-4 text-amber-400" />
+                  </span>
+                  Urban Stays
+                </h1>
               </div>
               {user ? (
                 <Button
