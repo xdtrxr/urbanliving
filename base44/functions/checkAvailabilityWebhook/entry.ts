@@ -22,14 +22,11 @@ function detectConflict(existing: any[], requestedIn: Date, requestedOut: Date):
     return { hasConflict: false, conflicting: null };
 }
 
-async function fetchPropertyImage(appId: string, apiKey: string, propertyId: string): Promise<string | null> {
+async function fetchPropertyImage(base44Client: any, propertyId: string): Promise<string | null> {
     try {
-        const res = await fetch(`https://app.base44.com/api/apps/${appId}/entities/Property/${propertyId}`, {
-            headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
-        });
-        if (!res.ok) return null;
-        const prop = await res.json();
-        return Array.isArray(prop.images) && prop.images.length > 0 ? prop.images[0] : null;
+        const props = await base44Client.asServiceRole.entities.Property.filter({ id: propertyId });
+        const prop = props?.[0];
+        return Array.isArray(prop?.images) && prop.images.length > 0 ? prop.images[0] : null;
     } catch (e) {
         console.warn('fetchPropertyImage failed:', (e as Error).message);
         return null;
@@ -226,35 +223,29 @@ Deno.serve(async (req) => {
         });
 
         // Notify admin (with property photo if available)
-        const appId = Deno.env.get('BASE44_APP_ID');
-        const apiKey = Deno.env.get('BASE44_SERVICE_ROLE_KEY');
         let telegramMessageId: string | null = null;
-        if (appId && apiKey) {
-            const propertyImageUrl = await fetchPropertyImage(appId, apiKey, property_id);
-            try {
-                const tgResult = await sendAdminTelegram({
-                    propertyTitle: property_title || 'Untitled property',
-                    propertyId: property_id,
-                    propertyLocation: property_location,
-                    propertyImageUrl,
-                    userName: user.full_name || 'Guest User',
-                    userEmail: user.email,
-                    userMobile: user.phone_number || '',
-                    guests: guests || 1,
-                    checkIn: check_in,
-                    checkOut: check_out,
-                    totalPrice: Number(total_price) || 0,
-                    specialRequests: special_requests || '',
-                    hasConflict,
-                    conflicting,
-                    requestId: availabilityRequest.id,
-                });
-                telegramMessageId = tgResult.message_id;
-            } catch (tgErr) {
-                console.error('Telegram notification failed (non-fatal):', tgErr);
-            }
-        } else {
-            console.warn('BASE44_APP_ID or BASE44_SERVICE_ROLE_KEY missing — skipped property image fetch');
+        try {
+            const propertyImageUrl = await fetchPropertyImage(base44, property_id);
+            const tgResult = await sendAdminTelegram({
+                propertyTitle: property_title || 'Untitled property',
+                propertyId: property_id,
+                propertyLocation: property_location,
+                propertyImageUrl,
+                userName: user.full_name || 'Guest User',
+                userEmail: user.email,
+                userMobile: user.phone_number || '',
+                guests: guests || 1,
+                checkIn: check_in,
+                checkOut: check_out,
+                totalPrice: Number(total_price) || 0,
+                specialRequests: special_requests || '',
+                hasConflict,
+                conflicting,
+                requestId: availabilityRequest.id,
+            });
+            telegramMessageId = tgResult.message_id;
+        } catch (tgErr) {
+            console.error('Telegram notification failed (non-fatal):', tgErr);
         }
 
         if (telegramMessageId) {
