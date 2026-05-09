@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
+import { Loader2, Mail, Lock, AlertCircle, ArrowRight, User as UserIcon, Phone } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 const GoogleIcon = () => (
@@ -28,6 +28,10 @@ export default function LoginPage() {
   const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [error, setError] = useState(null);
   const [isWorking, setIsWorking] = useState(false);
   const [referralCode, setReferralCode] = useState('');
@@ -97,9 +101,23 @@ export default function LoginPage() {
       setError('Email and password are required');
       return;
     }
-    if (mode === 'signup' && password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
+    if (mode === 'signup') {
+      if (password.length < 8) {
+        setError('Password must be at least 8 characters');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match');
+        return;
+      }
+      if (!firstName.trim()) {
+        setError('First name is required');
+        return;
+      }
+      if (!phoneNumber.trim() || phoneNumber.trim().replace(/\D/g, '').length < 10) {
+        setError('A valid phone number is required (at least 10 digits)');
+        return;
+      }
     }
 
     setIsWorking(true);
@@ -110,10 +128,21 @@ export default function LoginPage() {
           password,
           referral_code: referralCode || undefined,
         });
-        // Some flows auto-login; if not, attempt sign-in afterwards
+        // Some flows auto-login; otherwise sign-in afterwards.
         try {
           await base44.auth.loginViaEmailPassword(email, password);
         } catch { /* ignore — register may have logged in */ }
+
+        // Save the profile fields the SDK's register() doesn't capture.
+        const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+        try {
+          await base44.auth.updateMe({
+            full_name: fullName,
+            phone_number: phoneNumber.trim(),
+          });
+        } catch (profileErr) {
+          console.warn('Failed to save profile fields after signup:', profileErr);
+        }
       } else {
         await base44.auth.loginViaEmailPassword(email, password);
       }
@@ -164,8 +193,57 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleEmailSubmit} className="space-y-4">
+            {mode === 'signup' && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="firstName">First name <span className="text-red-500">*</span></Label>
+                    <div className="relative mt-1">
+                      <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input
+                        id="firstName"
+                        autoComplete="given-name"
+                        placeholder="Jane"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className="pl-10 h-12 rounded-xl"
+                        disabled={isWorking}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="lastName">Last name</Label>
+                    <Input
+                      id="lastName"
+                      autoComplete="family-name"
+                      placeholder="Optional"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="mt-1 h-12 rounded-xl"
+                      disabled={isWorking}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="phoneNumber">Phone number <span className="text-red-500">*</span></Label>
+                  <div className="relative mt-1">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input
+                      id="phoneNumber"
+                      type="tel"
+                      autoComplete="tel"
+                      placeholder="+234 800 000 0000"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      className="pl-10 h-12 rounded-xl"
+                      disabled={isWorking}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
@@ -181,7 +259,7 @@ export default function LoginPage() {
               </div>
             </div>
             <div>
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Password <span className="text-red-500">*</span></Label>
               <div className="relative mt-1">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
@@ -196,6 +274,25 @@ export default function LoginPage() {
                 />
               </div>
             </div>
+
+            {mode === 'signup' && (
+              <div>
+                <Label htmlFor="confirmPassword">Confirm password <span className="text-red-500">*</span></Label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Re-enter your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10 h-12 rounded-xl"
+                    disabled={isWorking}
+                  />
+                </div>
+              </div>
+            )}
 
             {mode === 'signup' && referralCode && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-800">
