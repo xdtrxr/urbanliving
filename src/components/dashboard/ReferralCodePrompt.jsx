@@ -86,7 +86,7 @@ export default function ReferralCodePrompt({ user, onSubmitted }) {
         <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleSkip()}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle className="text-2xl">Welcome to Luxeliving! 🎉</DialogTitle>
+                    <DialogTitle className="text-2xl">Welcome to Urban Stays! 🎉</DialogTitle>
                     <DialogDescription>
                         Did a friend refer you? Enter their referral code below to help them earn rewards when you book!
                     </DialogDescription>

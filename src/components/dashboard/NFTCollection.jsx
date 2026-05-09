@@ -46,7 +46,7 @@ export default function NFTCollection({ user }) {
       rarity: "Common",
       earned_date: new Date().toISOString().split('T')[0],
       image_url: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=200",
-      description: "Awarded for joining the Luxeliving community",
+      description: "Awarded for joining the Urban Stays community",
       benefits: ["5% discount on first booking", "Priority customer support"]
     }
   ] : nftTokens;

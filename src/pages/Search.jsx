@@ -104,7 +104,7 @@ export default function SearchPage() {
       };
       
       const prompt = `
-You are a luxury travel advisor AI for LuxeLiving.
+You are a luxury travel advisor AI for Urban Stays.
 
 ## User Profile:
 ${JSON.stringify(userProfile, null, 2)}
@@ -284,16 +284,20 @@ Return ONLY the JSON, no other text.
         )}
 
         <div className="flex flex-col lg:flex-row gap-8">
-          <div className="lg:w-80 flex-shrink-0">
-            <PropertyFilters
-              filters={filters}
-              onFiltersChange={setFilters}
-              isOpen={showFilters}
-              onToggle={() => setShowFilters(!showFilters)}
-            />
-          </div>
+          {/* Filters panel only renders for authenticated users; signed-out
+              visitors get a clean full-width grid that spans the screen. */}
+          {isAuthenticated && (
+            <div className="lg:w-80 flex-shrink-0">
+              <PropertyFilters
+                filters={filters}
+                onFiltersChange={setFilters}
+                isOpen={showFilters}
+                onToggle={() => setShowFilters(!showFilters)}
+              />
+            </div>
+          )}
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-slate-900">
                 {isLoading
@@ -318,7 +322,11 @@ Return ONLY the JSON, no other text.
 
             {!isLoading && (
               <AnimatePresence>
-                <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${isAuthenticated ? '' : 'xl:grid-cols-4'}`}>
+                <div className={`grid gap-6 ${
+                  isAuthenticated
+                    ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+                    : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+                }`}>
                   {filteredProperties.map((property, index) => (
                     <motion.div
                       key={property.id || index}

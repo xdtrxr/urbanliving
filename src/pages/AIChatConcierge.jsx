@@ -305,7 +305,7 @@ export default function AIChatConciergePage() {
       }
 
       const prompt = `
-You are **Agent Nova (AI Rental Assistant)** — an expert AI co-host that manages and optimizes short-term rental properties for LuxeLiving.
+You are **Agent Nova (AI Rental Assistant)** — an expert AI co-host that manages and optimizes short-term rental properties for Urban Stays.
 
 ## 🎯 YOUR CORE MISSION
 Help guests find perfect properties, manage bookings, answer questions, and deliver five-star experiences through warm, professional, and efficient service.

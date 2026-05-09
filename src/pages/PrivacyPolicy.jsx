@@ -21,7 +21,7 @@ export default function PrivacyPolicyPage() {
           </CardHeader>
           <CardContent className="p-4 sm:p-8 prose prose-slate max-w-none">
             <h2>1. Introduction</h2>
-            <p>Welcome to Luxeliving. We are committed to protecting your personal information and your right to privacy. If you have any questions or concerns about our policy, or our practices with regards to your personal information, please contact us.</p>
+            <p>Welcome to Urban Stays. We are committed to protecting your personal information and your right to privacy. If you have any questions or concerns about our policy, or our practices with regards to your personal information, please contact us.</p>
             
             <h2>2. Information We Collect</h2>
             <p>We collect personal information that you voluntarily provide to us when you register on the app, express an interest in obtaining information about us or our products and services, when you participate in activities on the app or otherwise when you contact us.</p>

@@ -43,7 +43,7 @@ export default function FAQPage() {
               </div>
               <div>
                 <CardTitle className="text-3xl font-bold text-slate-900">Frequently Asked Questions</CardTitle>
-                <p className="text-slate-600 mt-1">Find answers to common questions about Luxeliving.</p>
+                <p className="text-slate-600 mt-1">Find answers to common questions about Urban Stays.</p>
               </div>
             </div>
           </CardHeader>

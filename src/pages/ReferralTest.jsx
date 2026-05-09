@@ -309,7 +309,7 @@ export default function ReferralTestPage() {
               <Users className="w-5 h-5" />
               Your Referrals ({referrals.length})
             </CardTitle>
-            <CardDescription>People you've referred to Luxeliving</CardDescription>
+            <CardDescription>People you've referred to Urban Stays</CardDescription>
           </CardHeader>
           <CardContent>
             {referrals.length === 0 ? (

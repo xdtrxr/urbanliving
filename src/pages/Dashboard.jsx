@@ -104,7 +104,7 @@ export default function DashboardPage() {
               user_email: userData.email,
               points_earned: 100,
               transaction_type: 'bonus',
-              description: 'Welcome bonus for joining Luxeliving'
+              description: 'Welcome bonus for joining Urban Stays'
             });
           } catch (txError) {
             console.error('Error creating welcome bonus transaction:', txError);
@@ -121,7 +121,7 @@ export default function DashboardPage() {
               rarity: "Common",
               earned_date: new Date().toISOString().split('T')[0],
               image_url: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=200",
-              description: "Awarded for joining the Luxeliving community",
+              description: "Awarded for joining the Urban Stays community",
               benefits: ["5% discount on first booking", "Priority customer support"]
             }
           ];
