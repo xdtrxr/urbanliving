@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@base44/sdk@0.7.1';
+import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
 
 // Auto-cancels pending bookings whose payment_deadline has passed and notifies
 // admin via Telegram. Runs on a schedule (Deno.cron) and is also exposed as a
@@ -95,6 +95,20 @@ Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
     if (req.method !== 'POST') {
         return new Response(JSON.stringify({ success: false, error: 'Method not allowed' }), { status: 405, headers });
+    }
+
+    // Admin-only when invoked via HTTP (the cron entry point bypasses Deno.serve).
+    try {
+        const userClient = createClientFromRequest(req);
+        const user = await userClient.auth.me();
+        if (!user) {
+            return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
+        }
+        if (user.role !== 'admin') {
+            return new Response(JSON.stringify({ success: false, error: 'Admin role required' }), { status: 403, headers });
+        }
+    } catch (authErr) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
     }
 
     try {

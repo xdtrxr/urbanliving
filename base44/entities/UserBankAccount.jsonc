@@ -45,7 +45,9 @@
     "account_name"
   ],
   "rls": {
-    "create": null,
+    "create": {
+      "data.user_email": "{{user.email}}"
+    },
     "read": {
       "data.user_email": "{{user.email}}"
     },
