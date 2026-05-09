@@ -272,13 +272,18 @@ export default function Layout({ children, currentPageName }) {
                   <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-colors duration-200 flex-shrink-0" />
                 )}
                 {/* When sidebar is hidden (signed out) the desktop has no brand,
-                    so always show the wordmark for unauthenticated users. */}
-                <h1 className={`text-xl font-bold text-slate-900 ${user ? 'md:hidden' : ''} flex items-center gap-2`}>
+                    so always show the wordmark for unauthenticated users. Clicking
+                    the wordmark always takes the user to the home (Search) page. */}
+                <Link
+                  to={createPageUrl('Search')}
+                  className={`text-xl font-bold text-slate-900 ${user ? 'md:hidden' : ''} flex items-center gap-2 hover:opacity-80 transition-opacity`}
+                  aria-label="Urban Stays — go to home"
+                >
                   <span className="w-7 h-7 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-lg flex items-center justify-center">
                     <Home className="w-4 h-4 text-amber-400" />
                   </span>
                   Urban Stays
-                </h1>
+                </Link>
               </div>
               {user ? (
                 <Button
