@@ -63,6 +63,28 @@
     "referral_balance_ngn": {
       "type": "number",
       "default": 0
+    },
+    "referral_prompt_seen": {
+      "type": "boolean",
+      "default": false,
+      "description": "Has the user already been prompted to enter a referral code"
+    },
+    "nft_tokens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "rarity": { "type": "string" },
+          "earned_date": { "type": "string" },
+          "image_url": { "type": "string" },
+          "description": { "type": "string" },
+          "benefits": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "description": "NFT collectibles awarded to the user"
     }
   }
 }
