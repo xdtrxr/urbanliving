@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@base44/sdk@0.7.1';
+import { createClient } from 'npm:@base44/sdk@0.8.27';
 
 // IMPORTANT: This function and base44/functions/verifyPaystackPayment/entry.ts
 // share the post-payment booking-update logic (mark paid, notify admin, inline

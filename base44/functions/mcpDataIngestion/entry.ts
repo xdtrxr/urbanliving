@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 // Fetches Airbnb listings for a city via RapidAPI's airbnb13 service and
 // upserts them into the Property entity.
@@ -89,6 +89,10 @@ Deno.serve(async (req) => {
         const user = await base44.auth.me();
         if (!user) {
             return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
+        }
+        // Property upserts are admin-only — same trust level as the Property entity.
+        if (user.role !== 'admin') {
+            return new Response(JSON.stringify({ success: false, error: 'Admin role required' }), { status: 403, headers });
         }
 
         const body = await req.json().catch(() => ({}));

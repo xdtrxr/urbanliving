@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 import { GoogleAuth } from 'npm:google-auth-library@9.6.3';
 import { google } from 'npm:googleapis@134.0.0';
 
@@ -6,10 +6,15 @@ Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
         
-        // Authenticate user
+        // Authenticate caller — admin only since this writes to a shared
+        // operational spreadsheet that contains every booking, not just
+        // the caller's own.
         const user = await base44.auth.me();
         if (!user) {
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+        if (user.role !== 'admin') {
+            return Response.json({ error: 'Admin role required' }, { status: 403 });
         }
 
         const { booking_id } = await req.json();

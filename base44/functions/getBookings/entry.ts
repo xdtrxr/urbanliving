@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 const BUCKETS = ['pending-approval', 'upcoming', 'current', 'past', 'cancelled'] as const;
 type Bucket = typeof BUCKETS[number];

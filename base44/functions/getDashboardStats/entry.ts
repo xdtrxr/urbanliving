@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 const HOUR_MS = 60 * 60 * 1000;
 const PAYMENT_WINDOW_MS = 1 * HOUR_MS;

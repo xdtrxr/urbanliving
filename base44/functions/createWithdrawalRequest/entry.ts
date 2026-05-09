@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 const WITHDRAWAL_THRESHOLD_NGN = 10000;
 

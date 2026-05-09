@@ -1,4 +1,4 @@
-import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 // Auto-cancels pending bookings whose payment_deadline has passed and notifies
 // admin via Telegram. Runs on a schedule (Deno.cron) and is also exposed as a

@@ -106,10 +106,14 @@ Set these in your Base44 dashboard under **Settings → Secrets**:
 |---|---|
 | `TELEGRAM_BOT_TOKEN` | Your Telegram bot token from [@BotFather](https://t.me/BotFather) |
 | `TELEGRAM_ADMIN_CHAT_ID` | Telegram chat ID of the admin who receives booking notifications |
-| `PAYSTACK_SECRET_KEY` | Paystack secret key for payment processing |
-| `PAYSTACK_PUBLIC_KEY` | Paystack public key for frontend payment initialisation |
+| `TELEGRAM_WEBHOOK_SECRET` | Random ≥32-char string verified against the `x-telegram-bot-api-secret-token` header to reject forged callbacks. Pass the same value as `secret_token=` when calling `setWebhook` |
+| `PAYSTACK_SECRET_KEY` | Paystack secret key for payment verify + transfers |
+| `PAYSTACK_PUBLIC_KEY` | Paystack public key returned by `getPaystackPublicKey` for the frontend |
+| `RAPID_API_KEY` | RapidAPI key for the Airbnb scraper (mcpDataIngestion). Optional |
+| `RAPID_API_HOST` | Override the Airbnb scraper host. Defaults to `airbnb13.p.rapidapi.com`. Optional |
 | `GOOGLE_SHEET_ID` | ID of the Google Sheet used for booking logs |
 | `GOOGLE_SERVICE_ACCOUNT_KEY_JSON` | Google service account credentials (JSON) |
+| `BASE44_APP_ID` | Your Base44 app ID (usually auto-injected) |
 | `BASE44_SERVICE_ROLE_KEY` | Base44 service role key for admin-level entity operations |
 
 ### Telegram Webhook

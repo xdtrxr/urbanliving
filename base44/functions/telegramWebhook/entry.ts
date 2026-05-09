@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@base44/sdk@0.7.1';
+import { createClient } from 'npm:@base44/sdk@0.8.27';
 
 Deno.serve(async (req) => {
     console.log('=== TELEGRAM WEBHOOK CALLED ===');

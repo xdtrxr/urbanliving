@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 const REWARD_RATE = 0.05;
 const REFERRER_LOYALTY_BONUS = 250;

@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 // Returns the Paystack public key for client-side Paystack popup initialization.
 // Authenticated users only — the public key isn't a secret per se but limiting
