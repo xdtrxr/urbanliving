@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { Property as PropertyEntity } from '@/entities/Property';
+import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,9 @@ export default function PropertyPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [media, setMedia] = useState([]);
     const [selectedMedia, setSelectedMedia] = useState(null);
+    // Approved-but-unpaid booking by the current user for this property — when
+    // present we swap the "Book Now" CTA for "Proceed to Payment".
+    const [pendingPaymentBooking, setPendingPaymentBooking] = useState(null);
     const location = useLocation();
 
     useEffect(() => {
@@ -43,15 +47,32 @@ export default function PropertyPage() {
                 try {
                     const data = await PropertyEntity.get(propertyId);
                     setProperty(data);
-                    
+
                     const images = (data.images || []).map(url => ({ type: 'image', url }));
                     const videos = (data.videos || []).map(url => ({ type: 'video', url }));
-                    
+
                     const combinedMedia = [...images, ...videos];
                     setMedia(combinedMedia);
 
                     if (combinedMedia.length > 0) {
                         setSelectedMedia(combinedMedia[0]);
+                    }
+
+                    // If the user has an approved-but-unpaid booking for this property,
+                    // surface it so the CTA becomes "Proceed to Payment" instead of "Book Now".
+                    if (isAuthenticated) {
+                        try {
+                            const me = await base44.auth.me();
+                            const matches = await base44.entities.Booking.filter({
+                                property_id: propertyId,
+                                guest_email: me.email,
+                                status: 'pending',
+                            });
+                            const eligible = (matches || []).find(b => b.approved_at && b.payment_status !== 'paid');
+                            if (eligible) setPendingPaymentBooking(eligible);
+                        } catch (lookupErr) {
+                            console.warn('Could not look up existing booking for this property:', lookupErr);
+                        }
                     }
                 } catch (error) {
                     console.error("Failed to fetch property:", error);
@@ -61,7 +82,7 @@ export default function PropertyPage() {
         };
 
         loadProperty();
-    }, [location.search]);
+    }, [location.search, isAuthenticated]);
 
     if (isLoading) {
         return (
@@ -232,22 +253,37 @@ export default function PropertyPage() {
                                         </div>
                                     )}
 
-                                    {isAuthenticated ? (
-                                        <Link to={createPageUrl(`Checkout?property=${property.id}`)}>
-                                            <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
-                                                Book Now
-                                            </Button>
-                                        </Link>
-                                    ) : (
+                                    {!isAuthenticated ? (
                                         <Link to={`/login?from_url=${encodeURIComponent(window.location.href)}`}>
                                             <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
                                                 Sign in to Book
                                             </Button>
                                         </Link>
+                                    ) : pendingPaymentBooking ? (
+                                        <Link to={`${createPageUrl('PaymentPage')}?${new URLSearchParams({
+                                            booking_id: pendingPaymentBooking.id,
+                                            total: String(pendingPaymentBooking.total_price || 0),
+                                            property_title: property.title || '',
+                                            guest_email: pendingPaymentBooking.guest_email || '',
+                                        }).toString()}`}>
+                                            <Button size="lg" className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold rounded-xl">
+                                                Proceed to Payment
+                                            </Button>
+                                        </Link>
+                                    ) : (
+                                        <Link to={createPageUrl(`Checkout?property=${property.id}`)}>
+                                            <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
+                                                Book Now
+                                            </Button>
+                                        </Link>
                                     )}
 
                                     <p className="text-xs text-center text-slate-500 mt-4">
-                                        {isAuthenticated ? "You won't be charged yet" : 'Create an account or sign in to book.'}
+                                        {!isAuthenticated
+                                            ? 'Create an account or sign in to book.'
+                                            : pendingPaymentBooking
+                                                ? 'Your booking has been approved — complete payment to confirm.'
+                                                : "You won't be charged yet"}
                                     </p>
                                 </Card>
                             </div>

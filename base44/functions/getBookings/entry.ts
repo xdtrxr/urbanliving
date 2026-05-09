@@ -19,8 +19,12 @@ function computeDeadlineMs(b: any): number | null {
 
 function computeBucket(b: any, nowMs: number): Bucket {
     if (b.status === 'cancelled') return 'cancelled';
-    if (b.status === 'pending') return 'pending-approval';
     if (b.status === 'completed') return 'past';
+
+    // Pending bookings split by whether admin has approved yet:
+    //   approved_at unset → still awaiting admin decision → pending-approval
+    //   approved_at set   → admin approved, awaiting payment → date-based bucket
+    if (b.status === 'pending' && !b.approved_at) return 'pending-approval';
 
     const checkInMs = Date.parse(b.check_in);
     const checkOutMs = Date.parse(b.check_out);

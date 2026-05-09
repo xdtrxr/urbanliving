@@ -210,8 +210,13 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                       </Button>
                     </Link>
                   )}
-                  {approvalStatus === 'approved' && (
-                    <Link to={createPageUrl(`Checkout?bookingId=${booking.id}`)}>
+                  {approvalStatus === 'approved' && booking.payment_status !== 'paid' && (
+                    <Link to={`${createPageUrl('PaymentPage')}?${new URLSearchParams({
+                      booking_id: booking.id,
+                      total: String(booking.total_price || 0),
+                      property_title: property?.title || '',
+                      guest_email: booking.guest_email || '',
+                    }).toString()}`}>
                       <Button size="sm" className="rounded-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg">
                         <CreditCard className="w-4 h-4 mr-2" />
                         Proceed to Payment
@@ -562,6 +567,33 @@ export default function BookingsPage() {
   const past = grouped['past'];
   const cancelledBookings = grouped['cancelled'];
 
+  // Bookings that have been admin-approved but not yet paid (now living in the
+  // upcoming bucket per the new server-side logic) get the PendingApprovalCard
+  // so the user sees the countdown + "Proceed to Payment" CTA. Paid bookings
+  // get the regular BookingCard.
+  const renderUpcomingItem = (booking) => {
+    if (booking.payment_status === 'paid' || booking.status === 'confirmed') {
+      return (
+        <BookingCard
+          key={booking.id}
+          booking={booking}
+          property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
+          isCancellable={canCancelBooking(booking)}
+          cancellingBookingId={cancellingBookingId}
+          onCancelClick={handleCancelClick}
+        />
+      );
+    }
+    return (
+      <PendingApprovalCard
+        key={booking.id}
+        booking={booking}
+        property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
+        availabilityRequest={getAvailabilityRequest(booking)}
+      />
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-8">
@@ -648,16 +680,7 @@ export default function BookingsPage() {
           <TabsContent value="upcoming" className="space-y-6">
             <AnimatePresence>
               {upcoming.length > 0 ? (
-                upcoming.map(booking => (
-                  <BookingCard
-                    key={booking.id}
-                    booking={booking}
-                    property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
-                    isCancellable={canCancelBooking(booking)}
-                    cancellingBookingId={cancellingBookingId}
-                    onCancelClick={handleCancelClick}
-                  />
-                ))
+                upcoming.map(renderUpcomingItem)
               ) : (
                 <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-12 text-center">
                   <div className="text-6xl mb-6">📅</div>
@@ -676,16 +699,7 @@ export default function BookingsPage() {
           <TabsContent value="current" className="space-y-6">
             <AnimatePresence>
               {current.length > 0 ? (
-                current.map(booking => (
-                  <BookingCard
-                    key={booking.id}
-                    booking={booking}
-                    property={isValidSystemId(booking.property_id) ? properties[booking.property_id] : null}
-                    isCancellable={canCancelBooking(booking)}
-                    cancellingBookingId={cancellingBookingId}
-                    onCancelClick={handleCancelClick}
-                  />
-                ))
+                current.map(renderUpcomingItem)
               ) : (
                 <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-8 text-center">
                   <div className="text-6xl mb-4">🏠</div>
