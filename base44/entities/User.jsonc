@@ -74,14 +74,33 @@
       "items": {
         "type": "object",
         "properties": {
-          "id": { "type": "string" },
-          "name": { "type": "string" },
-          "type": { "type": "string" },
-          "rarity": { "type": "string" },
-          "earned_date": { "type": "string" },
-          "image_url": { "type": "string" },
-          "description": { "type": "string" },
-          "benefits": { "type": "array", "items": { "type": "string" } }
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "rarity": {
+            "type": "string"
+          },
+          "earned_date": {
+            "type": "string"
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "benefits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         }
       },
       "description": "NFT collectibles awarded to the user"
