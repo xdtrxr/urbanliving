@@ -9,8 +9,10 @@ import { Copy, Gift, CheckCircle, Clock, DollarSign, TrendingUp, Users, Target, 
 export default function ReferralCard({ user, referrals, referralStats, isLoadingStats }) {
     const [copied, setCopied] = useState(false);
     
-    // Generate the full referral link with custom domain
-    const referralLink = `https://luxelivingproperty.io/?ref=${user.referral_code}`;
+    // Use the current app origin so the link always points to the right
+    // deployment (preview, custom domain, etc.) instead of a stale hardcoded URL.
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const referralLink = `${origin}/?ref=${user.referral_code}`;
 
     const handleCopy = () => {
         navigator.clipboard.writeText(referralLink);

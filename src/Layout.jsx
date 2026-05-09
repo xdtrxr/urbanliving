@@ -34,7 +34,7 @@ const navigationItems = [
     description: "Find your perfect stay"
   },
   {
-    title: "Agent Luxe",
+    title: "Agent Nova",
     url: createPageUrl("AIChatConcierge"),
     icon: MessageCircle,
     description: "Get personalized advice"

@@ -8,7 +8,7 @@
  * 
  * Quest Types:
  * - ONE-TIME QUESTS: Complete once, permanent (Instagram, TikTok)
- * - DAILY QUESTS: Reset at midnight UTC (Agent Luxe Chat)
+ * - DAILY QUESTS: Reset at midnight UTC (Agent Nova Chat)
  * 
  * Features:
  * - Race condition prevention
@@ -92,7 +92,7 @@ const QUEST_REGISTRY = {
   // DAILY ENGAGEMENT QUESTS
   'daily_chat_agent': {
     id: 'daily_chat_agent',
-    name: 'Daily Chat with Agent Luxe',
+    name: 'Daily Chat with Agent Nova',
     description: 'Chat with our AI concierge (send at least 2 messages)',
     points: 50,
     color: 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white',
