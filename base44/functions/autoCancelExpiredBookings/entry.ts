@@ -1,4 +1,4 @@
-import { createClient, createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 // Auto-cancels pending bookings whose payment_deadline has passed and notifies
 // admin via Telegram. Runs on a schedule (Deno.cron) and is also exposed as a
@@ -40,15 +40,7 @@ async function notifyAdmin(b: any) {
     }
 }
 
-async function runSweep(): Promise<{ scanned: number; cancelled: number }> {
-    const appId = Deno.env.get('BASE44_APP_ID');
-    const apiKey = Deno.env.get('BASE44_SERVICE_ROLE_KEY');
-    if (!appId || !apiKey) {
-        console.error('BASE44_APP_ID / BASE44_SERVICE_ROLE_KEY not configured');
-        return { scanned: 0, cancelled: 0 };
-    }
-    const sdk = createClient({ appId, serviceToken: apiKey, requiresAuth: false });
-
+async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number }> {
     const pending = await sdk.asServiceRole.entities.Booking.filter({ status: 'pending' });
     const now = Date.now();
     let cancelled = 0;
@@ -70,18 +62,11 @@ async function runSweep(): Promise<{ scanned: number; cancelled: number }> {
     return { scanned: pending.length, cancelled };
 }
 
-// Scheduled execution. Base44's runtime supports Deno.cron at module top level.
-try {
-    Deno.cron('auto-cancel expired bookings', '*/5 * * * *', async () => {
-        console.log('🕒 Cron: sweeping expired pending bookings');
-        const result = await runSweep();
-        console.log(`🕒 Cron complete: scanned ${result.scanned}, cancelled ${result.cancelled}`);
-    });
-} catch (cronErr) {
-    // Some environments don't support Deno.cron at top level; the HTTP handler
-    // below still works for manual/scheduled triggers via curl or Base44 hooks.
-    console.warn('Deno.cron registration failed:', cronErr);
-}
+// Note: Deno.cron registration is intentionally NOT used here because Base44's
+// runtime provides the SDK client per-request via createClientFromRequest, and
+// the cron context has no incoming request to derive that from. To run on a
+// schedule, configure a Base44 dashboard schedule (or external cron) that POSTs
+// to this function's HTTP endpoint as an admin user.
 
 // Manual HTTP trigger — admin only. Useful for ad-hoc sweeps or test environments
 // that don't expose Deno.cron.
@@ -97,10 +82,12 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: false, error: 'Method not allowed' }), { status: 405, headers });
     }
 
-    // Admin-only when invoked via HTTP (the cron entry point bypasses Deno.serve).
+    // Admin-only when invoked via HTTP. Base44 supplies the SDK client with
+    // service-role access automatically via createClientFromRequest.
+    let sdk: any;
     try {
-        const userClient = createClientFromRequest(req);
-        const user = await userClient.auth.me();
+        sdk = createClientFromRequest(req);
+        const user = await sdk.auth.me();
         if (!user) {
             return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
         }
@@ -112,7 +99,7 @@ Deno.serve(async (req) => {
     }
 
     try {
-        const result = await runSweep();
+        const result = await runSweep(sdk);
         return new Response(JSON.stringify({ success: true, data: result }), { status: 200, headers });
     } catch (error) {
         console.error('autoCancelExpiredBookings error:', error);

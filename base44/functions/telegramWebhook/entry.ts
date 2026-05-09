@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@base44/sdk@0.8.27';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 Deno.serve(async (req) => {
     console.log('=== TELEGRAM WEBHOOK CALLED ===');
@@ -20,9 +20,13 @@ Deno.serve(async (req) => {
         console.warn('TELEGRAM_WEBHOOK_SECRET not configured — webhook is unauthenticated');
     }
 
+    // Base44 supplies the SDK client with service-role access automatically.
+    // No BASE44_APP_ID / BASE44_SERVICE_ROLE_KEY env vars needed.
+    const base44 = createClientFromRequest(req);
+
     try {
         const update = await req.json();
-        console.log('Telegram update:', JSON.stringify(update, null, 2));
+        console.log('Telegram update received');
 
         if (!update.callback_query) {
             return new Response(JSON.stringify({ ok: true }), {
@@ -43,30 +47,15 @@ Deno.serve(async (req) => {
             throw new Error('Invalid callback data');
         }
 
-        // Use the API key directly with fetch
-        const appId = Deno.env.get('BASE44_APP_ID');
-        const apiKey = Deno.env.get('BASE44_SERVICE_ROLE_KEY');
-        const baseUrl = `https://app.base44.com/api/apps/${appId}`;
-
-        console.log('📡 Making direct API call to update request...');
-
-        // Get the request first
-        const getResponse = await fetch(`${baseUrl}/entities/AvailabilityRequest/${requestId}`, {
-            method: 'GET',
-            headers: {
-                'api_key': apiKey,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!getResponse.ok) {
-            const errorText = await getResponse.text();
-            console.error('❌ Failed to fetch request:', getResponse.status, errorText);
-            throw new Error(`Failed to fetch request: ${getResponse.status}`);
+        // Fetch the request via SDK
+        const request = await base44.asServiceRole.entities.AvailabilityRequest.get(requestId);
+        if (!request) {
+            console.error('AvailabilityRequest not found:', requestId);
+            await answerCallbackQuery(callbackQuery.id, 'Request not found.');
+            return new Response(JSON.stringify({ ok: true }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
         }
-
-        const request = await getResponse.json();
-        console.log('✅ Request fetched:', request);
 
         if (request.status !== 'pending') {
             await answerCallbackQuery(callbackQuery.id, 'This request has already been processed.');
@@ -75,29 +64,16 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Update the request
+        // Update the request status
         const newStatus = action === 'approve' ? 'approved' : 'rejected';
-        const adminResponse = action === 'approve' 
-            ? 'Property is available for your requested dates!' 
+        const adminResponse = action === 'approve'
+            ? 'Property is available for your requested dates!'
             : 'Sorry, the property is not available for these dates. Please try different dates or check other properties.';
 
-        const updateResponse = await fetch(`${baseUrl}/entities/AvailabilityRequest/${requestId}`, {
-            method: 'PUT',
-            headers: {
-                'api_key': apiKey,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                status: newStatus,
-                admin_response: adminResponse
-            })
+        await base44.asServiceRole.entities.AvailabilityRequest.update(requestId, {
+            status: newStatus,
+            admin_response: adminResponse,
         });
-
-        if (!updateResponse.ok) {
-            const errorText = await updateResponse.text();
-            console.error('❌ Failed to update request:', updateResponse.status, errorText);
-            throw new Error(`Failed to update request: ${updateResponse.status}`);
-        }
 
         console.log(`✅ Request ${requestId} ${newStatus}`);
 
@@ -105,55 +81,33 @@ Deno.serve(async (req) => {
         // the payment timer can start. On reject, cancel it so it doesn't
         // linger in pending forever.
         try {
-            const matchQuery = new URLSearchParams({
+            const matches = await base44.asServiceRole.entities.Booking.filter({
                 property_id: request.property_id,
                 check_in: request.check_in,
                 check_out: request.check_out,
                 guest_email: request.user_email,
                 status: 'pending',
-            }).toString();
-            const bookingsRes = await fetch(`${baseUrl}/entities/Booking?${matchQuery}`, {
-                method: 'GET',
-                headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
             });
-            if (bookingsRes.ok) {
-                const matches = await bookingsRes.json();
-                const target = Array.isArray(matches) ? matches[0] : null;
-                if (target?.id) {
-                    const update = action === 'approve'
-                        ? { approved_at: new Date().toISOString() }
-                        : { status: 'cancelled' };
-                    const stampRes = await fetch(`${baseUrl}/entities/Booking/${target.id}`, {
-                        method: 'PUT',
-                        headers: { 'api_key': apiKey, 'Content-Type': 'application/json' },
-                        body: JSON.stringify(update),
-                    });
-                    if (stampRes.ok) {
-                        console.log(`✅ Booking ${target.id} updated for ${action}: ${JSON.stringify(update)}`);
-                    } else {
-                        console.warn(`⚠️ Failed to update booking on ${action}:`, stampRes.status, await stampRes.text());
-                    }
-                } else {
-                    console.warn(`⚠️ No matching pending booking found for ${action}`);
-                }
+            const target = Array.isArray(matches) ? matches[0] : null;
+            if (target?.id) {
+                const update = action === 'approve'
+                    ? { approved_at: new Date().toISOString() }
+                    : { status: 'cancelled' };
+                await base44.asServiceRole.entities.Booking.update(target.id, update);
+                console.log(`✅ Booking ${target.id} updated for ${action}: ${JSON.stringify(update)}`);
             } else {
-                console.warn('⚠️ Failed to query bookings:', bookingsRes.status);
+                console.warn(`⚠️ No matching pending booking found for ${action}`);
             }
         } catch (stampError) {
             console.error(`❌ Error updating booking on ${action}:`, stampError);
-            // Don't fail the webhook if booking update fails
         }
 
-        // Update Telegram message
+        // Update Telegram message in place
         const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
         const statusEmoji = action === 'approve' ? '✅' : '❌';
         const statusText = action === 'approve' ? 'APPROVED' : 'REJECTED';
 
-        const updatedMessage = `${statusEmoji} ${statusText}
-
-${callbackQuery.message.text}
-
-Status: ${statusText} by admin`;
+        const updatedMessage = `${statusEmoji} ${statusText}\n\n${callbackQuery.message.text || ''}\n\nStatus: ${statusText} by admin`;
 
         await fetch(`https://api.telegram.org/bot${telegramBotToken}/editMessageText`, {
             method: 'POST',
@@ -161,8 +115,8 @@ Status: ${statusText} by admin`;
             body: JSON.stringify({
                 chat_id: chatId,
                 message_id: messageId,
-                text: updatedMessage
-            })
+                text: updatedMessage,
+            }),
         });
 
         await answerCallbackQuery(callbackQuery.id, `Request ${statusText.toLowerCase()} successfully!`);
@@ -170,14 +124,13 @@ Status: ${statusText} by admin`;
         // Email the guest about the decision
         try {
             await emailGuestDecision({
+                base44,
                 guestEmail: request.user_email,
                 guestName: request.user_name,
                 propertyTitle: request.property_title,
                 checkIn: request.check_in,
                 checkOut: request.check_out,
                 action,
-                appId,
-                serviceToken: apiKey,
             });
         } catch (emailErr) {
             console.error('Failed to email guest about decision:', emailErr);
@@ -189,8 +142,6 @@ Status: ${statusText} by admin`;
 
     } catch (error) {
         console.error('=== TELEGRAM WEBHOOK ERROR ===', error);
-        // Always return 200 OK to Telegram, even on errors. Don't echo internal
-        // error messages back over the wire.
         return new Response(JSON.stringify({ ok: true }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
@@ -199,14 +150,13 @@ Status: ${statusText} by admin`;
 });
 
 interface GuestDecisionParams {
+    base44: any;
     guestEmail: string;
     guestName: string;
     propertyTitle: string;
     checkIn: string;
     checkOut: string;
     action: 'approve' | 'reject';
-    appId: string;
-    serviceToken: string;
 }
 
 async function emailGuestDecision(p: GuestDecisionParams) {
@@ -214,7 +164,6 @@ async function emailGuestDecision(p: GuestDecisionParams) {
         console.warn('No guest email — skipping decision notification');
         return;
     }
-    const sdk = createClient({ appId: p.appId, serviceToken: p.serviceToken, requiresAuth: false });
 
     const subject = p.action === 'approve'
         ? `Approved: your booking for ${p.propertyTitle}`
@@ -225,29 +174,29 @@ async function emailGuestDecision(p: GuestDecisionParams) {
           `Great news — your availability request for "${p.propertyTitle}" (${p.checkIn} → ${p.checkOut}) has been approved.\n\n` +
           `You have 1 hour to complete payment from when you open the payment page (and a 3-hour hard cap from this approval). After that the booking will be automatically cancelled.\n\n` +
           `Open Bookings to proceed: head to the app and click "Proceed to Payment" on this booking.\n\n` +
-          `— UrbanStays`
+          `— Urban Stays`
         : `Hi ${p.guestName || 'there'},\n\n` +
           `Unfortunately, "${p.propertyTitle}" is not available for ${p.checkIn} → ${p.checkOut}.\n\n` +
           `Please try different dates or browse other properties in the app.\n\n` +
-          `— UrbanStays`;
+          `— Urban Stays`;
 
-    await sdk.integrations.Core.SendEmail({
+    await p.base44.integrations.Core.SendEmail({
         to: p.guestEmail,
         subject,
         body,
-        from_name: 'UrbanStays',
+        from_name: 'Urban Stays',
     });
     console.log(`✅ Guest decision email sent to ${p.guestEmail}`);
 }
 
-async function answerCallbackQuery(callbackQueryId, text) {
+async function answerCallbackQuery(callbackQueryId: string, text: string) {
     const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
     await fetch(`https://api.telegram.org/bot${telegramBotToken}/answerCallbackQuery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             callback_query_id: callbackQueryId,
-            text: text
-        })
+            text: text,
+        }),
     });
 }

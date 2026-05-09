@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@base44/sdk@0.8.27';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 // IMPORTANT: This function and base44/functions/verifyPaystackPayment/entry.ts
 // share the post-payment booking-update logic (mark paid, notify admin, inline
@@ -106,15 +106,11 @@ Deno.serve(async (req) => {
         return ack({ skipped: `bad_currency:${currency}` });
     }
 
-    const appId = Deno.env.get('BASE44_APP_ID');
-    const apiKey = Deno.env.get('BASE44_SERVICE_ROLE_KEY');
-    if (!appId || !apiKey) {
-        console.error('BASE44_APP_ID / BASE44_SERVICE_ROLE_KEY missing');
-        return ack({ skipped: 'no_base44_credentials' });
-    }
+    // Base44 supplies the SDK client with service-role access automatically
+    // via createClientFromRequest — no env vars needed.
+    const sdk = createClientFromRequest(req);
 
     try {
-        const sdk = createClient({ appId, serviceToken: apiKey, requiresAuth: false });
         const booking = await sdk.asServiceRole.entities.Booking.get(bookingId);
         if (!booking) return ack({ skipped: 'booking_not_found' });
 
