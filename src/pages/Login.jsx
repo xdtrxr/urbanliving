@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Mail, Lock, AlertCircle, ArrowRight, User as UserIcon, Phone } from 'lucide-react';
+import { Loader2, Mail, Lock, AlertCircle, ArrowRight, User as UserIcon, Phone, ShieldCheck } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 const GoogleIcon = () => (
@@ -25,13 +25,15 @@ const AppleIcon = () => (
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
+  const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'verify'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [info, setInfo] = useState(null);
   const [error, setError] = useState(null);
   const [isWorking, setIsWorking] = useState(false);
   const [referralCode, setReferralCode] = useState('');
@@ -128,25 +130,15 @@ export default function LoginPage() {
           password,
           referral_code: referralCode || undefined,
         });
-        // Some flows auto-login; otherwise sign-in afterwards.
-        try {
-          await base44.auth.loginViaEmailPassword(email, password);
-        } catch { /* ignore — register may have logged in */ }
-
-        // Save the profile fields the SDK's register() doesn't capture.
-        const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
-        try {
-          await base44.auth.updateMe({
-            full_name: fullName,
-            phone_number: phoneNumber.trim(),
-          });
-        } catch (profileErr) {
-          console.warn('Failed to save profile fields after signup:', profileErr);
-        }
+        // Base44 sends an email with a 6-digit OTP. Switch to verify mode so
+        // the user can enter the code. We finish login + save profile fields
+        // after the OTP is verified.
+        setInfo(`We sent a 6-digit verification code to ${email}. Enter it below to finish creating your account.`);
+        setMode('verify');
       } else {
         await base44.auth.loginViaEmailPassword(email, password);
+        redirectAfterAuth();
       }
-      redirectAfterAuth();
     } catch (err) {
       console.error('Auth failed:', err);
       const msg = err?.response?.data?.message || err?.message || 'Authentication failed';
@@ -155,6 +147,140 @@ export default function LoginPage() {
       setIsWorking(false);
     }
   };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+    const code = otpCode.trim();
+    if (!/^\d{4,8}$/.test(code)) {
+      setError('Enter the verification code from your email');
+      return;
+    }
+    setIsWorking(true);
+    try {
+      await base44.auth.verifyOtp({ email, otpCode: code });
+      // After verification, log in and persist profile fields.
+      try {
+        await base44.auth.loginViaEmailPassword(email, password);
+      } catch { /* ignore — verify may have logged in already */ }
+
+      const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
+      try {
+        await base44.auth.updateMe({
+          full_name: fullName,
+          phone_number: phoneNumber.trim(),
+        });
+      } catch (profileErr) {
+        console.warn('Failed to save profile fields after verify:', profileErr);
+      }
+      redirectAfterAuth();
+    } catch (err) {
+      console.error('Verify failed:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Invalid or expired code';
+      setError(msg);
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setError(null);
+    setInfo(null);
+    setIsWorking(true);
+    try {
+      await base44.auth.resendOtp(email);
+      setInfo(`A new code has been sent to ${email}.`);
+    } catch (err) {
+      console.error('Resend failed:', err);
+      setError(err?.message || 'Could not resend code');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  if (mode === 'verify') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
+          <CardContent className="p-8">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 mx-auto mb-3 bg-slate-900 rounded-full flex items-center justify-center">
+                <ShieldCheck className="w-6 h-6 text-amber-400" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900">Verify your email</h1>
+              <p className="text-slate-600 mt-2 text-sm">
+                {info || `We sent a 6-digit code to ${email}.`}
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div>
+                <Label htmlFor="otpCode">Verification code <span className="text-red-500">*</span></Label>
+                <Input
+                  id="otpCode"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  className="mt-1 h-14 rounded-xl text-2xl tracking-[0.5em] text-center font-mono"
+                  maxLength={8}
+                  disabled={isWorking}
+                  autoFocus
+                />
+                <p className="text-xs text-slate-500 mt-2 text-center">
+                  Check your inbox (and spam folder).
+                </p>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={isWorking}
+                className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+              >
+                {isWorking ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying…</>
+                ) : (
+                  <>Verify and continue<ArrowRight className="w-4 h-4 ml-2" /></>
+                )}
+              </Button>
+            </form>
+
+            <div className="text-center mt-6 text-sm text-slate-600 space-y-2">
+              <div>
+                Didn&apos;t get the code?{' '}
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={isWorking}
+                  className="text-slate-900 font-semibold hover:underline disabled:opacity-50"
+                >
+                  Resend
+                </button>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => { setMode('signup'); setError(null); setInfo(null); setOtpCode(''); }}
+                  className="text-slate-500 hover:underline text-xs"
+                >
+                  ← Use a different email
+                </button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
