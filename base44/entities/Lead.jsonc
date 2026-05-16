@@ -1,0 +1,120 @@
+{
+  "name": "Lead",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Lead's full name as given in chat"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Phone number (international format preferred)"
+    },
+    "email": {
+      "type": "string",
+      "description": "Lead's email address"
+    },
+    "city": {
+      "type": "string",
+      "enum": ["Abuja", "Lagos", "Other"],
+      "description": "Preferred city"
+    },
+    "area": {
+      "type": "string",
+      "description": "Preferred neighbourhood / area within the city"
+    },
+    "check_in": {
+      "type": "string",
+      "format": "date",
+      "description": "Preferred check-in date"
+    },
+    "check_out": {
+      "type": "string",
+      "format": "date",
+      "description": "Preferred check-out date"
+    },
+    "guests": {
+      "type": "number",
+      "description": "Number of guests"
+    },
+    "budget_min": {
+      "type": "number",
+      "description": "Minimum per-night budget (NGN)"
+    },
+    "budget_max": {
+      "type": "number",
+      "description": "Maximum per-night budget (NGN)"
+    },
+    "apartment_type": {
+      "type": "string",
+      "enum": ["Studio", "1 Bedroom", "2 Bedroom", "3 Bedroom", "Family Apartment", "Any"],
+      "description": "Preferred apartment type"
+    },
+    "special_requests": {
+      "type": "string",
+      "description": "Free-form notes from the conversation"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "qualifying",
+        "qualified",
+        "shown_options",
+        "booking_started",
+        "booked",
+        "lost"
+      ],
+      "default": "qualifying",
+      "description": "Lifecycle status for sales pipeline"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Linked account email, set when an account is created or matched"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["chat", "web", "referral", "other"],
+      "default": "chat",
+      "description": "Where the lead came from"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Chat session that produced this lead"
+    },
+    "telegram_message_id": {
+      "type": "string",
+      "description": "Telegram message ID for the admin notification"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Admin-only notes about follow-up"
+    },
+    "assigned_to": {
+      "type": "string",
+      "description": "Admin user email this lead is assigned to (optional)"
+    }
+  },
+  "required": ["name", "phone", "email"],
+  "rls": {
+    "create": {
+      "$or": [
+        { "data.email": "{{user.email}}" },
+        { "user_condition": { "role": "admin" } },
+        { "user_condition": { "role": "anonymous" } }
+      ]
+    },
+    "read": {
+      "$or": [
+        { "data.email": "{{user.email}}" },
+        { "data.user_email": "{{user.email}}" },
+        { "user_condition": { "role": "admin" } }
+      ]
+    },
+    "update": {
+      "user_condition": { "role": "admin" }
+    },
+    "delete": {
+      "user_condition": { "role": "admin" }
+    }
+  }
+}

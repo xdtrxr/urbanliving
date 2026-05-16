@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, Users, Search, MapPin, Bed } from "lucide-react";
+import { Calendar as CalendarIcon, Users, Search, MapPin, Bed, Wallet, Home } from "lucide-react";
 import { format } from "date-fns";
 
 export default function BookingAssistant({ initialParams, onSearch, onCancel }) {
@@ -13,6 +13,8 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
   const [checkOut, setCheckOut] = useState(null);
   const [guests, setGuests] = useState(initialParams?.guests || "2");
   const [bedrooms, setBedrooms] = useState(initialParams?.bedrooms || "any");
+  const [budget, setBudget] = useState(initialParams?.budget || "any");
+  const [apartmentType, setApartmentType] = useState(initialParams?.apartmentType || "any");
   const locationInputRef = useRef(null);
 
   useEffect(() => {
@@ -35,12 +37,16 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
       return;
     }
 
+    const selectedBudget = budgetOptions.find(b => b.value === budget);
     onSearch({
       location: location.trim(),
       checkIn,
       checkOut,
       guests: parseInt(guests),
-      bedrooms: bedrooms === "any" ? null : bedrooms
+      bedrooms: bedrooms === "any" ? null : bedrooms,
+      budgetMin: selectedBudget?.min ?? null,
+      budgetMax: selectedBudget?.max ?? null,
+      apartmentType: apartmentType === "any" ? null : apartmentType,
     });
   };
 
@@ -58,11 +64,29 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
     { value: '4', label: '4+ Bedrooms' }
   ];
 
+  const budgetOptions = [
+    { value: 'any', label: 'Any Budget', min: null, max: null },
+    { value: 'under_50k', label: 'Under ₦50k/night', min: 0, max: 50000 },
+    { value: '50_100k', label: '₦50k – ₦100k/night', min: 50000, max: 100000 },
+    { value: '100_200k', label: '₦100k – ₦200k/night', min: 100000, max: 200000 },
+    { value: '200_500k', label: '₦200k – ₦500k/night', min: 200000, max: 500000 },
+    { value: 'over_500k', label: '₦500k+ /night', min: 500000, max: null },
+  ];
+
+  const apartmentTypeOptions = [
+    { value: 'any', label: 'Any Type' },
+    { value: 'Studio', label: 'Studio' },
+    { value: '1 Bedroom', label: '1 Bedroom' },
+    { value: '2 Bedroom', label: '2 Bedroom' },
+    { value: '3 Bedroom', label: '3 Bedroom' },
+    { value: 'Family Apartment', label: 'Family Apartment' },
+  ];
+
   return (
     <div className="bg-white border-2 border-slate-200 rounded-2xl shadow-xl p-4 mt-2 mb-4">
       <div className="flex flex-col gap-4">
         {/* Search Fields Row */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {/* Location */}
           <div className="relative">
             <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none z-10" />
@@ -142,6 +166,40 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
             </SelectTrigger>
             <SelectContent>
               {bedroomOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Budget */}
+          <Select value={budget} onValueChange={setBudget}>
+            <SelectTrigger className="h-12 rounded-xl border-slate-200">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-slate-400" />
+                <span>{budgetOptions.find(b => b.value === budget)?.label}</span>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              {budgetOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Apartment Type */}
+          <Select value={apartmentType} onValueChange={setApartmentType}>
+            <SelectTrigger className="h-12 rounded-xl border-slate-200">
+              <div className="flex items-center gap-2">
+                <Home className="h-4 w-4 text-slate-400" />
+                <span>{apartmentTypeOptions.find(t => t.value === apartmentType)?.label}</span>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              {apartmentTypeOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>

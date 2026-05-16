@@ -46,6 +46,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // NEW Tabs components
+import LeadsAdmin from '@/components/admin/LeadsAdmin';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -1077,7 +1078,7 @@ export default function AdminPage() {
 
         {/* NEW: Tabs for Manual Entry and Property Management */}
         <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 mb-8">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="add-manual">
               <Plus className="w-4 h-4 mr-2" />
               {editingPropertyId ? 'Edit Property' : 'Add New Property'}
@@ -1085,6 +1086,10 @@ export default function AdminPage() {
             <TabsTrigger value="manage-properties">
               <List className="w-4 h-4 mr-2" />
               Manage Properties
+            </TabsTrigger>
+            <TabsTrigger value="leads">
+              <Users className="w-4 h-4 mr-2" />
+              Leads
             </TabsTrigger>
           </TabsList>
 
@@ -1566,6 +1571,10 @@ export default function AdminPage() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="leads">
+            <LeadsAdmin />
           </TabsContent>
         </Tabs>
 

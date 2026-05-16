@@ -6,9 +6,10 @@ import { format, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
+import LeadOtpGate from './LeadOtpGate';
 
-export default function BookingConfirmCard({ booking, onSubmitted }) {
-  const [status, setStatus] = useState('idle'); // idle | submitting | submitted | error
+export default function BookingConfirmCard({ booking, lead, isAuthenticated, onAuthenticated, onSubmitted }) {
+  const [status, setStatus] = useState('idle'); // idle | gate | submitting | submitted | error
   const [error, setError] = useState(null);
   const [bookingId, setBookingId] = useState(null);
 
@@ -17,7 +18,7 @@ export default function BookingConfirmCard({ booking, onSubmitted }) {
     catch { return s; }
   };
 
-  const handleSubmit = async () => {
+  const submitBooking = async () => {
     setStatus('submitting');
     setError(null);
     try {
@@ -42,6 +43,31 @@ export default function BookingConfirmCard({ booking, onSubmitted }) {
       setStatus('error');
     }
   };
+
+  const handleSubmit = async () => {
+    // Anon users: confirm their email and verify OTP first; account gets created
+    // inside LeadOtpGate, then we submit. Signed-in users skip the gate.
+    if (!isAuthenticated) {
+      setStatus('gate');
+      return;
+    }
+    await submitBooking();
+  };
+
+  const handleGateVerified = async () => {
+    await onAuthenticated?.();
+    await submitBooking();
+  };
+
+  if (status === 'gate') {
+    return (
+      <LeadOtpGate
+        lead={lead}
+        onVerified={handleGateVerified}
+        onCancel={() => setStatus('idle')}
+      />
+    );
+  }
 
   if (status === 'submitted') {
     return (
