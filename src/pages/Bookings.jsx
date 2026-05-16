@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar, MapPin, Users, Clock, ExternalLink, Compass, X, AlertCircle, CreditCard, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
+import { Calendar, MapPin, Users, Clock, ExternalLink, Compass, X, AlertCircle, CreditCard, CheckCircle2, Loader2, RefreshCw, Phone, Map } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -329,6 +329,55 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                   <p className="text-sm text-slate-600">{booking.special_requests}</p>
                 </div>
               )}
+
+              {booking.payment_status === 'paid' && property && (() => {
+                const loc = property.location || {};
+                const fullAddress = [loc.address, loc.city, loc.country].filter(Boolean).join(', ');
+                const mapsLink = loc.coordinates?.lat && loc.coordinates?.lng
+                  ? `https://www.google.com/maps?q=${loc.coordinates.lat},${loc.coordinates.lng}`
+                  : (fullAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}` : null);
+                const hasAnything = fullAddress || property.host_phone || property.arrival_instructions;
+                if (!hasAnything) return null;
+                return (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
+                    <p className="text-sm font-bold text-emerald-900 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" /> Arrival Details
+                    </p>
+                    {fullAddress && (
+                      <div className="flex items-start gap-2 text-sm">
+                        <MapPin className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-slate-900">{fullAddress}</p>
+                          {mapsLink && (
+                            <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1 mt-1">
+                              <Map className="w-3 h-3" /> Open in Google Maps
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {property.host_phone && (
+                      <div className="flex items-start gap-2 text-sm">
+                        <Phone className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-slate-900">
+                            Call <span className="font-semibold">{property.host_name || 'your host'}</span> on arrival
+                          </p>
+                          <a href={`tel:${property.host_phone}`} className="text-sm font-semibold text-emerald-800 hover:text-emerald-900">
+                            {property.host_phone}
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                    {property.arrival_instructions && (
+                      <div className="text-sm text-slate-700 bg-white/60 rounded-lg p-3 border border-emerald-100">
+                        <p className="text-xs font-semibold text-emerald-900 uppercase tracking-wide mb-1">Host notes</p>
+                        <p className="whitespace-pre-wrap">{property.arrival_instructions}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="flex justify-between items-center pt-4 border-t border-slate-200">
                 <div className="text-sm text-slate-500">

@@ -76,6 +76,26 @@
       "type": "string",
       "format": "date-time",
       "description": "ISO timestamp when payment cleared and booking was confirmed"
+    },
+    "id_document_url": {
+      "type": "string",
+      "description": "URL of guest's uploaded identification document (uploaded immediately after payment)"
+    },
+    "id_document_type": {
+      "type": "string",
+      "enum": [
+        "national_id",
+        "drivers_license",
+        "passport",
+        "voters_card",
+        "other"
+      ],
+      "description": "Type of identification document"
+    },
+    "id_uploaded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when the guest uploaded their ID"
     }
   },
   "required": [

@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // NEW Tabs components
 import LeadsAdmin from '@/components/admin/LeadsAdmin';
+import ConfirmedBookingsAdmin from '@/components/admin/ConfirmedBookingsAdmin';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -180,6 +181,8 @@ export default function AdminPage() {
     images: [],
     videos: [],
     host_name: '',
+    host_phone: '',
+    arrival_instructions: '',
     instant_book: false
   });
   const [isSavingProperty, setIsSavingProperty] = useState(false); // Renamed from isSubmittingForm
@@ -384,6 +387,8 @@ export default function AdminPage() {
       images: property.images || [],
       videos: property.videos || [],
       host_name: property.host_name || '',
+      host_phone: property.host_phone || '',
+      arrival_instructions: property.arrival_instructions || '',
       instant_book: property.instant_book || false
     });
     setActiveAdminTab('add-manual'); // Switch to the "Add/Edit Property" tab
@@ -500,6 +505,8 @@ export default function AdminPage() {
         rating: 0, // Removed from form, default to 0
         reviews_count: 0, // Removed from form, default to 0
         host_name: propertyFormData.host_name || '',
+        host_phone: propertyFormData.host_phone || '',
+        arrival_instructions: propertyFormData.arrival_instructions || '',
         instant_book: propertyFormData.instant_book,
         source: 'manual', // NEW: always 'manual' for this form
         external_id: `manual_${Date.now()}` // NEW: Unique ID for manual entries
@@ -530,6 +537,8 @@ export default function AdminPage() {
         images: [],
         videos: [],
         host_name: '',
+        host_phone: '',
+        arrival_instructions: '',
         instant_book: false
       });
       setEditingPropertyId(null); // Clear editing state
@@ -968,6 +977,9 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
+        {/* Confirmed bookings — admin verifies guest IDs */}
+        <ConfirmedBookingsAdmin />
+
         {/* MCP Data Fetch Tool */}
         <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
           <CardHeader>
@@ -1113,7 +1125,7 @@ export default function AdminPage() {
                     <Button variant="ghost" size="sm" onClick={() => {
                         setEditingPropertyId(null);
                         setPropertyFormData({
-                          title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', instant_book: false
+                          title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', host_phone: '', arrival_instructions: '', instant_book: false
                         });
                       }} className="mt-2 text-blue-600 hover:bg-blue-100">
                       <XCircle className="w-3 h-3 mr-1" /> Clear Edit
@@ -1398,6 +1410,28 @@ export default function AdminPage() {
                         className="mt-1"
                       />
                     </div>
+                    <div>
+                      <Label htmlFor="host_phone">Host Phone (for guest arrival)</Label>
+                      <Input
+                        id="host_phone"
+                        value={propertyFormData.host_phone}
+                        onChange={(e) => setPropertyFormData(prev => ({ ...prev, host_phone: e.target.value }))}
+                        placeholder="e.g., +234 801 234 5678"
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Shown to guests after payment so they can call on arrival.</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="arrival_instructions">Arrival Instructions</Label>
+                      <Textarea
+                        id="arrival_instructions"
+                        value={propertyFormData.arrival_instructions}
+                        onChange={(e) => setPropertyFormData(prev => ({ ...prev, arrival_instructions: e.target.value }))}
+                        placeholder="Gate code, parking notes, key handover process, landmark directions, etc."
+                        className="mt-1 min-h-[80px]"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Revealed to the guest only after payment confirms.</p>
+                    </div>
                     <div className="flex items-center space-x-2">
                       <input
                         type="checkbox"
@@ -1419,7 +1453,7 @@ export default function AdminPage() {
                       onClick={() => {
                         setEditingPropertyId(null); // Clear editing state on cancel
                         setPropertyFormData({ // Reset form data
-                          title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', instant_book: false
+                          title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', host_phone: '', arrival_instructions: '', instant_book: false
                         });
                         setActiveAdminTab('manage-properties'); // Go back to manage tab
                       }}

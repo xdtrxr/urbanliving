@@ -118,6 +118,14 @@
     "host_name": {
       "type": "string"
     },
+    "host_phone": {
+      "type": "string",
+      "description": "Phone number guest can call on arrival (international format preferred)"
+    },
+    "arrival_instructions": {
+      "type": "string",
+      "description": "Free-form text shown to guest after payment (gate code, parking notes, key handover, etc.)"
+    },
     "instant_book": {
       "type": "boolean",
       "default": false

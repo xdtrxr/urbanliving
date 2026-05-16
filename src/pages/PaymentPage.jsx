@@ -10,6 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { awardBookingMilestones } from '@/components/utils/loyaltyService';
+import IdUploadGate from '@/components/booking/IdUploadGate';
 
 const DEBUG_PAYMENT = false;
 const dlog = (...args) => { if (DEBUG_PAYMENT) console.log(...args); };
@@ -280,7 +281,8 @@ export default function PaymentPage() {
       }
 
       setPaymentComplete(true);
-      setTimeout(() => navigate(createPageUrl('Bookings')), 3000);
+      // Note: no auto-redirect. The guest must upload their ID via
+      // IdUploadGate first; gate's onComplete navigates to Bookings.
     } catch (error) {
       console.error('Error verifying payment:', error);
       alert(
@@ -520,34 +522,27 @@ export default function PaymentPage() {
 
   if (paymentComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4 flex items-start justify-center pt-12">
         <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
+          initial={{ scale: 0.96, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.4 }}
+          className="w-full max-w-md space-y-4"
         >
-          <Card className="max-w-md w-full bg-white/90 backdrop-blur-sm">
-            <CardContent className="p-12 text-center">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2, type: "spring" }}
-              >
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <CheckCircle className="w-12 h-12 text-green-600" />
-                </div>
-              </motion.div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment Successful!</h2>
-              <p className="text-slate-600 mb-2">Your booking has been confirmed.</p>
-              <p className="text-sm text-slate-500 mb-6">
-                Booking ID: {bookingData.id}
-              </p>
-              <div className="space-y-3">
-                <p className="text-sm text-slate-600">Redirecting to your bookings...</p>
-                <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" />
+          <Card className="bg-white/95 backdrop-blur-sm">
+            <CardContent className="p-6 text-center">
+              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
+              <h2 className="text-xl font-bold text-slate-900 mb-1">Payment Successful</h2>
+              <p className="text-sm text-slate-600">Booking ID: {bookingData.id}</p>
             </CardContent>
           </Card>
+
+          <IdUploadGate
+            bookingId={bookingData.id}
+            onComplete={() => navigate(createPageUrl('Bookings'))}
+          />
         </motion.div>
       </div>
     );

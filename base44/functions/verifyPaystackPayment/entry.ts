@@ -9,6 +9,68 @@ const PAYSTACK_VERIFY_URL = 'https://api.paystack.co/transaction/verify';
 const REFERRAL_RATE = 0.05;
 const REFERRER_LOYALTY_BONUS = 250;
 
+// Sends the guest the property address, host phone, and arrival instructions
+// immediately after a payment confirms. Mirrors the same helper in
+// paystackWebhook — keep in lockstep when changing.
+async function sendArrivalEmail(opts: {
+    sdk: any;
+    bookingId: string;
+    guestEmail: string;
+    guestName: string;
+    propertyId: string;
+    checkIn: string;
+    checkOut: string;
+    guests: number;
+}) {
+    try {
+        const property = await opts.sdk.asServiceRole.entities.Property.get(opts.propertyId);
+        if (!property) {
+            console.warn(`sendArrivalEmail: property ${opts.propertyId} not found`);
+            return;
+        }
+        const loc = property.location || {};
+        const fullAddress = [loc.address, loc.city, loc.country].filter(Boolean).join(', ');
+        const mapsLink = loc.coordinates?.lat && loc.coordinates?.lng
+            ? `https://www.google.com/maps?q=${loc.coordinates.lat},${loc.coordinates.lng}`
+            : (fullAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}` : null);
+
+        const hostLine = property.host_phone
+            ? `📞 Call your host on arrival: ${property.host_name || 'Host'} — ${property.host_phone}`
+            : `📞 Host contact: not provided — message us via support if you need help.`;
+
+        const arrivalBlock = property.arrival_instructions
+            ? `\n\nArrival instructions from the host:\n${property.arrival_instructions}`
+            : '';
+
+        const mapsBlock = mapsLink ? `\nMap: ${mapsLink}` : '';
+
+        const body = `Hi ${opts.guestName || 'there'},
+
+Payment confirmed — your booking at "${property.title}" is locked in. 🎉
+
+📍 Address: ${fullAddress || 'See app for details'}${mapsBlock}
+🗓 Check-in: ${opts.checkIn}
+🗓 Check-out: ${opts.checkOut}
+👥 Guests: ${opts.guests}
+
+${hostLine}${arrivalBlock}
+
+Have a smooth trip — see you soon.
+
+— Urban Stays`;
+
+        await opts.sdk.integrations.Core.SendEmail({
+            to: opts.guestEmail,
+            subject: `You're checked in: arrival details for ${property.title}`,
+            body,
+            from_name: 'Urban Stays',
+        });
+        console.log(`✅ Arrival email sent to ${opts.guestEmail} for booking ${opts.bookingId}`);
+    } catch (err) {
+        console.error('sendArrivalEmail failed (non-fatal):', err);
+    }
+}
+
 async function notifyAdmin(opts: {
     bookingId: string;
     guestName: string;
@@ -157,6 +219,17 @@ Deno.serve(async (req) => {
             propertyId: booking.property_id,
             amountNGN: Number(booking.total_price) || 0,
             reference,
+        });
+
+        await sendArrivalEmail({
+            sdk: base44,
+            bookingId: booking.id,
+            guestEmail: booking.guest_email,
+            guestName: booking.guest_name,
+            propertyId: booking.property_id,
+            checkIn: booking.check_in,
+            checkOut: booking.check_out,
+            guests: Number(booking.guests) || 1,
         });
 
         // Inline referral reward — direct service-role writes, idempotent.

@@ -557,31 +557,40 @@ export default function CheckoutPage() {
 
                 {!existingBooking && (
                   <div className="pt-4 border-t border-slate-200">
-                    {availabilityStatus !== 'available' && (
-                      <Button
-                        onClick={handleCheckAvailability}
-                        disabled={isCheckingAvailability || !bookingDetails.checkIn || !bookingDetails.checkOut || availabilityStatus === 'pending'}
-                        variant="outline"
-                        className="w-full mb-3"
-                      >
-                        {availabilityStatus === 'pending' ? (
-                          <>
-                            <Clock className="w-4 h-4 mr-2 animate-pulse" />
-                            Awaiting Admin Approval...
-                          </>
-                        ) : isCheckingAvailability ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Sending Request...
-                          </>
-                        ) : (
-                          <>
-                            <Calendar className="w-4 h-4 mr-2" />
-                            Check Availability
-                          </>
-                        )}
-                      </Button>
-                    )}
+                    {availabilityStatus !== 'available' && (() => {
+                      const requirementsMet = !!bookingDetails.checkIn && !!bookingDetails.checkOut && Number(bookingDetails.guests) > 0;
+                      const isBusy = isCheckingAvailability || availabilityStatus === 'pending';
+                      const showGreen = requirementsMet && !isBusy;
+                      return (
+                        <Button
+                          onClick={handleCheckAvailability}
+                          disabled={isCheckingAvailability || !requirementsMet || availabilityStatus === 'pending'}
+                          variant={showGreen ? 'default' : 'outline'}
+                          className={`w-full mb-3 transition-colors ${
+                            showGreen
+                              ? 'bg-green-600 hover:bg-green-700 text-white border-0 shadow-md'
+                              : ''
+                          }`}
+                        >
+                          {availabilityStatus === 'pending' ? (
+                            <>
+                              <Clock className="w-4 h-4 mr-2 animate-pulse" />
+                              Awaiting Admin Approval...
+                            </>
+                          ) : isCheckingAvailability ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Sending Request...
+                            </>
+                          ) : (
+                            <>
+                              <Calendar className="w-4 h-4 mr-2" />
+                              Check Availability
+                            </>
+                          )}
+                        </Button>
+                      );
+                    })()}
 
                     {availabilityStatus === 'pending' && (
                       <div className="flex items-start gap-3 text-amber-600 bg-amber-50 border border-amber-200 p-4 rounded-xl mb-3">
