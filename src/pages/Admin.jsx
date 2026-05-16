@@ -47,41 +47,60 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // NEW Tabs components
 
+const HOUR_MS = 60 * 60 * 1000;
+
+function formatLeft(ms) {
+  if (ms == null || ms < 0) return '—';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return h > 0
+    ? `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
+    : `${m}m ${s.toString().padStart(2, '0')}s`;
+}
+
 // Module-scope so the parent's polling re-renders don't unmount/remount
-// (which would reset the countdown ticker every refresh).
-function InFlightBookingRow({ booking }) {
-  const deadlineMs = (() => {
-    const t = Date.parse(booking.payment_deadline || '');
-    return Number.isNaN(t) ? null : t;
-  })();
-  const [msLeft, setMsLeft] = useState(() => (deadlineMs ? Math.max(0, deadlineMs - Date.now()) : null));
+// (which would reset the countdown ticker every refresh). Hides itself
+// when both timers have run out via the onExpire callback.
+function InFlightBookingRow({ booking, onExpire }) {
+  const approvedMs = Date.parse(booking.approved_at || '');
+  const startedMs = Date.parse(booking.payment_started_at || '');
+
+  // Hard cap: 3 hours from when admin approved.
+  const approvalCapMs = Number.isNaN(approvedMs) ? null : approvedMs + 3 * HOUR_MS;
+  // Pay-now window: 1 hour from when the guest opened the payment page.
+  const paymentWindowMs = Number.isNaN(startedMs) ? null : startedMs + HOUR_MS;
+
+  const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    if (!deadlineMs) return;
-    const tick = () => setMsLeft(Math.max(0, deadlineMs - Date.now()));
-    const id = setInterval(tick, 1000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [deadlineMs]);
-  const formatLeft = (ms) => {
-    if (ms == null) return '—';
-    const totalSec = Math.floor(ms / 1000);
-    const m = Math.floor(totalSec / 60);
-    const s = totalSec % 60;
-    return `${m}m ${s.toString().padStart(2, '0')}s`;
-  };
-  const isUrgent = msLeft !== null && msLeft < 5 * 60 * 1000;
-  const expired = msLeft === 0;
-  const paymentStarted = !!booking.payment_started_at;
+  }, []);
+
+  const approvalLeft = approvalCapMs ? Math.max(0, approvalCapMs - now) : null;
+  const paymentLeft = paymentWindowMs ? Math.max(0, paymentWindowMs - now) : null;
+
+  // The booking is effectively expired when the approval cap is hit (the cap
+  // always overrides the per-session window — `getBookings` enforces the same).
+  const fullyExpired = approvalLeft === 0;
+  useEffect(() => {
+    if (fullyExpired) onExpire?.(booking.id);
+  }, [fullyExpired, booking.id, onExpire]);
+  if (fullyExpired) return null;
+
+  const isUrgent = (paymentLeft !== null && paymentLeft < 5 * 60 * 1000)
+    || (approvalLeft !== null && approvalLeft < 10 * 60 * 1000);
 
   return (
     <div className={`rounded-2xl border p-4 ${
-      expired ? 'border-slate-300 bg-slate-50'
-        : isUrgent ? 'border-red-200 bg-red-50/40'
-        : 'border-slate-200 bg-white'
+      isUrgent ? 'border-red-200 bg-red-50/40' : 'border-slate-200 bg-white'
     }`}>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-[260px]">
           <p className="font-semibold text-slate-900">
-            {booking.guest_name || booking.guest_email} <span className="text-slate-500 font-normal">· {booking.guest_email}</span>
+            {booking.guest_name || booking.guest_email}
+            <span className="text-slate-500 font-normal"> · {booking.guest_email}</span>
           </p>
           <p className="text-sm text-slate-700 mt-1">
             <code className="text-xs font-mono text-slate-500">{booking.property_id}</code>
@@ -91,16 +110,34 @@ function InFlightBookingRow({ booking }) {
           </p>
           <p className="text-xs text-slate-400 mt-2">
             Approved {booking.approved_at ? new Date(booking.approved_at).toLocaleString() : '—'}
-            {paymentStarted && ` · Opened payment ${new Date(booking.payment_started_at).toLocaleString()}`}
+            {startedMs && !Number.isNaN(startedMs) && ` · Opened payment ${new Date(startedMs).toLocaleString()}`}
           </p>
         </div>
-        <div className="text-right">
-          <div className={`font-mono text-lg font-bold tabular-nums ${
-            expired ? 'text-slate-500' : isUrgent ? 'text-red-700' : 'text-slate-900'
-          }`}>
-            {expired ? 'Expired' : formatLeft(msLeft)}
-          </div>
-          <p className="text-xs text-slate-500">{expired ? 'auto-cancel pending' : 'time left to pay'}</p>
+        <div className="text-right flex flex-col gap-2 items-end">
+          {approvalLeft !== null && (
+            <div>
+              <div className={`font-mono text-base font-bold tabular-nums ${
+                approvalLeft < 10 * 60 * 1000 ? 'text-red-700' : 'text-slate-900'
+              }`}>
+                {formatLeft(approvalLeft)}
+              </div>
+              <p className="text-xs text-slate-500">time left after approval</p>
+            </div>
+          )}
+          {paymentLeft !== null ? (
+            <div>
+              <div className={`font-mono text-base font-bold tabular-nums ${
+                paymentLeft < 5 * 60 * 1000 ? 'text-red-700' : 'text-slate-900'
+              }`}>
+                {formatLeft(paymentLeft)}
+              </div>
+              <p className="text-xs text-slate-500">time left after page opened</p>
+            </div>
+          ) : (
+            <div>
+              <div className="text-xs text-slate-400 italic">Guest hasn&apos;t opened payment yet</div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -209,12 +246,20 @@ export default function AdminPage() {
   const loadInFlightBookings = async (silent = false) => {
     if (!silent) setIsLoadingInFlight(true);
     try {
-      // Pull every booking with payment_deadline (approved, awaiting payment).
       const result = await base44.functions.invoke('getBookings', { scope: 'all' });
       const all = result?.data?.success ? result.data.data : [];
+      const now = Date.now();
+      // Only show ACTIVE bookings: admin-approved, still pending, and the
+      // payment deadline hasn't passed yet. Expired ones drop off the list
+      // (the auto-cancel cron will flip their status to 'cancelled' next sweep).
       const inFlight = all
-        .filter(b => b.status === 'pending' && b.approved_at)
-        .sort((a, b) => Date.parse(a.payment_deadline || 0) - Date.parse(b.payment_deadline || 0));
+        .filter(b => {
+          if (b.status !== 'pending' || !b.approved_at) return false;
+          const deadlineMs = Date.parse(b.payment_deadline || '');
+          if (Number.isNaN(deadlineMs)) return false;
+          return now < deadlineMs;
+        })
+        .sort((a, b) => Date.parse(a.payment_deadline) - Date.parse(b.payment_deadline));
       setInFlightBookings(inFlight);
     } catch (err) {
       console.error('Failed to load in-flight bookings:', err);
@@ -911,7 +956,11 @@ export default function AdminPage() {
             ) : (
               <div className="space-y-3">
                 {inFlightBookings.map((booking) => (
-                  <InFlightBookingRow key={booking.id} booking={booking} />
+                  <InFlightBookingRow
+                    key={booking.id}
+                    booking={booking}
+                    onExpire={(id) => setInFlightBookings(prev => prev.filter(b => b.id !== id))}
+                  />
                 ))}
               </div>
             )}
