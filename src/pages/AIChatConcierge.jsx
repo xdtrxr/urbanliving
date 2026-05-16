@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Send, Bot, User as UserIcon, Sparkles, MessageCircle, RotateCcw } from "lucide-react";
+import { Send, Bot, User as UserIcon, Sparkles, MessageCircle, RotateCcw, Mic, MicOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,7 @@ import SearchResultCard from '../components/chat/SearchResultCard';
 import BookingDetailsCard from '../components/chat/BookingDetailsCard'; // New import
 import BookingConfirmCard from '../components/chat/BookingConfirmCard';
 import { usePropertySearch } from "../components/hooks/usePropertySearch";
+import { useSpeechToText } from "../components/hooks/useSpeechToText";
 
 const welcomeLines = [
   "Hello! 👋 I'm **Agent Nova**, your AI rental assistant.",
@@ -38,6 +39,16 @@ export default function AIChatConciergePage() {
   const navigate = useNavigate();
 
   const { properties: searchedProperties, isLoading: isSearchingProperties, search: searchProperties } = usePropertySearch();
+
+  // Speech-to-text: appends final transcript to whatever's already in the input.
+  const { isSupported: speechSupported, isListening, transcript, start: startListening, stop: stopListening } = useSpeechToText({
+    onFinal: (text) => setInput((prev) => (prev ? `${prev} ${text}` : text)),
+    lang: 'en-US',
+  });
+  const toggleMic = () => {
+    if (isListening) stopListening();
+    else startListening();
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1011,16 +1022,38 @@ For other queries, return just a text response (not JSON).
 
       <div className="flex-shrink-0 border-t border-slate-200 bg-white/95 backdrop-blur-sm">
         <div className="px-3 sm:px-4 py-2.5">
+          {/* Live interim transcript shown while the user is speaking */}
+          {isListening && transcript && (
+            <div className="mb-2 px-3 py-1.5 bg-slate-100 rounded-md text-xs text-slate-700 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="italic">{transcript}</span>
+            </div>
+          )}
           <div className="flex gap-2 items-center">
             <Input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Message Agent Nova..."
+              placeholder={isListening ? 'Listening… speak now' : 'Message Agent Nova...'}
               className="flex-1 py-2.5 px-3.5 rounded-lg border-slate-300 focus:border-slate-500 focus:ring-slate-500/30 resize-none text-sm"
               disabled={isLoading}
             />
+            {speechSupported && (
+              <Button
+                type="button"
+                onClick={toggleMic}
+                disabled={isLoading}
+                title={isListening ? 'Stop listening' : 'Speak to dictate'}
+                className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
+                  isListening
+                    ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
+            )}
             <Button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
