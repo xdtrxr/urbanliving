@@ -26,37 +26,28 @@ const currencySymbols = {
 export default function PropertyCard({ property, onToggleWishlist, isWishlisted = false }) {
   const { isAuthenticated } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
-  const [localIsWishlisted, setLocalIsWishlisted] = useState(isWishlisted);
 
   const mainImage = property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800';
   const currencySymbol = currencySymbols[property.currency] || '₦';
 
+  // The parent owns the wishlist write — this card just emits the click.
+  // (Previously both this card AND the parent wrote to user.wishlist on every
+  // click, the second write toggled the value back, and the heart never
+  // actually changed state in the UI.)
   const handleToggleWishlist = async () => {
     if (isUpdating) return;
-    
-    setIsUpdating(true);
-    
-    try {
-      const userData = await base44.auth.me();
-      const currentWishlist = userData.wishlist || [];
-      
-      const newWishlist = localIsWishlisted
-        ? currentWishlist.filter(id => id !== property.id)
-        : [...currentWishlist, property.id];
-      
-      await base44.auth.updateMe({ wishlist: newWishlist });
-      
-      setLocalIsWishlisted(!localIsWishlisted);
-      
-      if (onToggleWishlist) {
-        onToggleWishlist(property.id);
-      }
-      
-    } catch (error) {
-      console.error("Failed to update wishlist:", error);
-      alert("Failed to update wishlist. Please try again.");
+    if (!isAuthenticated) {
+      window.location.href = `/login?from_url=${encodeURIComponent(window.location.href)}`;
+      return;
     }
-    
+    if (!onToggleWishlist) return;
+    setIsUpdating(true);
+    try {
+      await onToggleWishlist(property.id);
+    } catch (error) {
+      console.error('Failed to update wishlist:', error);
+      alert('Failed to update wishlist. Please try again.');
+    }
     setIsUpdating(false);
   };
 
@@ -76,13 +67,13 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
           onClick={handleToggleWishlist}
           disabled={isUpdating}
           className={`absolute top-4 right-4 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-all duration-300 ${
-            localIsWishlisted ? 'text-red-500' : 'text-slate-600 hover:text-red-500'
+            isWishlisted ? 'text-red-500' : 'text-slate-600 hover:text-red-500'
           }`}
         >
           {isUpdating ? (
             <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-red-500" />
           ) : (
-            <Heart className={`w-5 h-5 ${localIsWishlisted ? 'fill-current' : ''}`} />
+            <Heart className={`w-5 h-5 ${isWishlisted ? 'fill-current' : ''}`} />
           )}
         </Button>
 
