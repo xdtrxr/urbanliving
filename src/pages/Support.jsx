@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from '@/entities/User';
 import { SupportTicket } from '@/entities/SupportTicket';
 import { SupportMessage } from '@/entities/SupportMessage';
+import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -114,13 +115,17 @@ export default function SupportPage() {
         ai_handled: false
       });
 
-      // Create initial message
-      await SupportMessage.create({
+      // Create initial message — then fire Nova draft so admin gets a
+      // pre-written reply on Telegram. Fire-and-forget; the UX doesn't
+      // wait on it.
+      const initialMessage = await SupportMessage.create({
         ticket_id: ticket.id,
         sender_type: 'user',
         message: newTicket.message,
         message_type: 'text'
       });
+      base44.functions.invoke('draftSupportReply', { message_id: initialMessage.id })
+        .catch((err) => console.warn('draftSupportReply failed (non-fatal):', err));
 
       // Reset form
       setNewTicket({ subject: '', category: '', message: '' });
@@ -139,37 +144,58 @@ export default function SupportPage() {
     setIsCreatingTicket(false);
   };
 
-  const openTicket = async (ticket) => {
-    setSelectedTicket(ticket);
+  const refreshTicketMessages = async (ticketId, { silent = false } = {}) => {
+    if (!ticketId) return;
     try {
-      // Load messages for this ticket
-      const messages = await SupportMessage.filter(
-        { ticket_id: ticket.id }, 
-        'created_date'
-      );
-      setTicketMessages(messages);
+      const messages = await SupportMessage.filter({ ticket_id: ticketId }, 'created_date');
+      setTicketMessages((prev) => {
+        // Avoid React re-render churn when nothing has changed under us.
+        if (silent && prev.length === messages.length && prev[prev.length - 1]?.id === messages[messages.length - 1]?.id) {
+          return prev;
+        }
+        return messages;
+      });
     } catch (error) {
-      console.error('Error loading ticket messages:', error);
-      setTicketMessages([]);
+      if (!silent) {
+        console.error('Error loading ticket messages:', error);
+        setTicketMessages([]);
+      }
     }
   };
+
+  const openTicket = async (ticket) => {
+    setSelectedTicket(ticket);
+    await refreshTicketMessages(ticket.id);
+  };
+
+  // Poll every 5s while a ticket is open so admin replies (which come in via
+  // Telegram → telegramWebhook → SupportMessage.create) appear without the
+  // user needing to refresh the page.
+  useEffect(() => {
+    if (!selectedTicket?.id) return undefined;
+    const id = setInterval(() => refreshTicketMessages(selectedTicket.id, { silent: true }), 5000);
+    return () => clearInterval(id);
+  }, [selectedTicket?.id]);
 
   const sendMessage = async () => {
     if (!messageInput.trim() || !selectedTicket || !user) return;
 
     setIsSendingMessage(true);
     try {
-      // Create message directly using entity
-      await SupportMessage.create({
+      const created = await SupportMessage.create({
         ticket_id: selectedTicket.id,
         sender_type: 'user',
         message: messageInput,
         message_type: 'text'
       });
+      // Fire Nova draft so admin sees a pre-written reply on Telegram. Don't
+      // block the user's UI on it.
+      base44.functions.invoke('draftSupportReply', { message_id: created.id })
+        .catch((err) => console.warn('draftSupportReply failed (non-fatal):', err));
 
       setMessageInput('');
-      await openTicket(selectedTicket); // Reload messages
-      
+      await refreshTicketMessages(selectedTicket.id);
+
     } catch (error) {
       console.error('Error sending message:', error);
       alert('Failed to send message. Please try again.');

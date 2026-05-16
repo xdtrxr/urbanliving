@@ -38,6 +38,19 @@
     "helpful": {
       "type": "boolean",
       "description": "User feedback on whether the response was helpful"
+    },
+    "nova_draft": {
+      "type": "string",
+      "description": "Nova's drafted reply held for admin review (only set on user messages awaiting an admin response)"
+    },
+    "nova_draft_status": {
+      "type": "string",
+      "enum": ["pending", "sent_as_is", "edited", "replaced"],
+      "description": "Outcome of admin review on the Nova draft"
+    },
+    "telegram_message_id": {
+      "type": "string",
+      "description": "Telegram message_id of the admin notification posted for this message"
     }
   },
   "required": [
