@@ -202,8 +202,8 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                   Requested on {format(new Date(booking.created_date), "MMM d, yyyy 'at' h:mm a")}
                 </div>
                 <div className="flex gap-3">
-                  {property && (
-                    <Link to={createPageUrl(`Property?id=${property.id}`)}>
+                  {booking.property_id && (
+                    <Link to={createPageUrl(`Property?id=${booking.property_id}`)}>
                       <Button variant="outline" size="sm" className="rounded-xl">
                         <ExternalLink className="w-4 h-4 mr-2" />
                         View Property
@@ -335,8 +335,8 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                   Booked on {format(new Date(booking.created_date), "MMM d, yyyy")}
                 </div>
                 <div className="flex gap-3">
-                  {property && (
-                    <Link to={createPageUrl(`Property?id=${property.id}`)}>
+                  {booking.property_id && (
+                    <Link to={createPageUrl(`Property?id=${booking.property_id}`)}>
                       <Button variant="outline" size="sm" className="rounded-xl">
                         <ExternalLink className="w-4 h-4 mr-2" />
                         View Property
