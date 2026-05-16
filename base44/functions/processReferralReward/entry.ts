@@ -65,8 +65,11 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Idempotency: only award once
-        if (referral.status === 'booking_completed') {
+        // Idempotency: only award once. Two guards — status, and a
+        // booking_id stamp on the referral row. The booking_id check catches
+        // races where two writers (verifyPaystackPayment + paystackWebhook +
+        // this function) pass the status check before either has written.
+        if (referral.status === 'booking_completed' || referral.booking_id === booking.id) {
             return new Response(JSON.stringify({
                 success: true,
                 data: { skipped: 'already_awarded', referral_id: referral.id },

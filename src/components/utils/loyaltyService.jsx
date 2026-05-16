@@ -42,11 +42,18 @@ async function applyPoints({ user, points, transactionType, description, booking
   return { points, newTotal, newTier };
 }
 
+const BOOKING_REWARD_POINTS = 500;
+
 /**
  * Awards all booking-time milestones at once for the current user, idempotent.
- * - 5% of booking total (booking transaction)
+ * - Flat 500 points per booking (booking transaction)
  * - First booking ever (+500)
  * - 3 confirmed bookings in calendar month (+1000)
+ *
+ * The flat-500 booking award is ALSO inlined server-side in
+ * verifyPaystackPayment + paystackWebhook so guests who close their tab before
+ * PaymentPage finishes still get credited. Both paths dedup on
+ * transaction_type='booking' + booking_id, so re-runs are safe.
  */
 export async function awardBookingMilestones(bookingData) {
   if (!bookingData?.id) return [];
@@ -56,25 +63,22 @@ export async function awardBookingMilestones(bookingData) {
     // Single fetch up-front; refresh ONCE between writes.
     let tx = await fetchTransactions(user.email);
 
-    // 1. 5% of booking total (idempotent on booking_id)
+    // 1. Flat 500 points per booking (idempotent on booking_id)
     const alreadyForThisBooking = tx.some(
       (t) => t.transaction_type === 'booking' && t.booking_id === bookingData.id,
     );
     if (!alreadyForThisBooking) {
-      const points = Math.floor((Number(bookingData.total_price) || 0) * 0.05);
-      if (points > 0) {
-        const r = await applyPoints({
-          user,
-          points,
-          transactionType: 'booking',
-          description: `Earned ${points} points from a booking`,
-          bookingId: bookingData.id,
-          log: true,
-        });
-        awarded.push({ kind: 'booking', ...r });
-        user = await base44.auth.me();
-        tx = await fetchTransactions(user.email);
-      }
+      const r = await applyPoints({
+        user,
+        points: BOOKING_REWARD_POINTS,
+        transactionType: 'booking',
+        description: `Earned ${BOOKING_REWARD_POINTS} points from a booking`,
+        bookingId: bookingData.id,
+        log: true,
+      });
+      awarded.push({ kind: 'booking', ...r });
+      user = await base44.auth.me();
+      tx = await fetchTransactions(user.email);
     }
 
     // 2. First booking ever bonus (+500), idempotent on description marker

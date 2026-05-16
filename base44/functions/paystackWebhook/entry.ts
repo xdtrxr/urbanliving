@@ -7,6 +7,43 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 const REFERRAL_RATE = 0.05;
 const REFERRER_LOYALTY_BONUS = 250;
+const GUEST_BOOKING_POINTS = 500;
+
+// Awards the flat 500-point booking bonus to the guest, idempotent on
+// (user_email, transaction_type='booking', booking_id). Mirrors the client-side
+// awardBookingMilestones flow so guests still get credited if they close their
+// tab before PaymentPage finishes. Same dedup key on both sides — re-runs noop.
+async function awardGuestBookingPoints(sdk: any, guestEmail: string, bookingId: string) {
+    try {
+        const guests = await sdk.asServiceRole.entities.User.filter({ email: guestEmail });
+        const guest = guests[0];
+        if (!guest) {
+            console.warn(`awardGuestBookingPoints: no User row for ${guestEmail}`);
+            return;
+        }
+        const existing = await sdk.asServiceRole.entities.LoyaltyTransaction.filter({
+            user_email: guestEmail,
+            transaction_type: 'booking',
+            booking_id: bookingId,
+        });
+        if (existing.length > 0) {
+            console.log(`Guest ${guestEmail} already credited for booking ${bookingId}; skipping.`);
+            return;
+        }
+        const newLoyalty = (Number(guest.loyalty_points) || 0) + GUEST_BOOKING_POINTS;
+        await sdk.asServiceRole.entities.User.update(guest.id, { loyalty_points: newLoyalty });
+        await sdk.asServiceRole.entities.LoyaltyTransaction.create({
+            user_email: guestEmail,
+            points_earned: GUEST_BOOKING_POINTS,
+            transaction_type: 'booking',
+            booking_id: bookingId,
+            description: `Earned ${GUEST_BOOKING_POINTS} points from a booking`,
+        });
+        console.log(`🎁 Guest ${guestEmail} awarded ${GUEST_BOOKING_POINTS} points for booking ${bookingId}`);
+    } catch (err) {
+        console.warn('awardGuestBookingPoints failed (non-fatal):', err);
+    }
+}
 
 async function hmacSha512Hex(secret: string, body: string): Promise<string> {
     const enc = new TextEncoder();
@@ -224,6 +261,8 @@ Deno.serve(async (req) => {
             guests: Number(booking.guests) || 1,
         });
 
+        await awardGuestBookingPoints(sdk, booking.guest_email, booking.id);
+
         // Inline referral reward — direct service-role writes, idempotent.
         try {
             const guests = await sdk.asServiceRole.entities.User.filter({ email: booking.guest_email });
@@ -244,7 +283,12 @@ Deno.serve(async (req) => {
                             status: 'signed_up',
                         });
                     }
-                    if (referral.status !== 'booking_completed') {
+                    // Second idempotency guard: even if status check passes
+                    // under a race, the booking_id stamp on the referral row
+                    // will catch a second writer trying to credit the same
+                    // booking.
+                    const alreadyCreditedThisBooking = referral.booking_id === booking.id;
+                    if (referral.status !== 'booking_completed' && !alreadyCreditedThisBooking) {
                         const amountNGN = Math.round((Number(booking.total_price) || 0) * REFERRAL_RATE);
                         const newBalance = (Number(referrer.referral_balance_ngn) || 0) + amountNGN;
                         const newLoyalty = (Number(referrer.loyalty_points) || 0) + REFERRER_LOYALTY_BONUS;
