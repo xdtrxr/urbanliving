@@ -47,6 +47,66 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // NEW Tabs components
 
+// Module-scope so the parent's polling re-renders don't unmount/remount
+// (which would reset the countdown ticker every refresh).
+function InFlightBookingRow({ booking }) {
+  const deadlineMs = (() => {
+    const t = Date.parse(booking.payment_deadline || '');
+    return Number.isNaN(t) ? null : t;
+  })();
+  const [msLeft, setMsLeft] = useState(() => (deadlineMs ? Math.max(0, deadlineMs - Date.now()) : null));
+  useEffect(() => {
+    if (!deadlineMs) return;
+    const tick = () => setMsLeft(Math.max(0, deadlineMs - Date.now()));
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [deadlineMs]);
+  const formatLeft = (ms) => {
+    if (ms == null) return '—';
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}m ${s.toString().padStart(2, '0')}s`;
+  };
+  const isUrgent = msLeft !== null && msLeft < 5 * 60 * 1000;
+  const expired = msLeft === 0;
+  const paymentStarted = !!booking.payment_started_at;
+
+  return (
+    <div className={`rounded-2xl border p-4 ${
+      expired ? 'border-slate-300 bg-slate-50'
+        : isUrgent ? 'border-red-200 bg-red-50/40'
+        : 'border-slate-200 bg-white'
+    }`}>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-[260px]">
+          <p className="font-semibold text-slate-900">
+            {booking.guest_name || booking.guest_email} <span className="text-slate-500 font-normal">· {booking.guest_email}</span>
+          </p>
+          <p className="text-sm text-slate-700 mt-1">
+            <code className="text-xs font-mono text-slate-500">{booking.property_id}</code>
+            {' · '}{booking.check_in} → {booking.check_out}
+            {' · '}{booking.guests} guest{booking.guests === 1 ? '' : 's'}
+            {' · '}₦{(booking.total_price || 0).toLocaleString()}
+          </p>
+          <p className="text-xs text-slate-400 mt-2">
+            Approved {booking.approved_at ? new Date(booking.approved_at).toLocaleString() : '—'}
+            {paymentStarted && ` · Opened payment ${new Date(booking.payment_started_at).toLocaleString()}`}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className={`font-mono text-lg font-bold tabular-nums ${
+            expired ? 'text-slate-500' : isUrgent ? 'text-red-700' : 'text-slate-900'
+          }`}>
+            {expired ? 'Expired' : formatLeft(msLeft)}
+          </div>
+          <p className="text-xs text-slate-500">{expired ? 'auto-cancel pending' : 'time left to pay'}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [user, setUser] = useState(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -131,14 +191,37 @@ export default function AdminPage() {
         loadProperties();
         loadPlatformStats();
         loadPendingRequests();
+        loadInFlightBookings();
         const statsTimer = setInterval(() => loadPlatformStats(true), 30000);
         const reqTimer = setInterval(() => loadPendingRequests(true), 15000);
+        const inFlightTimer = setInterval(() => loadInFlightBookings(true), 15000);
         return () => {
           clearInterval(statsTimer);
           clearInterval(reqTimer);
+          clearInterval(inFlightTimer);
         };
     }
   }, [isAuthorized]);
+
+  const [inFlightBookings, setInFlightBookings] = useState([]);
+  const [isLoadingInFlight, setIsLoadingInFlight] = useState(false);
+
+  const loadInFlightBookings = async (silent = false) => {
+    if (!silent) setIsLoadingInFlight(true);
+    try {
+      // Pull every booking with payment_deadline (approved, awaiting payment).
+      const result = await base44.functions.invoke('getBookings', { scope: 'all' });
+      const all = result?.data?.success ? result.data.data : [];
+      const inFlight = all
+        .filter(b => b.status === 'pending' && b.approved_at)
+        .sort((a, b) => Date.parse(a.payment_deadline || 0) - Date.parse(b.payment_deadline || 0));
+      setInFlightBookings(inFlight);
+    } catch (err) {
+      console.error('Failed to load in-flight bookings:', err);
+    } finally {
+      if (!silent) setIsLoadingInFlight(false);
+    }
+  };
 
   const loadPendingRequests = async (silent = false) => {
     if (!silent) setIsLoadingRequests(true);
@@ -786,6 +869,49 @@ export default function AdminPage() {
                       </div>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* In-Flight Bookings — approved by admin, awaiting payment */}
+        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Bookings In Flight
+                {inFlightBookings.length > 0 && (
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                    {inFlightBookings.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadInFlightBookings()}
+                disabled={isLoadingInFlight}
+                className="rounded-xl"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoadingInFlight ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+            <CardDescription>
+              Bookings you approved but the guest hasn't paid for yet. Auto-cancelled when the payment timer expires.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingInFlight && inFlightBookings.length === 0 ? (
+              <div className="text-center py-6 text-slate-500 text-sm">Loading…</div>
+            ) : inFlightBookings.length === 0 ? (
+              <div className="text-center py-6 text-slate-500 text-sm">No bookings awaiting payment right now.</div>
+            ) : (
+              <div className="space-y-3">
+                {inFlightBookings.map((booking) => (
+                  <InFlightBookingRow key={booking.id} booking={booking} />
                 ))}
               </div>
             )}
