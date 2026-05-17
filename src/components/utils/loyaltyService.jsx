@@ -43,12 +43,14 @@ async function applyPoints({ user, points, transactionType, description, booking
 }
 
 const BOOKING_REWARD_POINTS = 500;
+const FIRST_BOOKING_BONUS = 1000;
+const MONTHLY_3_BOOKINGS_BONUS = 3000;
 
 /**
  * Awards all booking-time milestones at once for the current user, idempotent.
  * - Flat 500 points per booking (booking transaction)
- * - First booking ever (+500)
- * - 3 confirmed bookings in calendar month (+1000)
+ * - First booking ever (+1000)
+ * - 3 confirmed bookings in calendar month (+3000)
  *
  * The flat-500 booking award is ALSO inlined server-side in
  * verifyPaystackPayment + paystackWebhook so guests who close their tab before
@@ -81,7 +83,7 @@ export async function awardBookingMilestones(bookingData) {
       tx = await fetchTransactions(user.email);
     }
 
-    // 2. First booking ever bonus (+500), idempotent on description marker
+    // 2. First booking ever bonus, idempotent on description marker
     const alreadyFirst = tx.some(
       (t) => t.transaction_type === 'milestone' && t.description?.includes('FIRST_BOOKING'),
     );
@@ -89,7 +91,7 @@ export async function awardBookingMilestones(bookingData) {
     if (!alreadyFirst && hasBookingTx) {
       const r = await applyPoints({
         user,
-        points: 500,
+        points: FIRST_BOOKING_BONUS,
         transactionType: 'milestone',
         description: 'FIRST_BOOKING — Welcome bonus for your first booking',
         bookingId: bookingData.id,
@@ -100,7 +102,7 @@ export async function awardBookingMilestones(bookingData) {
       tx = await fetchTransactions(user.email);
     }
 
-    // 3. 3 bookings in this calendar month (+1000), once per month
+    // 3. 3 bookings in this calendar month, once per month
     const monthStart = startOfCalendarMonthIso();
     const bookingTxThisMonth = tx.filter(
       (t) => t.transaction_type === 'booking' && t.created_date && t.created_date >= monthStart,
@@ -112,7 +114,7 @@ export async function awardBookingMilestones(bookingData) {
     if (bookingTxThisMonth.length >= 3 && !alreadyMonthlyBonus) {
       const r = await applyPoints({
         user,
-        points: 1000,
+        points: MONTHLY_3_BOOKINGS_BONUS,
         transactionType: 'milestone',
         description: `${monthlyBonusKey} — 3 bookings in a calendar month bonus`,
         bookingId: bookingData.id,
