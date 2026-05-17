@@ -249,45 +249,73 @@ export default function AIChatConciergePage() {
   }, [isLoadingHistory, user]);
   
   const checkChatQuestCompletion = async (userData, messageCount) => {
+    if (messageCount < 2) return;
     try {
       const today = new Date().toISOString().split('T')[0];
-      const chatQuest = await base44.entities.Quest.filter({ 
-        user_email: userData.email, 
+      const DAILY_CHAT_POINTS = 50; // mirrors QUEST_REGISTRY.daily_chat_agent.points
+
+      // Self-healing: find OR create the daily quest, then daily-reset if stale.
+      // Previously this only awarded when the user had visited /Quests first,
+      // because that's where the Quest row was created and daily-reset. Users
+      // who only used Nova never got their 50 points.
+      let existing = await base44.entities.Quest.filter({
+        user_email: userData.email,
         quest_id: 'daily_chat_agent',
-        status: 'available'
+      });
+      let quest = existing[0];
+
+      if (!quest) {
+        quest = await base44.entities.Quest.create({
+          quest_id: 'daily_chat_agent',
+          quest_type: 'daily_engagement',
+          platform: 'chat_agent',
+          points_reward: DAILY_CHAT_POINTS,
+          verification_method: 'automatic',
+          is_daily: true,
+          user_email: userData.email,
+          status: 'available',
+        });
+      } else if (quest.status === 'claimed' && quest.last_completed_date !== today) {
+        // Daily reset
+        await base44.entities.Quest.update(quest.id, {
+          status: 'available',
+          completion_date: null,
+          last_completed_date: null,
+        });
+        quest = { ...quest, status: 'available', completion_date: null, last_completed_date: null };
+      }
+
+      if (quest.status !== 'available') return; // already claimed today
+
+      const reward = quest.points_reward || DAILY_CHAT_POINTS;
+
+      await base44.entities.Quest.update(quest.id, {
+        status: 'completed',
+        completion_date: new Date().toISOString(),
+        last_completed_date: today,
       });
 
-      if (chatQuest.length > 0 && messageCount >= 2) {
-        const quest = chatQuest[0];
-        
-        await base44.entities.Quest.update(quest.id, {
-          status: 'completed',
-          completion_date: new Date().toISOString(),
-          last_completed_date: today
-        });
+      const newLoyaltyPoints = (userData.loyalty_points || 0) + reward;
+      const newTier = calculateLoyaltyTier(newLoyaltyPoints);
 
-        const newLoyaltyPoints = (userData.loyalty_points || 0) + quest.points_reward;
-        const newTier = calculateLoyaltyTier(newLoyaltyPoints);
+      await base44.auth.updateMe({
+        loyalty_points: newLoyaltyPoints,
+        loyalty_tier: newTier,
+      });
 
-        await base44.auth.updateMe({
-          loyalty_points: newLoyaltyPoints,
-          loyalty_tier: newTier
-        });
+      await base44.entities.LoyaltyTransaction.create({
+        user_email: userData.email,
+        points_earned: reward,
+        transaction_type: 'engagement',
+        description: 'Daily chat with Agent Nova',
+        quest_id: quest.id,
+      });
 
-        await base44.entities.LoyaltyTransaction.create({
-          user_email: userData.email,
-          points_earned: quest.points_reward,
-          transaction_type: 'engagement',
-          description: 'Daily chat with Agent Nova',
-          quest_id: quest.id
-        });
+      await base44.entities.Quest.update(quest.id, { status: 'claimed' });
 
-        await base44.entities.Quest.update(quest.id, { status: 'claimed' });
-
-        setTimeout(() => {
-          alert(`🎉 Daily quest completed! You earned ${quest.points_reward} Urban Points for chatting with Agent Nova today!`);
-        }, 1500);
-      }
+      setTimeout(() => {
+        alert(`🎉 Daily quest completed! You earned ${reward} Urban Points for chatting with Agent Nova today!`);
+      }, 1500);
     } catch (error) {
       console.error('Error checking chat quest:', error);
     }
