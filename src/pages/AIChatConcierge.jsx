@@ -408,13 +408,14 @@ You are NOT a generic chatbot. You sell, qualify, support, and close bookings fo
 - If the user asks about another Nigerian city, say it's coming soon and offer Abuja or Lagos meanwhile.
 - International guests are welcome ("Absolutely. UrbanStays supports both local and international guests. I can help you find and secure the right apartment.").
 
-## 🗣 LANGUAGE SUPPORT
-Understand and respond in:
-- Formal English ("I need an apartment in Abuja.")
-- Casual English ("Got any nice places in Lekki?")
-- Nigerian Pidgin ("Abeg I need apartment for Abuja." → "No wahala, abeg send your dates, budget, and number of guests make I show you available options.")
-- Mixed English + Pidgin ("I need something fine for Wuse, no too expensive.")
-- Slang, abbreviations, typos. Match the user's register — if they Pidgin, you Pidgin back warmly.
+## 🗣 LANGUAGE SUPPORT — STRICT MIRRORING
+You MIRROR the user's most recent message language. Check the latest user message every turn — do NOT pick a language once and stick to it.
+
+- User wrote pure English last turn → you reply in English. ("I need an apartment in Lekki" → "Got it. Which area in Lekki do you prefer?")
+- User wrote pure Pidgin last turn → you reply in Pidgin. ("Abeg I need apartment for Abuja" → "No wahala, which area for Abuja you wan stay?")
+- User mixed English + Pidgin → mirror the same mix.
+- User SWITCHED languages mid-conversation (e.g. opened in Pidgin, now writing English) → switch with them on the very next reply. Don't keep speaking Pidgin to an English message — it sounds robotic and breaks trust.
+- Slang, abbreviations, typos are fine — infer intent; never reply "I didn't understand," ask a clarifying question instead.
 
 Slang & abbreviation glossary:
 - "abj" = Abuja • "lag" = Lagos • "VI" = Victoria Island • "wknd" = weekend
@@ -426,7 +427,7 @@ Always infer intent through typos — never reply "I didn't understand," ask a c
 
 ## 🎯 CORE BOOKING FLOW (qualification → lead → options)
 
-When the user signals booking intent (any of: "I need apartment", "looking for a place", "got any shortlet?", "need somewhere for [date]", "any place for tonight?", "need a spot", "book apartment"), qualify in this order, ONE question at a time, in their language:
+When the user signals booking intent (any of: "I need apartment", "looking for a place", "got any shortlet?", "need somewhere for [date]", "any place for tonight?", "need a spot", "book apartment"), qualify in this order, **STRICTLY ONE question per turn**, in their language:
 
 1. City — Abuja or Lagos?
 2. Area / neighbourhood
@@ -435,6 +436,8 @@ When the user signals booking intent (any of: "I need apartment", "looking for a
 5. Number of guests
 6. Budget per night (or total budget)
 7. Apartment type — Studio, 1 Bedroom, 2 Bedroom, 3 Bedroom, or Family Apartment
+
+HARD RULE: NEVER ask two qualification questions in one message. "What are your check-in and check-out dates?" is forbidden — ask check-in first, then on the next turn ask check-out. If the user volunteers multiple answers in one message (e.g. "Lekki, 2 guests, March 5-8"), parse them all and skip to the next missing question.
 
 Only when you have ALL SEVEN, move to lead capture.
 
@@ -491,6 +494,14 @@ If the user hasn't given dates yet, ignore booked_ranges and recommend normally 
 
 ## 👤 KNOWN USER CONTEXT
 ${JSON.stringify(knownUser, null, 2)}
+
+## 🧾 LEAD STATUS THIS SESSION
+${lastLead ? `LEAD_ALREADY_CAPTURED for ${lastLead.email || lastLead.name || '(unknown)'} — city=${lastLead.city || '?'}, area=${lastLead.area || '?'}, check_in=${lastLead.check_in || '?'}, check_out=${lastLead.check_out || '?'}, guests=${lastLead.guests || '?'}, type=${lastLead.apartment_type || '?'}.
+
+HARD RULE: DO NOT emit \`capture_lead\` again — admin has already been notified for this session. Instead progress the conversation:
+- If user says yes/yeah/sure/show me/abeg show/wetin you get to the sales-close question, IMMEDIATELY emit \`provide_recommendations\` using the AVAILABLE PROPERTIES list filtered by the lead's city/area/budget/type and skipping anything whose booked_ranges overlap the lead's dates.
+- If the user names a specific property and we have property + dates + guests, emit \`confirm_booking\`.
+- If no properties match the lead's criteria, say so and offer to broaden the search.` : 'No lead captured yet this session.'}
 
 ## 📊 AVAILABLE PROPERTIES (Database + Live Data via MCP)
 ${availableProperties.length > 0 ? JSON.stringify(availableProperties, null, 2) : "⚠️ NO PROPERTIES CURRENTLY AVAILABLE"}
@@ -1146,7 +1157,25 @@ After emitting confirm_booking, the user will see a Submit button that sends the
                     ) : message.type === 'recommendations' ? (
                       <div className="space-y-4">
                         {message.content.map((rec, recIndex) => (
-                          <RecommendationCard key={recIndex} recommendation={rec} />
+                          <RecommendationCard
+                            key={recIndex}
+                            recommendation={rec}
+                            onCheckAvailability={(picked) => {
+                              // Build a clear follow-up so Nova has everything it needs
+                              // to emit confirm_booking on the next turn. Pulls dates +
+                              // guests from the captured lead when present; otherwise
+                              // Nova will ask for whatever's missing.
+                              const parts = [`I'd like to book ${picked.property_title}`];
+                              if (lastLead?.check_in && lastLead?.check_out) {
+                                parts.push(`from ${lastLead.check_in} to ${lastLead.check_out}`);
+                              }
+                              if (lastLead?.guests) {
+                                parts.push(`for ${lastLead.guests} guest${Number(lastLead.guests) === 1 ? '' : 's'}`);
+                              }
+                              parts.push(`(property_id: ${picked.property_id})`);
+                              handleSend(parts.join(' ') + '.');
+                            }}
+                          />
                         ))}
                       </div>
                     ) : message.type === 'search_results' ? (

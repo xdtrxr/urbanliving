@@ -1,13 +1,17 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, DollarSign, Sparkles, ImageIcon, ExternalLink } from 'lucide-react';
+import { MapPin, DollarSign, Sparkles, ImageIcon, ExternalLink, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
-export default function RecommendationCard({ recommendation }) {
+// onCheckAvailability is invoked with the recommendation when the user taps
+// the green button. The chat handler turns that into a follow-up user message
+// so Nova can emit confirm_booking on the next turn (uses dates+guests from
+// the captured lead via closure).
+export default function RecommendationCard({ recommendation, onCheckAvailability }) {
   return (
     <Card className="bg-white border-slate-200/80 rounded-2xl shadow-lg overflow-hidden w-full max-w-sm mx-auto">
       <CardHeader className="p-0">
@@ -65,7 +69,16 @@ export default function RecommendationCard({ recommendation }) {
           </div>
         </div>
       </CardContent>
-      <CardFooter className="p-5 pt-0">
+      <CardFooter className="p-5 pt-0 flex flex-col gap-2">
+        {onCheckAvailability && (
+          <Button
+            onClick={() => onCheckAvailability(recommendation)}
+            className="w-full bg-green-600 hover:bg-green-700 text-white shadow-sm"
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Check Availability
+          </Button>
+        )}
         <Link to={createPageUrl(`Property?id=${recommendation.property_id}`)} className="w-full">
           <Button variant="outline" className="w-full">
             <ExternalLink className="w-4 h-4 mr-2" />
