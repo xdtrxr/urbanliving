@@ -38,7 +38,11 @@ import {
   MessageCircle,
   Loader2,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Gift,
+  Calendar,
+  Users,
+  Sparkles
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -111,6 +115,50 @@ const LOYALTY_TIERS = {
   Platinum: { threshold: 5000, color: 'text-purple-600' },
   Diamond: { threshold: 10000, color: 'text-blue-600' }
 };
+
+/**
+ * Auto-awarded rewards (no quest button — credited server-side after the
+ * triggering event). Surfaced here so users know what they're earning passively.
+ * Numbers must match:
+ *  - awardBookingMilestones in src/components/utils/loyaltyService.jsx
+ *  - awardGuestBookingPoints in verifyPaystackPayment and paystackWebhook
+ *  - REFERRAL_RATE / REFERRER_LOYALTY_BONUS in the same backend functions
+ */
+const AUTO_REWARDS = [
+  {
+    id: 'every_booking',
+    name: 'Every Booking',
+    description: 'Earn 500 Urban Points automatically every time you complete a booking. No action needed — credited as soon as payment clears.',
+    points: 500,
+    icon: Calendar,
+    color: 'bg-gradient-to-br from-emerald-500 to-green-600 text-white',
+  },
+  {
+    id: 'first_booking',
+    name: 'First Booking Bonus',
+    description: 'Earn an extra 500 Urban Points the first time you complete a booking. A one-time welcome reward.',
+    points: 500,
+    icon: Sparkles,
+    color: 'bg-gradient-to-br from-amber-500 to-orange-600 text-white',
+  },
+  {
+    id: 'monthly_3_bookings',
+    name: '3 Bookings This Month',
+    description: 'Hit 3 confirmed bookings in a calendar month and earn a 1,000-point bonus. Resets every month.',
+    points: 1000,
+    icon: Trophy,
+    color: 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white',
+  },
+  {
+    id: 'refer_a_friend',
+    name: 'Refer a Friend',
+    description: 'Share your referral code. When a friend signs up and completes their first booking, you earn 5% of their booking value in cash and 250 Urban Points.',
+    points: 250,
+    icon: Users,
+    color: 'bg-gradient-to-br from-pink-500 to-rose-600 text-white',
+    extra: '+ 5% cash',
+  },
+];
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -831,9 +879,55 @@ export default function QuestsPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-900 mb-6 text-center">Available Quests</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-            {Object.entries(QUEST_REGISTRY).map(([questId, config]) => 
+            {Object.entries(QUEST_REGISTRY).map(([questId, config]) =>
               renderQuestCard(questId, config)
             )}
+          </div>
+        </div>
+
+        {/* Auto-awarded rewards — earned passively, no button needed */}
+        <div className="mt-16">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Earn With Every Booking</h2>
+            <p className="text-slate-600">These rewards are credited automatically — no action required.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+            {AUTO_REWARDS.map((reward) => {
+              const IconComponent = reward.icon;
+              return (
+                <Card key={reward.id} className="border-0 rounded-3xl overflow-hidden bg-white/90 backdrop-blur-sm h-full flex flex-col hover:shadow-2xl transition-all duration-500">
+                  <div className={`h-2 ${reward.color}`} />
+                  <CardHeader className="p-6 flex-grow">
+                    <div className="flex items-start gap-3 mb-4">
+                      <div className={`w-12 h-12 rounded-full ${reward.color} flex items-center justify-center shadow-lg flex-shrink-0`}>
+                        <IconComponent className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base font-bold text-slate-900 mb-2 break-words">
+                          {reward.name}
+                        </CardTitle>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Star className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                          <span className="font-semibold text-amber-600 text-sm whitespace-nowrap">
+                            +{reward.points.toLocaleString()} Points
+                          </span>
+                          {reward.extra && (
+                            <Badge className="bg-emerald-100 text-emerald-800">{reward.extra}</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-slate-600 text-sm leading-relaxed">{reward.description}</p>
+                  </CardHeader>
+                  <CardContent className="px-6 pb-6 mt-auto">
+                    <div className="flex items-center justify-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <Gift className="w-4 h-4 text-slate-500" />
+                      <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Auto-credited</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
 
