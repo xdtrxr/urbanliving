@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { usePropertySearch } from "../components/hooks/usePropertySearch";
 import { base44 } from "@/api/base44Client";
+import { createPageUrl } from "@/utils";
 
 import SearchHeader from "../components/search/SearchHeader";
 import PropertyCard from "../components/search/PropertyCard";
@@ -14,6 +16,7 @@ import { useAuth } from "@/lib/AuthContext";
 
 export default function SearchPage() {
   const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const { properties, isLoading, error, metadata, search, clearCache } = usePropertySearch();
   const [filteredProperties, setFilteredProperties] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -86,109 +89,25 @@ export default function SearchPage() {
       return;
     }
 
-    setIsLoadingAI(true);
-    
-    try {
-      console.log('🤖 Getting AI recommendations...');
-      
-      const userBookings = await base44.entities.Booking.filter({ 
-        guest_email: user.email 
-      });
-      
-      const allProperties = await base44.entities.Property.list('-rating', 50);
-      
-      const userProfile = {
-        name: user.full_name,
-        loyalty_tier: user.loyalty_tier || 'Bronze',
-        previous_bookings: userBookings.length,
-        wishlist_count: wishlist.length,
-        travel_style: user.travel_style || 'Not specified',
-        interests: user.interests || 'Not specified'
-      };
-      
-      const prompt = `
-You are a luxury travel advisor AI for Urban Stays.
-
-## User Profile:
-${JSON.stringify(userProfile, null, 2)}
-
-## Available Properties:
-${JSON.stringify(allProperties.slice(0, 30).map(p => ({
-  id: p.id,
-  title: p.title,
-  location: p.location,
-  price_per_night: p.price_per_night,
-  property_type: p.property_type,
-  rating: p.rating,
-  max_guests: p.max_guests,
-  bedrooms: p.bedrooms,
-  amenities: p.amenities
-})), null, 2)}
-
-## Task:
-Based on the user's profile, recommend 5-6 properties that would be perfect for them.
-
-**CRITICAL RULES:**
-1. ONLY recommend properties from the "Available Properties" list above
-2. Use EXACT property_id from the list
-3. Consider user's loyalty tier, booking history, and preferences
-4. Provide diverse recommendations (different locations, types, price points)
-5. Explain WHY each property is a good match
-
-## Required Output Format (valid JSON):
-{
-  "recommendations": [
-    {
-      "property_id": "exact_id_from_list",
-      "reason": "Brief explanation why this matches user preferences"
+    // Recommendations now live inside Nova — Nova owns property awareness,
+    // booking conflict checks, and the booking flow that follows. We seed Nova
+    // with any active filters so the conversation picks up where the user is.
+    const bits = [];
+    if (searchQuery?.trim()) bits.push(`in ${searchQuery.trim()}`);
+    if (guests && Number(guests) > 0) bits.push(`for ${guests} guest${Number(guests) === 1 ? '' : 's'}`);
+    if (bedrooms && bedrooms !== 'any') {
+      const label = bedrooms === 'studio' ? 'a studio' : bedrooms === 'loft' ? 'a loft' : `${bedrooms} bedroom${bedrooms === '1' ? '' : 's'}`;
+      bits.push(`with ${label}`);
     }
-  ]
-}
+    if (filters?.maxPrice) bits.push(`under ₦${Number(filters.maxPrice).toLocaleString()}/night`);
 
-Return ONLY the JSON, no other text.
-`;
+    const seed = bits.length > 0
+      ? `Give me personalized property recommendations ${bits.join(' ')}.`
+      : 'Give me personalized property recommendations based on my profile.';
 
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: prompt,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            recommendations: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  property_id: { type: "string" },
-                  reason: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
-      
-      console.log('🤖 AI Response:', result);
-      
-      const recommendedIds = result.recommendations.map(r => r.property_id);
-      const recommendedProperties = allProperties.filter(p => 
-        recommendedIds.includes(p.id)
-      );
-      
-      if (recommendedProperties.length > 0) {
-        setFilteredProperties(recommendedProperties);
-        setSearchQuery("AI Recommendations");
-        
-        alert(`✨ I've curated ${recommendedProperties.length} personalized recommendations just for you based on your profile and preferences!`);
-      } else {
-        alert("No personalized recommendations available at the moment. Please try searching by location.");
-      }
-      
-    } catch (error) {
-      console.error('❌ AI Recommendations error:', error);
-      alert("Failed to get AI recommendations. Please try again.");
-    } finally {
-      setIsLoadingAI(false);
-    }
+    const params = new URLSearchParams();
+    params.set('prompt', seed);
+    navigate(`${createPageUrl('AIChatConcierge')}?${params.toString()}`);
   };
 
   const toggleWishlist = async (propertyId) => {

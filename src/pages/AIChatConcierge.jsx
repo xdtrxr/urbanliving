@@ -37,6 +37,7 @@ export default function AIChatConciergePage() {
   const [userMessageCount, setUserMessageCount] = useState(0);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const autoPromptSentRef = useRef(false);
   const navigate = useNavigate();
 
   const { properties: searchedProperties, isLoading: isSearchingProperties, search: searchProperties } = usePropertySearch();
@@ -134,6 +135,24 @@ export default function AIChatConciergePage() {
     initializeChatSession();
   }, [initializeChatSession]);
 
+  // Auto-send a one-shot prompt when arriving with `?prompt=...` in the URL.
+  // Used by the Search page's "AI Recommendations" button so the rec flow
+  // happens inside Nova end-to-end. Fires once after the chat is ready.
+  useEffect(() => {
+    if (autoPromptSentRef.current) return;
+    if (isLoadingHistory || !user || !isIntroComplete) return;
+    const params = new URLSearchParams(window.location.search);
+    const seeded = params.get('prompt');
+    if (!seeded || !seeded.trim()) return;
+    autoPromptSentRef.current = true;
+    // Clear the param from the URL so a refresh doesn't re-send it.
+    params.delete('prompt');
+    const newQs = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${newQs ? `?${newQs}` : ''}`);
+    handleSend(seeded.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingHistory, user, isIntroComplete]);
+
   // Proactive Nova nudges: surface unread booking status changes when chat reopens.
   // Tracks announced booking IDs in localStorage so we don't re-nudge.
   const surfaceProactiveNudges = useCallback(async () => {
@@ -146,26 +165,50 @@ export default function AIChatConciergePage() {
       let seen = {};
       try { seen = JSON.parse(localStorage.getItem(seenKey) || '{}'); } catch { seen = {}; }
 
-      const nudges = [];
+      const nudgeMessages = [];
       const now = Date.now();
       const dayMs = 24 * 60 * 60 * 1000;
 
       for (const b of bookings) {
-        // Approved + awaiting payment
+        // Approved + awaiting payment — render a CTA card with Pay Now + View Property
         if (b.bucket === 'pending-approval' && b.approved_at && !b.payment_started_at) {
           const key = `approved:${b.id}`;
           if (!seen[key]) {
-            nudges.push(`✅ Your request for booking \`${b.id}\` was approved. You have ~1 hour to pay before it auto-cancels.`);
+            nudgeMessages.push({
+              id: `nova_cta_${b.id}`,
+              role: 'assistant',
+              type: 'booking_cta',
+              cta: 'pay',
+              content: `✅ Admin approved your request for **${b.property_title || 'your booking'}**. You have ~1 hour to pay before it auto-cancels.`,
+              booking: {
+                id: b.id,
+                property_id: b.property_id,
+                property_title: b.property_title || '',
+                guest_email: b.guest_email || '',
+                total_price: b.total_price || 0,
+              },
+            });
             seen[key] = now;
           }
         }
-        // Newly paid/confirmed in last 24h
+        // Newly paid/confirmed in last 24h — text-only nudge
         if (b.bucket === 'upcoming' && b.paid_at) {
           const paidMs = Date.parse(b.paid_at);
           if (!Number.isNaN(paidMs) && now - paidMs < dayMs) {
             const key = `paid:${b.id}`;
             if (!seen[key]) {
-              nudges.push(`🎉 Payment confirmed for booking \`${b.id}\`. See you soon!`);
+              nudgeMessages.push({
+                id: `nova_cta_${b.id}_paid`,
+                role: 'assistant',
+                type: 'booking_cta',
+                cta: 'view',
+                content: `🎉 Payment confirmed for **${b.property_title || 'your booking'}**. See you soon!`,
+                booking: {
+                  id: b.id,
+                  property_id: b.property_id,
+                  property_title: b.property_title || '',
+                },
+              });
               seen[key] = now;
             }
           }
@@ -174,13 +217,17 @@ export default function AIChatConciergePage() {
         if (b.bucket === 'cancelled' && b.payment_deadline) {
           const key = `expired:${b.id}`;
           if (!seen[key]) {
-            nudges.push(`⏰ Booking \`${b.id}\` was auto-cancelled because the payment window expired. Want me to find another option?`);
+            nudgeMessages.push({
+              id: `nova_nudge_${b.id}_expired`,
+              role: 'assistant',
+              content: `⏰ Booking \`${b.id}\` was auto-cancelled because the payment window expired. Want me to find another option?`,
+            });
             seen[key] = now;
           }
         }
       }
 
-      if (nudges.length === 0) return;
+      if (nudgeMessages.length === 0) return;
 
       // Prune entries older than 30 days
       for (const k of Object.keys(seen)) {
@@ -188,12 +235,7 @@ export default function AIChatConciergePage() {
       }
       localStorage.setItem(seenKey, JSON.stringify(seen));
 
-      const nudgeMessage = {
-        id: `nova_nudge_${Date.now()}`,
-        role: 'assistant',
-        content: `Quick update before we continue:\n\n${nudges.map((n) => `• ${n}`).join('\n')}`,
-      };
-      setMessages((prev) => [nudgeMessage, ...prev]);
+      setMessages((prev) => [...nudgeMessages, ...prev]);
     } catch (err) {
       console.warn('Proactive nudge check failed:', err);
     }
@@ -293,6 +335,33 @@ export default function AIChatConciergePage() {
     setMessages([{ role: 'assistant', content: '', id: 'intro' }]);
     animateWelcomeMessage();
     setUserMessageCount(0);
+  };
+
+  // For each property in the candidate list, attach the active booked ranges
+  // so Nova can avoid recommending properties whose dates conflict with
+  // existing pending/confirmed bookings. Fails open (empty ranges) on error
+  // so a bookings-API blip doesn't take down recommendations.
+  const enrichWithBookedRanges = async (props) => {
+    if (!Array.isArray(props) || props.length === 0) return props;
+    const dbIds = props.map((p) => p.id).filter((id) => typeof id === 'string' && id.length > 10);
+    if (dbIds.length === 0) return props.map((p) => ({ ...p, booked_ranges: [] }));
+    let activeBookings = [];
+    try {
+      activeBookings = await base44.entities.Booking.filter({
+        property_id: { $in: dbIds },
+        status: { $in: ['confirmed', 'pending'] },
+      });
+    } catch (err) {
+      console.warn('enrichWithBookedRanges: Booking.filter failed (fail-open):', err);
+    }
+    const byProperty = new Map();
+    for (const b of activeBookings || []) {
+      if (!b.property_id || !b.check_in || !b.check_out) continue;
+      const arr = byProperty.get(b.property_id) || [];
+      arr.push({ check_in: b.check_in, check_out: b.check_out, status: b.status });
+      byProperty.set(b.property_id, arr);
+    }
+    return props.map((p) => ({ ...p, booked_ranges: byProperty.get(p.id) || [] }));
   };
 
   const continueWithAI = async (availableProperties, conversationContext, userMessage) => {
@@ -410,6 +479,16 @@ If the user's request is genuinely outside booking (legal issue, dispute, refund
 - NEVER guess dates or guest counts. If unknown, ask.
 - ALWAYS return valid JSON when you choose an action. For plain conversation, return text only (no JSON).
 
+## 📆 AVAILABILITY-AWARE RECOMMENDATIONS
+Each property in AVAILABLE PROPERTIES has a \`booked_ranges\` array of \`{check_in, check_out, status}\` for currently pending or confirmed bookings.
+
+When the user has given you their requested check_in and check_out dates, BEFORE recommending or proposing a booking on a property:
+1. Check each \`booked_range\` for that property.
+2. Two ranges overlap if requested.check_in < range.check_out AND requested.check_out > range.check_in.
+3. If ANY overlap exists, the property is UNAVAILABLE for those dates — do NOT recommend it and do NOT use it in \`confirm_booking\`. Suggest alternative properties instead, or ask the user about different dates.
+
+If the user hasn't given dates yet, ignore booked_ranges and recommend normally — they'll be filtered when dates are chosen.
+
 ## 👤 KNOWN USER CONTEXT
 ${JSON.stringify(knownUser, null, 2)}
 
@@ -468,7 +547,20 @@ ${conversationContext}
   "response": "Brief intro message"
 }
 
-**confirm_booking** — when user has picked a specific property AND all of property_id, check_in, check_out, guests are known:
+**confirm_booking** — fire AS SOON AS you have all four of: a real property_id from AVAILABLE PROPERTIES, a check_in (YYYY-MM-DD), a check_out (YYYY-MM-DD), and a guest count.
+
+You MUST emit confirm_booking when:
+- You just showed recommendations and the user picks one ("I'll take the Lekki one", "book the first one", "the 2-bedroom in Wuse", "yes that one"). Map their reference back to the exact property in AVAILABLE PROPERTIES.
+- The user gives you all four pieces of info in any single message ("book the Maitama 2-bed Apr 5 to Apr 8 for 2 people"). Don't ask follow-ups when nothing is missing.
+- The user already gave dates + guests earlier and now confirms a property.
+
+Do NOT emit confirm_booking when:
+- The chosen property's booked_ranges overlap the requested dates (it's unavailable — offer alternatives).
+- You're still missing one of the four required fields.
+- The user is browsing or comparing, not committing.
+
+After emitting confirm_booking, the user will see a Submit button that sends the booking request to admin for approval — they tap once and you're done with this step.
+
 {
   "action": "confirm_booking",
   "booking": {
@@ -683,27 +775,30 @@ ${conversationContext}
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSend = async (overrideText) => {
+    // overrideText lets programmatic callers (e.g., URL ?prompt= auto-send)
+    // bypass the input state which may not have updated yet on the same tick.
+    const text = (typeof overrideText === 'string' && overrideText) ? overrideText : input;
+    if (!text.trim() || isLoading) return;
     if (showBookingAssistant) setShowBookingAssistant(false);
 
-    const userMessage = { id: Date.now(), role: 'user', content: input };
+    const userMessage = { id: Date.now(), role: 'user', content: text };
     setMessages(prev => [...prev, userMessage]);
-    
-    await saveMessageToHistory(input, 'user');
-    
+
+    await saveMessageToHistory(text, 'user');
+
     const newMessageCount = userMessageCount + 1;
     setUserMessageCount(newMessageCount);
-    
+
     if (user && newMessageCount >= 2) {
       await checkChatQuestCompletion(user, newMessageCount);
     }
-    
+
     const recentMessages = messages.slice(-10);
     const conversationContext = [...recentMessages, userMessage]
       .map(msg => `${msg.role}: ${typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)}`)
       .join('\n');
-    
+
     setInput("");
     setIsLoading(true);
 
@@ -754,8 +849,9 @@ ${conversationContext}
           
           console.log(`🤖 Agent Nova: Using ${mappedPropertiesForAI.length} properties (DB + MCP)`);
           console.log(`📊 Sources: ${[...new Set(mappedPropertiesForAI.map(p => p.source))].join(', ')}`);
-          
-          await continueWithAI(mappedPropertiesForAI, conversationContext, userMessage);
+
+          const enriched = await enrichWithBookedRanges(mappedPropertiesForAI);
+          await continueWithAI(enriched, conversationContext, userMessage);
         }, 100); // Small delay to allow searchedProperties to potentially update
         
       } catch (error) {
@@ -777,8 +873,9 @@ ${conversationContext}
           images: p.images || [],
           source: 'database'
         }));
-        
-        await continueWithAI(propertiesForAI, conversationContext, userMessage);
+
+        const enriched = await enrichWithBookedRanges(propertiesForAI);
+        await continueWithAI(enriched, conversationContext, userMessage);
       }
 
     } catch (error) {
@@ -971,6 +1068,48 @@ ${conversationContext}
                             ));
                           }}
                         />
+                      </div>
+                    ) : message.type === 'booking_cta' ? (
+                      <div className="space-y-3">
+                        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+                          <ReactMarkdown>{message.content || ''}</ReactMarkdown>
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {message.cta === 'pay' && message.booking?.id && (
+                              <Button
+                                onClick={() => navigate(
+                                  `${createPageUrl('PaymentPage')}?${new URLSearchParams({
+                                    booking_id: message.booking.id,
+                                    total: String(message.booking.total_price || 0),
+                                    property_title: message.booking.property_title || '',
+                                    guest_email: message.booking.guest_email || '',
+                                  }).toString()}`
+                                )}
+                                size="sm"
+                                className="rounded-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white"
+                              >
+                                Pay Now
+                              </Button>
+                            )}
+                            {message.booking?.property_id && (
+                              <Button
+                                onClick={() => navigate(createPageUrl(`Property?id=${message.booking.property_id}`))}
+                                size="sm"
+                                variant="outline"
+                                className="rounded-xl"
+                              >
+                                View Property
+                              </Button>
+                            )}
+                            <Button
+                              onClick={() => navigate(createPageUrl('Bookings'))}
+                              size="sm"
+                              variant="ghost"
+                              className="rounded-xl text-slate-600"
+                            >
+                              All Bookings
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     ) : message.type === 'booking_confirm' ? (
                       <div className="space-y-3">
