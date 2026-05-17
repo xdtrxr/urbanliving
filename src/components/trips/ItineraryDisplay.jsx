@@ -11,7 +11,7 @@ import {
     Star, 
     Clock, 
     MapPin,
-    DollarSign,
+    Wallet,
     GripVertical // Corrected from GrabVertical
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -97,7 +97,7 @@ export default function ItineraryDisplay({ itineraryItems }) {
                                                                 </div>
                                                                 {item.cost_estimate && (
                                                                     <div className="flex items-center gap-1.5">
-                                                                        <DollarSign className="w-4 h-4" />
+                                                                        <Wallet className="w-4 h-4" />
                                                                         <span>{item.cost_estimate}</span>
                                                                     </div>
                                                                 )}

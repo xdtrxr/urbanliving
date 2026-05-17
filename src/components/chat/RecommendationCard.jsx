@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, DollarSign, Sparkles, ImageIcon, ExternalLink, Calendar } from 'lucide-react';
+import { MapPin, Wallet, Sparkles, ImageIcon, ExternalLink, Calendar } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
@@ -56,8 +56,8 @@ export default function RecommendationCard({ recommendation, onCheckAvailability
           <div className="flex items-center justify-between text-sm">
             <Badge variant="secondary" className="font-medium">{recommendation.property_type}</Badge>
             <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-              <DollarSign className="w-4 h-4 text-green-600" />
-              <span>{recommendation.price_per_night}</span>
+              <Wallet className="w-4 h-4 text-green-600" />
+              <span>₦{Number(recommendation.price_per_night || 0).toLocaleString()}</span>
             </div>
           </div>
           

@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Briefcase, Heart, Search, Settings, ArrowRight, Clock, DollarSign, Gift, RefreshCw } from 'lucide-react';
+import { Briefcase, Heart, Search, Settings, ArrowRight, Clock, Wallet, Gift, RefreshCw } from 'lucide-react';
 import LoyaltyCard from '../components/dashboard/LoyaltyCard';
 import NFTCollection from '../components/dashboard/NFTCollection';
 import ReferralCodePrompt from '../components/dashboard/ReferralCodePrompt';
@@ -278,7 +278,7 @@ export default function DashboardPage() {
             title="Total Spend"
             value={dashStats ? `₦${dashStats.revenue.paidNGN.toLocaleString()}` : '—'}
             description="Paid bookings"
-            icon={<DollarSign className="h-4 w-4 text-slate-500 group-hover:text-green-500 transition-colors duration-300" />}
+            icon={<Wallet className="h-4 w-4 text-slate-500 group-hover:text-green-500 transition-colors duration-300" />}
           />
           <StatCard
             title="Referral Earnings"

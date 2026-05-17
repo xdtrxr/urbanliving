@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Search, Calendar, User, Heart, Home, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, DollarSign, CreditCard } from "lucide-react";
+import { Search, Calendar, User, Heart, Home, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -66,7 +66,7 @@ const navigationItems = [
   {
     title: "Withdrawals",
     url: createPageUrl("Withdrawals"),
-    icon: DollarSign,
+    icon: Wallet,
     description: "Withdraw earnings"
   },
   {

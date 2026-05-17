@@ -25,7 +25,7 @@ import {
   List,
   Plus, // NEW
   Settings, // NEW
-  DollarSign, // NEW
+  Wallet, // NEW (renamed from DollarSign — app is NGN-only)
   FileText, // Added for basic info section
   XCircle, // Added for clear edit button
   Briefcase,
@@ -816,7 +816,7 @@ export default function AdminPage() {
               <div className="rounded-2xl border border-slate-200 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm text-slate-600">Revenue (Paid)</p>
-                  <DollarSign className="w-4 h-4 text-green-500" />
+                  <Wallet className="w-4 h-4 text-green-500" />
                 </div>
                 <p className="text-2xl font-bold text-slate-900">
                   {platformStats ? `₦${platformStats.revenue.paidNGN.toLocaleString()}` : '—'}
@@ -1221,7 +1221,7 @@ export default function AdminPage() {
                   {/* Pricing */}
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg text-slate-900 flex items-center gap-2">
-                      <DollarSign className="w-5 h-5 text-green-600" />
+                      <Wallet className="w-5 h-5 text-green-600" />
                       Pricing
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

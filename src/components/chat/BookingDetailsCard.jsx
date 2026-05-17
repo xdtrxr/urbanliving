@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, Users, DollarSign, ExternalLink } from "lucide-react";
+import { Calendar, MapPin, Users, Wallet, ExternalLink } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -68,10 +68,10 @@ export default function BookingDetailsCard({ booking, property }) {
             </div>
           </div>
           <div className="flex items-start gap-2">
-            <DollarSign className="w-4 h-4 text-slate-500 mt-0.5" />
+            <Wallet className="w-4 h-4 text-slate-500 mt-0.5" />
             <div>
               <p className="text-slate-500 text-xs">Total</p>
-              <p className="font-semibold text-slate-900">${booking.total_price}</p>
+              <p className="font-semibold text-slate-900">₦{Number(booking.total_price || 0).toLocaleString()}</p>
             </div>
           </div>
         </div>

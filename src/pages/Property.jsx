@@ -20,12 +20,13 @@ const amenityIcons = {
   kitchen: Utensils,
 };
 
+// App is NGN-only — every entry resolves to ₦ so guests never see $/€/£.
 const currencySymbols = {
   NGN: '₦',
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  CAD: 'C$'
+  USD: '₦',
+  EUR: '₦',
+  GBP: '₦',
+  CAD: '₦'
 };
 
 export default function PropertyPage() {

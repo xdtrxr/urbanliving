@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, Gift, CheckCircle, Clock, DollarSign, TrendingUp, Users, Target, Loader2 } from "lucide-react";
+import { Copy, Gift, CheckCircle, Clock, Wallet, TrendingUp, Users, Target, Loader2 } from "lucide-react";
 
 export default function ReferralCard({ user, referrals, referralStats, isLoadingStats }) {
     const [copied, setCopied] = useState(false);
@@ -73,7 +73,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                         <div className="bg-gradient-to-br from-amber-50 to-orange-100 rounded-xl p-4 border-2 border-amber-200">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
-                                    <DollarSign className="w-5 h-5 text-amber-600" />
+                                    <Wallet className="w-5 h-5 text-amber-600" />
                                     <span className="text-sm text-amber-900 font-semibold">Total Revenue Generated</span>
                                 </div>
                             </div>

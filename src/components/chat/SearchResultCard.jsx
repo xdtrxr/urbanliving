@@ -7,12 +7,13 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { User } from "@/entities/User";
 
+// App is NGN-only — every entry resolves to ₦ so guests never see $/€/£.
 const currencySymbols = {
-    USD: '$',
-    EUR: '€',
-    GBP: '£',
+    USD: '₦',
+    EUR: '₦',
+    GBP: '₦',
     NGN: '₦',
-    CAD: 'C$'
+    CAD: '₦'
 };
 
 export default function SearchResultCard({ property, user: initialUser }) {
@@ -21,7 +22,7 @@ export default function SearchResultCard({ property, user: initialUser }) {
   const [isUpdatingWishlist, setIsUpdatingWishlist] = useState(false);
 
   const mainImage = property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400';
-  const currencySymbol = currencySymbols[property.currency] || '$';
+  const currencySymbol = currencySymbols[property.currency] || '₦';
 
   // Update wishlist status when user prop changes
   useEffect(() => {
