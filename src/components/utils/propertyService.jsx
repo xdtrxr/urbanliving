@@ -274,14 +274,20 @@ class PropertyService {
         filter.max_guests = { $gte: parseInt(params.guests) };
       }
 
-      // Bedrooms / property type from the bedrooms picker
+      // Bedrooms / property type from the bedrooms picker.
+      // Exact match for 1, 2, 3 — picking "One Bedroom" should NOT return
+      // 4-bedroom apartments. Picking "Four Bedroom" stays $gte 4 to match the
+      // "4+ Bedrooms" label used by the chat booking assistant.
       if (params.bedrooms && params.bedrooms !== 'any') {
         if (params.bedrooms === 'studio') {
           filter.property_type = 'studio';
         } else if (params.bedrooms === 'loft') {
           filter.property_type = 'loft';
         } else {
-          filter.bedrooms = { $gte: parseInt(params.bedrooms) };
+          const n = parseInt(params.bedrooms);
+          if (Number.isFinite(n)) {
+            filter.bedrooms = n >= 4 ? { $gte: 4 } : n;
+          }
         }
       }
 
