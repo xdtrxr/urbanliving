@@ -49,62 +49,71 @@ async function awardGuestBookingPoints(sdk: any, guestEmail: string, bookingId: 
 // Sends the guest the property address, host phone, and arrival instructions
 // immediately after a payment confirms. Mirrors the same helper in
 // paystackWebhook — keep in lockstep when changing.
+// Returns { sent, needs_admin } so the caller can decide whether to invoke
+// requestHostDetails when host info is missing. Prefers per-booking overrides
+// (filled by admin via Telegram for a previous incomplete-property booking)
+// over Property defaults. Mirrored in paystackWebhook — keep in lockstep.
 async function sendArrivalEmail(opts: {
     sdk: any;
-    bookingId: string;
-    guestEmail: string;
-    guestName: string;
-    propertyId: string;
-    checkIn: string;
-    checkOut: string;
-    guests: number;
-}) {
+    booking: any;
+}): Promise<{ sent: boolean; needs_admin: boolean }> {
+    const { sdk, booking } = opts;
     try {
-        const property = await opts.sdk.asServiceRole.entities.Property.get(opts.propertyId);
+        const property = await sdk.asServiceRole.entities.Property.get(booking.property_id);
         if (!property) {
-            console.warn(`sendArrivalEmail: property ${opts.propertyId} not found`);
-            return;
+            console.warn(`sendArrivalEmail: property ${booking.property_id} not found`);
+            return { sent: false, needs_admin: false };
         }
+
+        const hostPhone = booking.host_phone_override || property.host_phone || '';
+        const hostName = booking.host_name_override || property.host_name || '';
+        const arrivalInstructions = booking.arrival_instructions_override || property.arrival_instructions || '';
+
+        // Gate: if either critical field is missing AND we don't have an
+        // override yet, escalate to admin via Telegram instead of sending an
+        // email with "not provided" in it.
+        if (!hostPhone || !arrivalInstructions) {
+            console.log(`sendArrivalEmail: missing host details for booking ${booking.id} (phone=${!!hostPhone}, instructions=${!!arrivalInstructions}) — needs admin input`);
+            return { sent: false, needs_admin: true };
+        }
+
         const loc = property.location || {};
         const fullAddress = [loc.address, loc.city, loc.country].filter(Boolean).join(', ');
         const mapsLink = loc.coordinates?.lat && loc.coordinates?.lng
             ? `https://www.google.com/maps?q=${loc.coordinates.lat},${loc.coordinates.lng}`
             : (fullAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}` : null);
 
-        const hostLine = property.host_phone
-            ? `📞 Call your host on arrival: ${property.host_name || 'Host'} — ${property.host_phone}`
-            : `📞 Host contact: not provided — message us via support if you need help.`;
-
-        const arrivalBlock = property.arrival_instructions
-            ? `\n\nArrival instructions from the host:\n${property.arrival_instructions}`
-            : '';
-
         const mapsBlock = mapsLink ? `\nMap: ${mapsLink}` : '';
 
-        const body = `Hi ${opts.guestName || 'there'},
+        const body = `Hi ${booking.guest_name || 'there'},
 
 Payment confirmed — your booking at "${property.title}" is locked in. 🎉
 
 📍 Address: ${fullAddress || 'See app for details'}${mapsBlock}
-🗓 Check-in: ${opts.checkIn}
-🗓 Check-out: ${opts.checkOut}
-👥 Guests: ${opts.guests}
+🗓 Check-in: ${booking.check_in}
+🗓 Check-out: ${booking.check_out}
+👥 Guests: ${Number(booking.guests) || 1}
 
-${hostLine}${arrivalBlock}
+📞 Call your host on arrival: ${hostName || 'Host'} — ${hostPhone}
+
+Arrival instructions from the host:
+${arrivalInstructions}
 
 Have a smooth trip — see you soon.
 
 — Urban Stays`;
 
-        await opts.sdk.integrations.Core.SendEmail({
-            to: opts.guestEmail,
+        await sdk.integrations.Core.SendEmail({
+            to: booking.guest_email,
             subject: `You're checked in: arrival details for ${property.title}`,
             body,
             from_name: 'Urban Stays',
         });
-        console.log(`✅ Arrival email sent to ${opts.guestEmail} for booking ${opts.bookingId}`);
+        console.log(`✅ Arrival email sent to ${booking.guest_email} for booking ${booking.id}`);
+        return { sent: true, needs_admin: false };
     } catch (err) {
         console.error('sendArrivalEmail failed (non-fatal):', err);
+        return { sent: false, needs_admin: false };
     }
 }
 
@@ -258,16 +267,23 @@ Deno.serve(async (req) => {
             reference,
         });
 
-        await sendArrivalEmail({
-            sdk: base44,
-            bookingId: booking.id,
-            guestEmail: booking.guest_email,
-            guestName: booking.guest_name,
-            propertyId: booking.property_id,
-            checkIn: booking.check_in,
-            checkOut: booking.check_out,
-            guests: Number(booking.guests) || 1,
-        });
+        // Re-read so we see any host_*_override that may have been filled
+        // before payment confirmed (rare but possible if admin pre-filled).
+        const bookingForEmail = await base44.asServiceRole.entities.Booking.get(booking.id);
+        const emailResult = await sendArrivalEmail({ sdk: base44, booking: bookingForEmail });
+        if (!emailResult.sent && emailResult.needs_admin) {
+            try {
+                await base44.functions.invoke('requestHostDetails', { booking_id: booking.id });
+            } catch (reqErr) {
+                console.warn('requestHostDetails invoke failed (non-fatal):', reqErr);
+            }
+        } else if (emailResult.sent) {
+            try {
+                await base44.asServiceRole.entities.Booking.update(booking.id, {
+                    host_details_status: 'complete',
+                });
+            } catch { /* noop */ }
+        }
 
         await awardGuestBookingPoints(base44, booking.guest_email, booking.id);
 

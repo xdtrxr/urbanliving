@@ -29,18 +29,29 @@ Deno.serve(async (req) => {
         console.log('Telegram update received');
 
         // Branch 1: admin replied to one of our force_reply prompts.
-        // We use [#SM:<id>] embedded in the prompt to know which support
-        // message they're editing/replacing.
+        // We embed a [#TAG:<id>] token in the prompt to know what we're being
+        // answered about.
         if (update.message && update.message.reply_to_message && update.message.text) {
             const prompt = update.message.reply_to_message.text || '';
-            const m = prompt.match(/\[#SM:([a-zA-Z0-9_-]+)\]/);
-            if (m) {
+
+            const supMatch = prompt.match(/\[#SM:([a-zA-Z0-9_-]+)\]/);
+            if (supMatch) {
                 return await handleAdminTextReply({
                     base44,
-                    supportMessageId: m[1],
+                    supportMessageId: supMatch[1],
                     adminText: update.message.text,
                     chatId: update.message.chat.id,
                     replyToMessageId: update.message.message_id,
+                });
+            }
+
+            const hostMatch = prompt.match(/\[#HOST:([a-zA-Z0-9_-]+)\]/);
+            if (hostMatch) {
+                return await handleAdminHostReply({
+                    base44,
+                    bookingId: hostMatch[1],
+                    adminText: update.message.text,
+                    chatId: update.message.chat.id,
                 });
             }
         }
@@ -59,16 +70,30 @@ Deno.serve(async (req) => {
         console.log('Callback data:', callbackData);
 
         // Branch 2: support draft actions (sup_send / sup_edit / sup_replace)
-        const supMatch = callbackData.match(/^sup_(send|edit|replace)_(.+)$/);
-        if (supMatch) {
+        const supCbMatch = callbackData.match(/^sup_(send|edit|replace)_(.+)$/);
+        if (supCbMatch) {
             return await handleSupportCallback({
                 base44,
-                action: supMatch[1] as 'send' | 'edit' | 'replace',
-                supportMessageId: supMatch[2],
+                action: supCbMatch[1] as 'send' | 'edit' | 'replace',
+                supportMessageId: supCbMatch[2],
                 callbackQueryId: callbackQuery.id,
                 chatId,
                 originalMessageText: callbackQuery.message.text || '',
                 originalMessageId: messageId,
+            });
+        }
+
+        // Branch 2b: "set as default" choice after host details were filled
+        const hostDefaultMatch = callbackData.match(/^host_default_(yes|no)_(.+)$/);
+        if (hostDefaultMatch) {
+            return await handleHostDefaultCallback({
+                base44,
+                choice: hostDefaultMatch[1] as 'yes' | 'no',
+                bookingId: hostDefaultMatch[2],
+                callbackQueryId: callbackQuery.id,
+                chatId,
+                originalMessageId: messageId,
+                originalMessageText: callbackQuery.message.text || '',
             });
         }
 
@@ -380,5 +405,190 @@ async function editTelegramMessage(token: string | undefined, chatId: number, me
         });
     } catch (e) {
         console.error('editTelegramMessage failed:', e);
+    }
+}
+
+// === Host-details fallback handling ===
+// requestHostDetails sent admin a force_reply prompt with [#HOST:<bookingId>].
+// Admin replies with two-line text (line 1 = phone, line 2+ = arrival
+// instructions). We parse, write per-booking overrides, send the arrival
+// email, and then ask "Save as default for the property?" with inline buttons.
+
+interface HostReplyParams {
+    base44: any;
+    bookingId: string;
+    adminText: string;
+    chatId: number;
+}
+
+async function handleAdminHostReply(p: HostReplyParams): Promise<Response> {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const jsonResp = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+    });
+
+    const booking = await p.base44.asServiceRole.entities.Booking.get(p.bookingId);
+    if (!booking) {
+        await sendTelegramMessage(token, p.chatId, '⚠️ Could not find that booking.', {});
+        return jsonResp({ ok: true });
+    }
+    if (booking.host_details_status === 'filled_by_admin' || booking.host_details_status === 'default_saved') {
+        await sendTelegramMessage(token, p.chatId, '⚠️ This booking already has host details on file.', {});
+        return jsonResp({ ok: true });
+    }
+
+    const lines = (p.adminText || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return jsonResp({ ok: true });
+
+    const phoneLine = lines[0];
+    const instructionsLines = lines.slice(1);
+    if (instructionsLines.length === 0) {
+        await sendTelegramMessage(token, p.chatId,
+            '⚠️ Please reply with TWO sections: phone on line 1, then arrival instructions on the next lines.', {});
+        return jsonResp({ ok: true });
+    }
+    const arrivalInstructions = instructionsLines.join('\n');
+
+    // Persist as per-booking overrides + flag for follow-up step
+    await p.base44.asServiceRole.entities.Booking.update(p.bookingId, {
+        host_phone_override: phoneLine,
+        arrival_instructions_override: arrivalInstructions,
+        host_details_status: 'filled_by_admin',
+    });
+
+    // Send the arrival email using the new overrides
+    let emailOk = false;
+    try {
+        const fresh = await p.base44.asServiceRole.entities.Booking.get(p.bookingId);
+        const result = await sendArrivalEmailFromBooking(p.base44, fresh);
+        emailOk = result.sent;
+    } catch (err) {
+        console.error('sendArrivalEmailFromBooking failed:', err);
+    }
+
+    // Ask whether to save as Property default
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: p.chatId,
+            text: emailOk
+                ? `✅ Arrival email sent to ${booking.guest_email}.\n\nSave these as the property's default so future bookings don't need to ask?`
+                : `⚠️ Saved host details, but email send failed. Save these as the property's default?`,
+            reply_markup: {
+                inline_keyboard: [[
+                    { text: '✅ Save as default', callback_data: `host_default_yes_${p.bookingId}` },
+                    { text: '🚫 Just this booking', callback_data: `host_default_no_${p.bookingId}` },
+                ]],
+            },
+        }),
+    });
+
+    return jsonResp({ ok: true });
+}
+
+interface HostDefaultParams {
+    base44: any;
+    choice: 'yes' | 'no';
+    bookingId: string;
+    callbackQueryId: string;
+    chatId: number;
+    originalMessageId: number;
+    originalMessageText: string;
+}
+
+async function handleHostDefaultCallback(p: HostDefaultParams): Promise<Response> {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const jsonResp = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+    });
+
+    const booking = await p.base44.asServiceRole.entities.Booking.get(p.bookingId);
+    if (!booking) {
+        await answerCallbackQuery(p.callbackQueryId, 'Booking not found.');
+        return jsonResp({ ok: true });
+    }
+    if (booking.host_details_status === 'default_saved') {
+        await answerCallbackQuery(p.callbackQueryId, 'Already saved.');
+        return jsonResp({ ok: true });
+    }
+
+    if (p.choice === 'yes') {
+        try {
+            const propertyUpdate: Record<string, unknown> = {};
+            if (booking.host_phone_override) propertyUpdate.host_phone = booking.host_phone_override;
+            if (booking.host_name_override) propertyUpdate.host_name = booking.host_name_override;
+            if (booking.arrival_instructions_override) propertyUpdate.arrival_instructions = booking.arrival_instructions_override;
+            if (Object.keys(propertyUpdate).length > 0) {
+                await p.base44.asServiceRole.entities.Property.update(booking.property_id, propertyUpdate);
+            }
+            await p.base44.asServiceRole.entities.Booking.update(p.bookingId, {
+                host_details_status: 'default_saved',
+            });
+            await editTelegramMessage(token, p.chatId, p.originalMessageId,
+                `${p.originalMessageText}\n\n✅ Saved as the property's default. Future bookings will use these automatically.`);
+            await answerCallbackQuery(p.callbackQueryId, 'Saved as default.');
+        } catch (err) {
+            console.error('Failed to save Property default:', err);
+            await answerCallbackQuery(p.callbackQueryId, 'Save failed.');
+        }
+    } else {
+        await editTelegramMessage(token, p.chatId, p.originalMessageId,
+            `${p.originalMessageText}\n\n🚫 Kept for this booking only.`);
+        await answerCallbackQuery(p.callbackQueryId, 'Per-booking only.');
+    }
+
+    return jsonResp({ ok: true });
+}
+
+// Local copy of the email-sender so telegramWebhook is self-contained.
+// Mirrors the helper in verifyPaystackPayment / paystackWebhook.
+async function sendArrivalEmailFromBooking(sdk: any, booking: any): Promise<{ sent: boolean }> {
+    try {
+        const property = await sdk.asServiceRole.entities.Property.get(booking.property_id);
+        if (!property) return { sent: false };
+
+        const hostPhone = booking.host_phone_override || property.host_phone || '';
+        const hostName = booking.host_name_override || property.host_name || '';
+        const arrivalInstructions = booking.arrival_instructions_override || property.arrival_instructions || '';
+        if (!hostPhone || !arrivalInstructions) return { sent: false };
+
+        const loc = property.location || {};
+        const fullAddress = [loc.address, loc.city, loc.country].filter(Boolean).join(', ');
+        const mapsLink = loc.coordinates?.lat && loc.coordinates?.lng
+            ? `https://www.google.com/maps?q=${loc.coordinates.lat},${loc.coordinates.lng}`
+            : (fullAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}` : null);
+        const mapsBlock = mapsLink ? `\nMap: ${mapsLink}` : '';
+
+        const body = `Hi ${booking.guest_name || 'there'},
+
+Payment confirmed — your booking at "${property.title}" is locked in. 🎉
+
+📍 Address: ${fullAddress || 'See app for details'}${mapsBlock}
+🗓 Check-in: ${booking.check_in}
+🗓 Check-out: ${booking.check_out}
+👥 Guests: ${Number(booking.guests) || 1}
+
+📞 Call your host on arrival: ${hostName || 'Host'} — ${hostPhone}
+
+Arrival instructions from the host:
+${arrivalInstructions}
+
+Have a smooth trip — see you soon.
+
+— Urban Stays`;
+
+        await sdk.integrations.Core.SendEmail({
+            to: booking.guest_email,
+            subject: `You're checked in: arrival details for ${property.title}`,
+            body,
+            from_name: 'Urban Stays',
+        });
+        return { sent: true };
+    } catch (err) {
+        console.error('sendArrivalEmailFromBooking failed:', err);
+        return { sent: false };
     }
 }
