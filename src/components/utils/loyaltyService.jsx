@@ -1,10 +1,10 @@
 import { base44 } from '@/api/base44Client';
 
 const TIER_THRESHOLDS = [
-  { name: 'Diamond', min: 10000 },
-  { name: 'Platinum', min: 5000 },
-  { name: 'Gold', min: 2500 },
-  { name: 'Silver', min: 1000 },
+  { name: 'Diamond', min: 50000 },
+  { name: 'Platinum', min: 25000 },
+  { name: 'Gold', min: 12500 },
+  { name: 'Silver', min: 5000 },
   { name: 'Bronze', min: 0 },
 ];
 

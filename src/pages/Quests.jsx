@@ -110,10 +110,10 @@ const QUEST_REGISTRY = {
 
 const LOYALTY_TIERS = {
   Bronze: { threshold: 0, color: 'text-orange-600' },
-  Silver: { threshold: 1000, color: 'text-gray-600' },
-  Gold: { threshold: 2500, color: 'text-yellow-600' },
-  Platinum: { threshold: 5000, color: 'text-purple-600' },
-  Diamond: { threshold: 10000, color: 'text-blue-600' }
+  Silver: { threshold: 5000, color: 'text-gray-600' },
+  Gold: { threshold: 12500, color: 'text-yellow-600' },
+  Platinum: { threshold: 25000, color: 'text-purple-600' },
+  Diamond: { threshold: 50000, color: 'text-blue-600' }
 };
 
 /**

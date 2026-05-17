@@ -5,32 +5,32 @@ import { Progress } from "@/components/ui/progress";
 import { Trophy, Star, Crown, Gem, Award } from "lucide-react";
 
 const tierConfig = {
-  Bronze: { 
+  Bronze: {
     color: "bg-orange-100 text-orange-800 border-orange-200",
     icon: Award,
     nextTier: "Silver",
-    pointsRequired: 1000,
+    pointsRequired: 5000,
     gradient: "from-orange-400 to-orange-600"
   },
-  Silver: { 
+  Silver: {
     color: "bg-gray-100 text-gray-800 border-gray-200",
     icon: Star,
     nextTier: "Gold",
-    pointsRequired: 2500,
+    pointsRequired: 12500,
     gradient: "from-gray-400 to-gray-600"
   },
-  Gold: { 
+  Gold: {
     color: "bg-yellow-100 text-yellow-800 border-yellow-200",
     icon: Trophy,
     nextTier: "Platinum",
-    pointsRequired: 5000,
+    pointsRequired: 25000,
     gradient: "from-yellow-400 to-yellow-600"
   },
-  Platinum: { 
+  Platinum: {
     color: "bg-purple-100 text-purple-800 border-purple-200",
     icon: Crown,
     nextTier: "Diamond",
-    pointsRequired: 10000,
+    pointsRequired: 50000,
     gradient: "from-purple-400 to-purple-600"
   },
   Diamond: { 
@@ -53,9 +53,9 @@ export default function LoyaltyCard({ user }) {
     
     const currentTierPoints = {
       Bronze: 0,
-      Silver: 1000,
-      Gold: 2500,
-      Platinum: 5000
+      Silver: 5000,
+      Gold: 12500,
+      Platinum: 25000
     }[currentTier] || 0;
     
     const progressPoints = points - currentTierPoints;

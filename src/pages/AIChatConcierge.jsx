@@ -322,10 +322,10 @@ export default function AIChatConciergePage() {
   };
 
   const calculateLoyaltyTier = (points) => {
-    if (points >= 10000) return 'Diamond';
-    if (points >= 5000) return 'Platinum';
-    if (points >= 2500) return 'Gold';
-    if (points >= 1000) return 'Silver';
+    if (points >= 50000) return 'Diamond';
+    if (points >= 25000) return 'Platinum';
+    if (points >= 12500) return 'Gold';
+    if (points >= 5000) return 'Silver';
     return 'Bronze';
   };
 
