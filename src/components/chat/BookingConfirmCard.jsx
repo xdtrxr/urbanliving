@@ -1,17 +1,64 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, MapPin, Users, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { Calendar, MapPin, Users, CheckCircle2, Loader2, AlertCircle, Shield } from 'lucide-react';
+import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import LeadOtpGate from './LeadOtpGate';
 
+const SERVICE_FEE_RATE = 0.025;
+
+// Computes canonical pricing from the property + dates so we don't trust LLM
+// math. Falls back to whatever booking values Nova sent if property isn't
+// available yet. Mirrors the breakdown shown on the Checkout page.
+function computeBreakdown(booking, property) {
+  const nightlyFromProp = Number(property?.price_per_night);
+  const nightly = Number.isFinite(nightlyFromProp) && nightlyFromProp > 0
+    ? nightlyFromProp
+    : Number(booking?.price_per_night) || 0;
+  const cautionFromProp = Number(property?.caution_fee);
+  const caution = Number.isFinite(cautionFromProp)
+    ? cautionFromProp
+    : Number(booking?.caution_fee) || 0;
+  let nights = 0;
+  try {
+    const ci = parseISO(booking.check_in);
+    const co = parseISO(booking.check_out);
+    nights = Math.max(differenceInCalendarDays(co, ci), 0);
+  } catch { /* noop */ }
+  if (!nights && booking?.nights) nights = Number(booking.nights) || 0;
+  const subtotal = nightly * nights;
+  const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
+  const total = subtotal + serviceFee + caution;
+  return { nightly, nights, subtotal, serviceFee, caution, total };
+}
+
 export default function BookingConfirmCard({ booking, lead, isAuthenticated, onAuthenticated, onSubmitted }) {
   const [status, setStatus] = useState('idle'); // idle | gate | submitting | submitted | error
   const [error, setError] = useState(null);
   const [bookingId, setBookingId] = useState(null);
+  const [property, setProperty] = useState(null);
+
+  // Pull canonical price_per_night + caution_fee from the property record so
+  // the breakdown reflects what the user will actually pay — never the LLM's
+  // arithmetic.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!booking?.property_id) return;
+      try {
+        const p = await base44.entities.Property.get(booking.property_id);
+        if (!cancelled) setProperty(p);
+      } catch (err) {
+        console.warn('BookingConfirmCard: property fetch failed (fail-open):', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [booking?.property_id]);
+
+  const breakdown = useMemo(() => computeBreakdown(booking, property), [booking, property]);
 
   const safeDate = (s) => {
     try { return format(parseISO(s), 'EEE, MMM d, yyyy'); }
@@ -29,7 +76,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
         check_in: booking.check_in,
         check_out: booking.check_out,
         guests: booking.guests,
-        total_price: booking.total_price,
+        total_price: breakdown.total,
         special_requests: booking.special_requests || '',
       });
       const data = result?.data;
@@ -127,15 +174,39 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
             <p className="text-slate-500 text-xs mb-1">Nights</p>
-            <p className="font-semibold text-slate-900">{booking.nights || ''}</p>
+            <p className="font-semibold text-slate-900">{breakdown.nights || ''}</p>
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-3 border-t border-slate-200 mb-4">
-          <span className="text-slate-600">Total</span>
-          <span className="text-2xl font-bold text-slate-900">
-            ₦{(booking.total_price || 0).toLocaleString()}
-          </span>
+        <div className="bg-slate-50 rounded-xl p-4 mb-4 space-y-2 text-sm">
+          <div className="flex justify-between text-slate-700">
+            <span>₦{breakdown.nightly.toLocaleString()} × {breakdown.nights} {breakdown.nights === 1 ? 'night' : 'nights'}</span>
+            <span className="font-medium">₦{breakdown.subtotal.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between text-slate-700">
+            <span>Service fee (2.5%)</span>
+            <span className="font-medium">₦{breakdown.serviceFee.toLocaleString()}</span>
+          </div>
+          {breakdown.caution > 0 && (
+            <div className="flex justify-between items-center py-2 px-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <span className="text-amber-900 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5" />
+                Refundable caution fee
+              </span>
+              <span className="font-semibold text-amber-900">₦{breakdown.caution.toLocaleString()}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+            <span className="text-slate-600 font-medium">Total</span>
+            <span className="text-2xl font-bold text-slate-900">
+              ₦{breakdown.total.toLocaleString()}
+            </span>
+          </div>
+          {breakdown.caution > 0 && (
+            <p className="text-xs text-amber-700">
+              Caution fee of ₦{breakdown.caution.toLocaleString()} is fully refunded after checkout inspection.
+            </p>
+          )}
         </div>
 
         {booking.special_requests && (

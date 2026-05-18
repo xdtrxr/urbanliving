@@ -394,12 +394,18 @@ export default function AIChatConciergePage() {
 
   const continueWithAI = async (availableProperties, conversationContext, userMessage) => {
     try {
+      // Limit to the 5 most recent bookings — Nova doesn't need full history
+      // for context, and pulling 50+ rows + their properties was a measurable
+      // slowdown. propertyMap is only used by the booking_details renderer.
       let userBookings = [];
       let propertyMap = {};
       if (user) {
         try {
-          userBookings = await base44.entities.Booking.filter({ guest_email: user.email });
-          
+          userBookings = await base44.entities.Booking.filter(
+            { guest_email: user.email },
+            '-created_date',
+            5,
+          );
           if (userBookings.length > 0) {
             const propertyIds = [...new Set(userBookings.map(b => b.property_id))];
             const properties = await base44.entities.Property.filter({ id: { $in: propertyIds } });
@@ -672,11 +678,13 @@ After emitting confirm_booking, the user will see a Submit button that sends the
     "guests": 2,
     "nights": 3,
     "price_per_night": 50000,
-    "total_price": 150000,
+    "caution_fee": 25000,
     "special_requests": ""
   },
   "response": "One-sentence confirmation prompt."
 }
+
+NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from the property's authoritative numbers — so you don't need to send total_price; just send the per-property values above. Use caution_fee from the property in AVAILABLE PROPERTIES (default 0 if absent).
 
 **show_bookings** — when user asks about their existing bookings:
 { "action": "show_bookings", "response": "Here are your bookings:" }
@@ -919,62 +927,66 @@ After emitting confirm_booking, the user will see a Submit button that sends the
           limit: 30
         });
         
-        // We need to wait for the state update from usePropertySearch to reflect.
-        // A simple setTimeout is used as a workaround. In a more robust system,
-        // usePropertySearch could expose a promise or a callback to signal completion.
-        setTimeout(async () => {
-          if (searchedProperties.length > 0) {
-            propertiesForAI = searchedProperties;
-          } else {
-            // Fallback to fetching only database properties if search hook yields nothing initially
-            const dbProperties = await base44.entities.Property.list('-rating', 30);
-            propertiesForAI = dbProperties.map(p => ({ ...p, source: 'database' }));
-          }
-
-          const mappedPropertiesForAI = propertiesForAI.map(p => ({
-            id: p.id,
-            title: p.title,
-            location_city: p.location?.city,
-            location_country: p.location?.country,
-            price_per_night: p.price_per_night,
-            currency: p.currency || 'NGN',
-            max_guests: p.max_guests,
-            bedrooms: p.bedrooms,
-            property_type: p.property_type,
-            amenities: p.amenities || [],
-            rating: p.rating,
-            images: p.images || [],
-            source: p.source || 'database' // Ensure source is included
-          }));
-          
-          console.log(`🤖 Agent Nova: Using ${mappedPropertiesForAI.length} properties (DB + MCP)`);
-          console.log(`📊 Sources: ${[...new Set(mappedPropertiesForAI.map(p => p.source))].join(', ')}`);
-
-          const enriched = await enrichWithBookedRanges(mappedPropertiesForAI);
-          await continueWithAI(enriched, conversationContext, userMessage);
-        }, 100); // Small delay to allow searchedProperties to potentially update
-        
-      } catch (error) {
-        console.error('Failed to fetch properties via smart search:', error);
-        // Fallback to database only in case of error
+        // Skipped: the old setTimeout(100) tried to wait for usePropertySearch
+        // state to update, but that race never resolved in practice so we
+        // always fell through to the else branch anyway. Going direct to the
+        // DB list is faster AND avoids the 100ms artificial delay that was
+        // adding to Nova's perceived response time.
         const dbProperties = await base44.entities.Property.list('-rating', 30);
-        propertiesForAI = dbProperties.map(p => ({
+        propertiesForAI = dbProperties.map(p => ({ ...p, source: 'database' }));
+
+        // Slim payload sent to the LLM:
+        // - drop image URLs (Nova doesn't reason from URLs; cards render
+        //   from a property lookup the frontend already has)
+        // - cap amenities to 5 (full list bloats prompt without changing
+        //   reasoning quality much)
+        // - cap to top 12 properties (rating-sorted) to keep the prompt small
+        // Combined this drops the prompt by 5-10k tokens which is where the
+        // bulk of Nova's latency was coming from.
+        const mappedPropertiesForAI = propertiesForAI.slice(0, 12).map(p => ({
+          id: p.id,
+          title: p.title,
+          location_city: p.location?.city,
+          location_country: p.location?.country,
+          location_address: p.location?.address || undefined,
+          price_per_night: p.price_per_night,
+          caution_fee: p.caution_fee || 0,
+          currency: p.currency || 'NGN',
+          max_guests: p.max_guests,
+          bedrooms: p.bedrooms,
+          property_type: p.property_type,
+          amenities: (p.amenities || []).slice(0, 5),
+          rating: p.rating,
+          imageUrl: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null,
+          source: p.source || 'database',
+        }));
+
+        console.log(`🤖 Agent Nova: Using ${mappedPropertiesForAI.length} properties`);
+
+        const enriched = await enrichWithBookedRanges(mappedPropertiesForAI);
+        await continueWithAI(enriched, conversationContext, userMessage);
+
+      } catch (error) {
+        console.error('Failed to fetch properties:', error);
+        // Fallback if even the basic list fails
+        const dbProperties = await base44.entities.Property.list('-rating', 12);
+        const fallback = (dbProperties || []).map(p => ({
           id: p.id,
           title: p.title,
           location_city: p.location?.city,
           location_country: p.location?.country,
           price_per_night: p.price_per_night,
+          caution_fee: p.caution_fee || 0,
           currency: p.currency || 'NGN',
           max_guests: p.max_guests,
           bedrooms: p.bedrooms,
           property_type: p.property_type,
-          amenities: p.amenities || [],
+          amenities: (p.amenities || []).slice(0, 5),
           rating: p.rating,
-          images: p.images || [],
-          source: 'database'
+          imageUrl: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null,
+          source: 'database',
         }));
-
-        const enriched = await enrichWithBookedRanges(propertiesForAI);
+        const enriched = await enrichWithBookedRanges(fallback);
         await continueWithAI(enriched, conversationContext, userMessage);
       }
 
