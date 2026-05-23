@@ -22,11 +22,24 @@ function detectConflict(existing: any[], requestedIn: Date, requestedOut: Date):
     return { hasConflict: false, conflicting: null };
 }
 
+// Resolves the first image URL for a property. Uses .get() not .filter() so
+// non-DB property IDs (e.g. MCP-injected ones from chat) fail fast and obviously
+// rather than silently returning empty. Returns null when the property exists
+// but has no images uploaded — admin Telegram will fall back to text-only.
 async function fetchPropertyImage(base44Client: any, propertyId: string): Promise<string | null> {
     try {
-        const props = await base44Client.asServiceRole.entities.Property.filter({ id: propertyId });
-        const prop = props?.[0];
-        return Array.isArray(prop?.images) && prop.images.length > 0 ? prop.images[0] : null;
+        const prop = await base44Client.asServiceRole.entities.Property.get(propertyId);
+        if (!prop) {
+            console.warn(`fetchPropertyImage: property ${propertyId} not found in DB (maybe MCP-only?)`);
+            return null;
+        }
+        if (!Array.isArray(prop.images) || prop.images.length === 0) {
+            console.warn(`fetchPropertyImage: property ${propertyId} has no images uploaded`);
+            return null;
+        }
+        const url = prop.images[0];
+        console.log(`fetchPropertyImage: using ${url} for property ${propertyId}`);
+        return url;
     } catch (e) {
         console.warn('fetchPropertyImage failed:', (e as Error).message);
         return null;
@@ -100,38 +113,48 @@ async function sendAdminTelegram(opts: {
         ]],
     };
 
-    let endpoint: string;
-    let payload: Record<string, unknown>;
+    // Try sendPhoto first when we have an image URL. If Telegram can't fetch
+    // the photo (signed/private URL, expired token, bad domain, etc.) fall
+    // back to a plain sendMessage so admin still gets the request + buttons
+    // and a link to the image at the bottom. Previously a failed sendPhoto
+    // silently dropped the entire notification.
+    const trySend = async (endpoint: string, payload: Record<string, unknown>) => {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        return res.json();
+    };
+
     if (opts.propertyImageUrl) {
-        endpoint = `https://api.telegram.org/bot${token}/sendPhoto`;
-        payload = {
+        const photoResp = await trySend(`https://api.telegram.org/bot${token}/sendPhoto`, {
             chat_id: chatId,
             photo: opts.propertyImageUrl,
             caption: text,
             parse_mode: 'Markdown',
             reply_markup: replyMarkup,
-        };
-    } else {
-        endpoint = `https://api.telegram.org/bot${token}/sendMessage`;
-        payload = {
-            chat_id: chatId,
-            text,
-            parse_mode: 'Markdown',
-            reply_markup: replyMarkup,
-        };
+        });
+        if (photoResp.ok) {
+            return { sent: true, message_id: String(photoResp.result.message_id) };
+        }
+        console.warn('Telegram sendPhoto failed, falling back to text:', photoResp);
     }
 
-    const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+    const textWithImage = opts.propertyImageUrl
+        ? `${text}\n\n🖼 *Property image:* ${opts.propertyImageUrl}`
+        : text;
+    const msgResp = await trySend(`https://api.telegram.org/bot${token}/sendMessage`, {
+        chat_id: chatId,
+        text: textWithImage,
+        parse_mode: 'Markdown',
+        reply_markup: replyMarkup,
     });
-    const data = await res.json();
-    if (!data.ok) {
-        console.error('Telegram API error:', data);
+    if (!msgResp.ok) {
+        console.error('Telegram sendMessage also failed:', msgResp);
         return { sent: false, message_id: null as string | null };
     }
-    return { sent: true, message_id: String(data.result.message_id) };
+    return { sent: true, message_id: String(msgResp.result.message_id) };
 }
 
 Deno.serve(async (req) => {
