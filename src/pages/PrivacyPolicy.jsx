@@ -44,7 +44,7 @@ export default function PrivacyPolicyPage() {
             <p>In some regions (like the European Economic Area), you have certain rights under applicable data protection laws. These may include the right (i) to request access and obtain a copy of your personal information, (ii) to request rectification or erasure; (iii) to restrict the processing of your personal information; and (iv) if applicable, to data portability.</p>
             
             <h2>7. Contact Us</h2>
-            <p>If you have questions or comments about this policy, you may email us at privacy@luxeliving.example.com</p>
+            <p>If you have questions or comments about this policy, you may email us at <a href="mailto:privacy@urbanstays.io" className="text-amber-700 hover:underline">privacy@urbanstays.io</a>.</p>
           </CardContent>
         </Card>
       </div>
