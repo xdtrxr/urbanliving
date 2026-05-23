@@ -10,6 +10,13 @@ const REFERRAL_RATE = 0.05;
 const REFERRER_LOYALTY_BONUS = 250;
 const GUEST_BOOKING_POINTS = 500;
 
+// Public origin used in outbound email links. Falls back to the prod domain
+// so guest emails always have a working link even if APP_BASE_URL isn't set
+// (e.g. fresh dev environments).
+const APP_BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://urbanstays.io';
+const bookingLink = (bookingId: string) => `${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(bookingId)}#booking-${encodeURIComponent(bookingId)}`;
+const propertyLink = (propertyId: string) => `${APP_BASE_URL}/Property?id=${encodeURIComponent(propertyId)}`;
+
 // Awards the flat 500-point booking bonus to the guest, idempotent on
 // (user_email, transaction_type='booking', booking_id). Mirrors the client-side
 // awardBookingMilestones flow so guests still get credited if they close their
@@ -88,6 +95,10 @@ async function sendArrivalEmail(opts: {
         const body = `Hi ${booking.guest_name || 'there'},
 
 Payment confirmed — your booking at "${property.title}" is locked in. 🎉
+
+🔖 Status: CONFIRMED & PAID
+👉 View your booking: ${bookingLink(booking.id)}
+🏠 Property page: ${propertyLink(booking.property_id)}
 
 📍 Address: ${fullAddress || 'See app for details'}${mapsBlock}
 🗓 Check-in: ${booking.check_in}
