@@ -42,15 +42,52 @@ export default function AIChatConciergePage() {
 
   const { properties: searchedProperties, isLoading: isSearchingProperties, search: searchProperties } = usePropertySearch();
 
-  // Speech-to-text: appends final transcript to whatever's already in the input.
+  // Speech-to-text: appends final transcript to whatever's already in the input,
+  // then auto-fires Send after ~1.5s of silence so the user doesn't have to tap
+  // the button after speaking. Cancelled if the user keeps talking (interim
+  // result), types manually, taps the mic again, or a send is already inflight.
+  const AUTO_SEND_DELAY_MS = 1500;
+  const autoSendTimerRef = useRef(null);
+  const cancelAutoSend = () => {
+    if (autoSendTimerRef.current) {
+      clearTimeout(autoSendTimerRef.current);
+      autoSendTimerRef.current = null;
+    }
+  };
+  const scheduleAutoSend = (text) => {
+    cancelAutoSend();
+    autoSendTimerRef.current = setTimeout(() => {
+      autoSendTimerRef.current = null;
+      // handleSend handles its own input/loading guards
+      handleSend(text);
+    }, AUTO_SEND_DELAY_MS);
+  };
   const { isSupported: speechSupported, isListening, transcript, start: startListening, stop: stopListening } = useSpeechToText({
-    onFinal: (text) => setInput((prev) => (prev ? `${prev} ${text}` : text)),
+    onFinal: (text) => {
+      setInput((prev) => {
+        const merged = prev ? `${prev} ${text}` : text;
+        scheduleAutoSend(merged);
+        return merged;
+      });
+    },
+    onInterim: () => {
+      // User is still speaking — postpone the auto-send.
+      cancelAutoSend();
+    },
     lang: 'en-US',
   });
   const toggleMic = () => {
-    if (isListening) stopListening();
-    else startListening();
+    if (isListening) {
+      stopListening();
+      cancelAutoSend();
+    } else {
+      cancelAutoSend();
+      startListening();
+    }
   };
+
+  // Clean up any pending auto-send timer if the component unmounts.
+  useEffect(() => () => cancelAutoSend(), []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1427,7 +1464,12 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
             <Input
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                // If a voice-triggered auto-send was queued, manual typing
+                // cancels it — user wants to edit before sending.
+                cancelAutoSend();
+                setInput(e.target.value);
+              }}
               onKeyDown={handleKeyPress}
               placeholder={isListening ? 'Listening… speak now' : 'Message Agent Nova...'}
               className="flex-1 py-2.5 px-3.5 rounded-lg border-slate-300 focus:border-slate-500 focus:ring-slate-500/30 resize-none text-sm"
