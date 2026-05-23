@@ -992,14 +992,27 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
 
     } catch (error) {
       console.error("Error communicating with AI:", error);
-      const errorMessage = { 
+      const errorMessage = {
         id: Date.now() + 1,
-        role: 'assistant', 
-        content: "I'm having a little trouble connecting right now. Please try again in a moment! In the meantime, you can browse our available properties or contact our support team for immediate assistance. 😊" 
+        role: 'assistant',
+        content: "I'm having a little trouble connecting right now. Please try again in a moment! In the meantime, you can browse our available properties or contact our support team for immediate assistance. 😊"
       };
       setMessages(prev => [...prev, errorMessage]);
-      await saveMessageToHistory(errorMessage.content, 'assistant');
+      // Wrapped so a failure here can't strand isLoading=true and leave the
+      // Send button permanently disabled (the bug behind "Send button isn't
+      // working" — previous catch had no finally and a saveMessageToHistory
+      // network blip would jam the UI).
+      try {
+        await saveMessageToHistory(errorMessage.content, 'assistant');
+      } catch (saveErr) {
+        console.warn('Failed to persist error message (non-fatal):', saveErr);
+      }
+    } finally {
+      // Guarantees the Send button + Input come back alive even if anything
+      // above throws. continueWithAI already has its own finally; this is the
+      // safety net for paths that never reach it.
       setIsLoading(false);
+      inputRef.current?.focus();
     }
   };
 
