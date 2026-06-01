@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -30,7 +30,51 @@ export default function IdUploadGate({ bookingId, onComplete }) {
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
+  // Tracks whether we're still checking past bookings for an existing ID.
+  // Keeps the gate from flashing into view if we're about to skip it.
+  const [reusing, setReusing] = useState(true);
   const fileInputRef = useRef(null);
+
+  // If the guest uploaded an ID on a previous booking, reuse it: copy the
+  // {id_document_url, id_document_type} forward onto this booking, then close
+  // the gate. Guest never sees the upload form for subsequent bookings.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await base44.auth.me();
+        if (!me?.email) {
+          if (!cancelled) setReusing(false);
+          return;
+        }
+        const prior = await base44.entities.Booking.filter(
+          { guest_email: me.email },
+          '-id_uploaded_at',
+          50,
+        );
+        const withId = (prior || []).find(
+          (b) => b.id_document_url && b.id !== bookingId,
+        );
+        if (!withId) {
+          if (!cancelled) setReusing(false);
+          return;
+        }
+        await base44.entities.Booking.update(bookingId, {
+          id_document_url: withId.id_document_url,
+          id_document_type: withId.id_document_type,
+          id_uploaded_at: new Date().toISOString(),
+        });
+        if (!cancelled) {
+          setDone(true);
+          setTimeout(() => onComplete?.(), 600);
+        }
+      } catch (err) {
+        console.warn('IdUploadGate reuse check failed (showing upload form):', err);
+        if (!cancelled) setReusing(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [bookingId, onComplete]);
 
   const handleFileChange = (e) => {
     setError(null);
@@ -91,6 +135,19 @@ export default function IdUploadGate({ bookingId, onComplete }) {
           <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
           <p className="font-semibold text-emerald-900">ID received — thanks!</p>
           <p className="text-sm text-emerald-800 mt-1">Taking you to your bookings…</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Brief loading state while we check past bookings for an ID we can reuse.
+  // Skipped quickly when there's none — the user sees the upload form normally.
+  if (reusing) {
+    return (
+      <Card className="bg-white border-slate-200 rounded-2xl shadow-md">
+        <CardContent className="p-6 text-center">
+          <Loader2 className="w-6 h-6 text-slate-500 mx-auto mb-2 animate-spin" />
+          <p className="text-sm text-slate-600">Checking your account for an ID on file…</p>
         </CardContent>
       </Card>
     );

@@ -25,7 +25,20 @@ const statusColors = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
   confirmed: "bg-green-100 text-green-800 border-green-200",
   cancelled: "bg-red-100 text-red-800 border-red-200",
-  completed: "bg-blue-100 text-blue-800 border-blue-200"
+  completed: "bg-blue-100 text-blue-800 border-blue-200",
+  // payment_expired is a sub-status of cancelled — the guest can re-book the
+  // same property + dates because checkAvailabilityWebhook only blocks against
+  // pending/confirmed bookings. Distinct amber styling so it doesn't look like
+  // an admin rejection or a user cancellation.
+  payment_expired: "bg-amber-100 text-amber-800 border-amber-200",
+};
+
+// Returns the right label + key for the status badge, factoring in cancel_reason.
+const labelForStatus = (booking) => {
+  if (booking.status === 'cancelled' && booking.cancel_reason === 'payment_expired') {
+    return { key: 'payment_expired', label: 'Payment Expired' };
+  }
+  return { key: booking.status, label: booking.status.charAt(0).toUpperCase() + booking.status.slice(1) };
 };
 
 const approvalStatusColors = {
@@ -285,9 +298,14 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                     <p className="text-xs text-red-500">Invalid property ID: {booking.property_id}</p>
                   )}
                 </div>
-                <Badge className={`${statusColors[booking.status]} border font-medium`}>
-                  {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                </Badge>
+                {(() => {
+                  const s = labelForStatus(booking);
+                  return (
+                    <Badge className={`${statusColors[s.key]} border font-medium`}>
+                      {s.label}
+                    </Badge>
+                  );
+                })()}
               </div>
             </CardHeader>
 

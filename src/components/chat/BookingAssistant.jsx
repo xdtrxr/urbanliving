@@ -17,6 +17,11 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
   const [apartmentType, setApartmentType] = useState(initialParams?.apartmentType || "any");
   const locationInputRef = useRef(null);
 
+  // Start-of-today (midnight) so the "disable past dates" check doesn't reject
+  // today itself just because the clock has ticked past midnight.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
   useEffect(() => {
     if (!initialParams?.location) {
       locationInputRef.current?.focus();
@@ -99,14 +104,20 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
             />
           </div>
 
-          {/* Check-in */}
+          {/* Check-in. When checkOut is already chosen, mark it as a custom
+              modifier so the user sees BOTH endpoints highlighted at once. */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="h-12 rounded-xl border-slate-200 justify-start pl-3 hover:border-slate-400">
-                <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
-                <span className={checkIn ? "text-slate-900" : "text-slate-500"}>
-                  {checkIn ? format(checkIn, "MMM d") : "Check-in"}
-                </span>
+              <Button
+                variant="outline"
+                className={`h-12 rounded-xl justify-start pl-3 transition-colors ${
+                  checkIn
+                    ? 'border-amber-400 bg-amber-50 text-slate-900'
+                    : 'border-slate-200 hover:border-slate-400 text-slate-500'
+                }`}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+                <span>{checkIn ? format(checkIn, "MMM d") : "Check-in"}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -114,19 +125,26 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
                 mode="single"
                 selected={checkIn}
                 onSelect={setCheckIn}
-                disabled={(date) => date < new Date()}
+                disabled={(date) => date < startOfToday}
+                modifiers={checkOut ? { rangeEnd: checkOut } : {}}
+                modifiersClassNames={{ rangeEnd: 'bg-amber-200 text-amber-900 rounded-full font-semibold' }}
               />
             </PopoverContent>
           </Popover>
 
-          {/* Check-out */}
+          {/* Check-out — same dual-marker treatment. */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="h-12 rounded-xl border-slate-200 justify-start pl-3 hover:border-slate-400">
-                <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
-                <span className={checkOut ? "text-slate-900" : "text-slate-500"}>
-                  {checkOut ? format(checkOut, "MMM d") : "Check-out"}
-                </span>
+              <Button
+                variant="outline"
+                className={`h-12 rounded-xl justify-start pl-3 transition-colors ${
+                  checkOut
+                    ? 'border-amber-400 bg-amber-50 text-slate-900'
+                    : 'border-slate-200 hover:border-slate-400 text-slate-500'
+                }`}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+                <span>{checkOut ? format(checkOut, "MMM d") : "Check-out"}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -134,7 +152,9 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
                 mode="single"
                 selected={checkOut}
                 onSelect={setCheckOut}
-                disabled={(date) => date < new Date() || (checkIn && date <= checkIn)}
+                disabled={(date) => date < startOfToday || (checkIn && date <= checkIn)}
+                modifiers={checkIn ? { rangeStart: checkIn } : {}}
+                modifiersClassNames={{ rangeStart: 'bg-amber-200 text-amber-900 rounded-full font-semibold' }}
               />
             </PopoverContent>
           </Popover>

@@ -50,10 +50,17 @@ async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number 
         if (deadlineMs === null) continue; // not approved yet
         if (now <= deadlineMs) continue;
         try {
-            await sdk.asServiceRole.entities.Booking.update(b.id, { status: 'cancelled' });
+            // Stamp cancel_reason so the Bookings UI can show "Payment Expired"
+            // instead of plain "Cancelled". The property+dates are still free
+            // to re-book because checkAvailabilityWebhook only blocks against
+            // bookings whose status is in {pending, confirmed}.
+            await sdk.asServiceRole.entities.Booking.update(b.id, {
+                status: 'cancelled',
+                cancel_reason: 'payment_expired',
+            });
             await notifyAdmin(b);
             cancelled += 1;
-            console.log(`⏰ Auto-cancelled expired booking ${b.id}`);
+            console.log(`⏰ Auto-cancelled expired booking ${b.id} (payment_expired)`);
         } catch (err) {
             console.error(`Failed to auto-cancel booking ${b.id}:`, err);
         }

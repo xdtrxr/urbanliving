@@ -26,22 +26,34 @@ function detectConflict(existing: any[], requestedIn: Date, requestedOut: Date):
 // non-DB property IDs (e.g. MCP-injected ones from chat) fail fast and obviously
 // rather than silently returning empty. Returns null when the property exists
 // but has no images uploaded — admin Telegram will fall back to text-only.
+//
+// VERBOSE LOGGING is intentional: if admin reports "no image in the Telegram
+// notification" the function logs are the only place we can see whether the
+// property was found, whether it had images, and which URL was attempted.
 async function fetchPropertyImage(base44Client: any, propertyId: string): Promise<string | null> {
+    console.log(`[fetchPropertyImage] looking up property_id=${propertyId}`);
     try {
         const prop = await base44Client.asServiceRole.entities.Property.get(propertyId);
         if (!prop) {
-            console.warn(`fetchPropertyImage: property ${propertyId} not found in DB (maybe MCP-only?)`);
+            console.warn(`[fetchPropertyImage] ⚠️ property ${propertyId} NOT FOUND in DB. Likely MCP/Airbnb result that was never ingested. No image possible.`);
             return null;
         }
-        if (!Array.isArray(prop.images) || prop.images.length === 0) {
-            console.warn(`fetchPropertyImage: property ${propertyId} has no images uploaded`);
+        const imageCount = Array.isArray(prop.images) ? prop.images.length : 0;
+        console.log(`[fetchPropertyImage] property ${propertyId} found: title="${prop.title}", images.length=${imageCount}`);
+        if (imageCount === 0) {
+            console.warn(`[fetchPropertyImage] ⚠️ property ${propertyId} has NO images. Admin needs to upload one in the Admin form.`);
             return null;
         }
         const url = prop.images[0];
-        console.log(`fetchPropertyImage: using ${url} for property ${propertyId}`);
+        // Sanity check the URL — Telegram needs a publicly fetchable URL.
+        if (typeof url !== 'string' || !url.startsWith('http')) {
+            console.warn(`[fetchPropertyImage] ⚠️ property ${propertyId} first image is not a valid URL: ${JSON.stringify(url).slice(0, 200)}`);
+            return null;
+        }
+        console.log(`[fetchPropertyImage] ✅ using image URL: ${url}`);
         return url;
     } catch (e) {
-        console.warn('fetchPropertyImage failed:', (e as Error).message);
+        console.error('[fetchPropertyImage] threw:', (e as Error).message);
         return null;
     }
 }

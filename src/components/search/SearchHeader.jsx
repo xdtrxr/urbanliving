@@ -20,8 +20,12 @@ export default function SearchHeader({
   setBedrooms,
   onSearch,
   onAIRecommendations,
-  isLoadingAI 
+  isLoadingAI
 }) {
+  // Midnight today — so the disabled check accepts today itself.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
   const guestOptions = [
     ...Array.from({ length: 16 }, (_, i) => i + 1),
     20, 25, 30, 35, 40, 45, 50, 51
@@ -67,9 +71,13 @@ export default function SearchHeader({
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className="h-14 rounded-xl border-slate-200 hover:border-amber-400 justify-start pl-4 font-medium"
+                  className={`h-14 rounded-xl justify-start pl-4 font-medium transition-colors ${
+                    checkIn
+                      ? 'border-amber-400 bg-amber-50 text-slate-900'
+                      : 'border-slate-200 hover:border-amber-400 text-slate-500'
+                  }`}
                 >
-                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-400" />
+                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500" />
                   {checkIn ? format(checkIn, "MMM d") : "Check-in"}
                 </Button>
               </PopoverTrigger>
@@ -78,7 +86,9 @@ export default function SearchHeader({
                   mode="single"
                   selected={checkIn}
                   onSelect={setCheckIn}
-                  disabled={(date) => date < new Date()}
+                  disabled={(date) => date < startOfToday}
+                  modifiers={checkOut ? { rangeEnd: checkOut } : {}}
+                  modifiersClassNames={{ rangeEnd: 'bg-amber-200 text-amber-900 rounded-full font-semibold' }}
                 />
               </PopoverContent>
             </Popover>
@@ -87,9 +97,13 @@ export default function SearchHeader({
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className="h-14 rounded-xl border-slate-200 hover:border-amber-400 justify-start pl-4 font-medium"
+                  className={`h-14 rounded-xl justify-start pl-4 font-medium transition-colors ${
+                    checkOut
+                      ? 'border-amber-400 bg-amber-50 text-slate-900'
+                      : 'border-slate-200 hover:border-amber-400 text-slate-500'
+                  }`}
                 >
-                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-400" />
+                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500" />
                   {checkOut ? format(checkOut, "MMM d") : "Check-out"}
                 </Button>
               </PopoverTrigger>
@@ -98,7 +112,9 @@ export default function SearchHeader({
                   mode="single"
                   selected={checkOut}
                   onSelect={setCheckOut}
-                  disabled={(date) => date < new Date() || (checkIn && date <= checkIn)}
+                  disabled={(date) => date < startOfToday || (checkIn && date <= checkIn)}
+                  modifiers={checkIn ? { rangeStart: checkIn } : {}}
+                  modifiersClassNames={{ rangeStart: 'bg-amber-200 text-amber-900 rounded-full font-semibold' }}
                 />
               </PopoverContent>
             </Popover>
