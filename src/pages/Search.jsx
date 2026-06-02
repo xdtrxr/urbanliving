@@ -7,7 +7,7 @@ import { createPageUrl } from "@/utils";
 
 import SearchHeader from "../components/search/SearchHeader";
 import PropertyCard from "../components/search/PropertyCard";
-import PropertyFilters from "../components/search/PropertyFilters";
+import PropertyFiltersBar from "../components/search/PropertyFiltersBar";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,6 @@ export default function SearchPage() {
   const [bedrooms, setBedrooms] = useState("any");
   const [user, setUser] = useState(null);
   const [wishlist, setWishlist] = useState([]);
-  const [showFilters, setShowFilters] = useState(false);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [filters, setFilters] = useState({
     minPrice: 0,
@@ -205,101 +204,91 @@ export default function SearchPage() {
           </motion.div>
         )}
 
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Filters panel only renders for authenticated users; signed-out
-              visitors get a clean full-width grid that spans the screen. */}
-          {isAuthenticated && (
-            <div className="lg:w-80 flex-shrink-0">
-              <PropertyFilters
-                filters={filters}
-                onFiltersChange={setFilters}
-                isOpen={showFilters}
-                onToggle={() => setShowFilters(!showFilters)}
-              />
-            </div>
-          )}
+        {/* Filter chip bar — top row of quick filters + "All filters" sheet.
+            Signed-out visitors don't get filters (matches previous behavior). */}
+        {isAuthenticated && (
+          <PropertyFiltersBar
+            filters={filters}
+            onFiltersChange={setFilters}
+          />
+        )}
 
-          <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-900">
-                {isLoading
-                  ? "Loading properties..."
-                  : isAuthenticated
-                    ? `${filteredProperties.length} Properties Found`
-                    : "Available Properties"}
-              </h2>
-              {searchQuery && (
-                <div className="text-slate-600">
-                  {searchQuery === "AI Recommendations" ? (
-                    <span className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-purple-500" />
-                      Personalized for you
-                    </span>
-                  ) : (
-                    `matching "${searchQuery}"`
-                  )}
-                </div>
-              )}
-            </div>
-
-            {!isLoading && (
-              <AnimatePresence>
-                <div className={`grid gap-6 ${
-                  isAuthenticated
-                    ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
-                    : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
-                }`}>
-                  {filteredProperties.map((property, index) => (
-                    <motion.div
-                      key={property.id || index}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ delay: index * 0.05 }}
-                    >
-                      <PropertyCard
-                        property={property}
-                        onToggleWishlist={toggleWishlist}
-                        isWishlisted={wishlist.includes(property.id)}
-                      />
-                    </motion.div>
-                  ))}
-                </div>
-              </AnimatePresence>
-            )}
-
-            {!isLoading && filteredProperties.length === 0 && properties.length > 0 && (
-              <div className="text-center py-20">
-                <div className="text-6xl mb-4">🔍</div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-2">No properties match your filters</h3>
-                <p className="text-slate-600 mb-4">
-                  Try adjusting your search criteria or clear your filters to see more properties.
-                </p>
-                <Button 
-                  onClick={() => {
-                    setSearchQuery("");
-                    setFilters({
-                      minPrice: 0,
-                      maxPrice: 500000,
-                      propertyType: "any",
-                      amenities: []
-                    });
-                  }}
-                  variant="outline"
-                >
-                  Clear All Filters
-                </Button>
-              </div>
-            )}
-
-            {!isLoading && properties.length === 0 && (
-              <div className="text-center py-20">
-                <div className="text-6xl mb-4">🌍</div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-2">No properties found</h3>
-                <p className="text-slate-600 mb-4">Try searching for a different location or generate sample data from the Admin panel.</p>
+        <div className="min-w-0">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+              {isLoading
+                ? "Loading properties..."
+                : isAuthenticated
+                  ? `${filteredProperties.length} Properties Found`
+                  : "Available Properties"}
+            </h2>
+            {searchQuery && (
+              <div className="text-slate-600 text-sm sm:text-base">
+                {searchQuery === "AI Recommendations" ? (
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    Personalized for you
+                  </span>
+                ) : (
+                  `matching "${searchQuery}"`
+                )}
               </div>
             )}
           </div>
+
+          {!isLoading && (
+            <AnimatePresence>
+              <div className="grid gap-5 sm:gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                {filteredProperties.map((property, index) => (
+                  <motion.div
+                    key={property.id || index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <PropertyCard
+                      property={property}
+                      onToggleWishlist={toggleWishlist}
+                      isWishlisted={wishlist.includes(property.id)}
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            </AnimatePresence>
+          )}
+
+          {!isLoading && filteredProperties.length === 0 && properties.length > 0 && (
+            <div className="text-center py-20">
+              <div className="text-6xl mb-4">🔍</div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">No properties match your filters</h3>
+              <p className="text-slate-600 mb-4">
+                Try adjusting your search criteria or clear your filters to see more properties.
+              </p>
+              <Button
+                onClick={() => {
+                  setSearchQuery("");
+                  setFilters({
+                    minPrice: 0,
+                    maxPrice: 500000,
+                    propertyType: "any",
+                    amenities: []
+                  });
+                }}
+                variant="outline"
+              >
+                Clear All Filters
+              </Button>
+            </div>
+          )}
+
+          {!isLoading && properties.length === 0 && (
+            <div className="text-center py-20">
+              <div className="text-6xl mb-4">🌍</div>
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">No properties found</h3>
+              <p className="text-slate-600 mb-4">Try searching for a different location or generate sample data from the Admin panel.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
