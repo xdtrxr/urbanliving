@@ -159,12 +159,14 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
               <Calendar className="w-3.5 h-3.5" /> Check-in
             </p>
             <p className="font-semibold text-slate-900">{safeDate(booking.check_in)}</p>
+            <p className="text-[10px] text-slate-500">from 2:00 PM</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
             <p className="text-slate-500 text-xs mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> Check-out
             </p>
             <p className="font-semibold text-slate-900">{safeDate(booking.check_out)}</p>
+            <p className="text-[10px] text-slate-500">by 12:00 PM</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
             <p className="text-slate-500 text-xs mb-1 flex items-center gap-1">

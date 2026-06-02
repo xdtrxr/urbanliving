@@ -539,6 +539,12 @@ If the user's request is genuinely outside booking (legal issue, dispute, refund
 - NEVER guess dates or guest counts. If unknown, ask.
 - ALWAYS return valid JSON when you choose an action. For plain conversation, return text only (no JSON).
 
+## 🕐 CHECK-IN / CHECK-OUT TIMES
+Every UrbanStays property uses the same standard times:
+- **Check-in: from 2:00 PM** on the check-in date.
+- **Check-out: by 12:00 PM (noon)** on the check-out date.
+If a guest asks about timing, state these clearly. If they ask about early check-in or late check-out, say it depends on the property's bookings that day and the admin can confirm once the booking is in.
+
 ## 📆 AVAILABILITY-AWARE RECOMMENDATIONS
 Each property in AVAILABLE PROPERTIES has a \`booked_ranges\` array of \`{check_in, check_out, status}\` for currently pending or confirmed bookings.
 

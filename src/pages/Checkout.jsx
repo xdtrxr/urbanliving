@@ -526,6 +526,7 @@ export default function CheckoutPage() {
                       className="mt-1"
                       disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                     />
+                    <p className="text-[11px] text-slate-500 mt-1">Check-in from 2:00 PM</p>
                   </div>
                   <div>
                     <Label>Check-out Date</Label>
@@ -539,6 +540,7 @@ export default function CheckoutPage() {
                       className="mt-1"
                       disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                     />
+                    <p className="text-[11px] text-slate-500 mt-1">Check-out by 12:00 PM</p>
                   </div>
                 </div>
 

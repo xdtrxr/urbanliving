@@ -149,6 +149,7 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                   <div>
                     <p className="text-slate-500">Check-in</p>
                     <p className="font-semibold text-slate-900">{format(checkIn, "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-slate-500">from 2:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -156,6 +157,7 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                   <div>
                     <p className="text-slate-500">Check-out</p>
                     <p className="font-semibold text-slate-900">{format(checkOut, "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-slate-500">by 12:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -323,6 +325,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                   <div>
                     <p className="text-slate-500">Check-in</p>
                     <p className="font-semibold text-slate-900">{format(checkIn, "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-slate-500">from 2:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -330,6 +333,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                   <div>
                     <p className="text-slate-500">Check-out</p>
                     <p className="font-semibold text-slate-900">{format(checkOut, "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-slate-500">by 12:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

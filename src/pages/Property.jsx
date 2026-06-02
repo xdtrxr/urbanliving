@@ -6,9 +6,9 @@ import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-    MapPin, Users, Bed, Bath, Wifi, Car, Utensils, Star, Calendar, 
-    ArrowLeft, Share2, Heart, PlayCircle, Image as ImageIcon, Shield 
+import {
+    MapPin, Users, Bed, Bath, Wifi, Car, Utensils, Star, Calendar,
+    ArrowLeft, Share2, Heart, PlayCircle, Image as ImageIcon, Shield, Clock
 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -226,6 +226,26 @@ export default function PropertyPage() {
                                                 <span className="text-slate-700 capitalize">{amenity.replace(/_/g, ' ')}</span>
                                             </div>
                                         ))}
+                                    </div>
+                                </div>
+
+                                <div className="mt-8">
+                                    <h3 className="font-bold text-xl text-slate-800 mb-4">Check-in & Check-out</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                            <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                                            <div>
+                                                <p className="text-xs text-slate-500">Check-in</p>
+                                                <p className="font-semibold text-slate-900">from 2:00 PM</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                            <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                                            <div>
+                                                <p className="text-xs text-slate-500">Check-out</p>
+                                                <p className="font-semibold text-slate-900">by 12:00 PM</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
