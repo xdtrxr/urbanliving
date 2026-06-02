@@ -151,7 +151,7 @@ export default function AIChatConciergePage() {
     const newQs = params.toString();
     window.history.replaceState({}, '', `${window.location.pathname}${newQs ? `?${newQs}` : ''}`);
     handleSend(seeded.trim());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isLoadingHistory, user, isIntroComplete]);
 
   // Proactive Nova nudges: surface unread booking status changes when chat reopens.
@@ -246,7 +246,7 @@ export default function AIChatConciergePage() {
     if (!isLoadingHistory && user) {
       surfaceProactiveNudges();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isLoadingHistory, user]);
   
   const checkChatQuestCompletion = async (userData, messageCount) => {

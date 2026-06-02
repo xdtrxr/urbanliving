@@ -79,7 +79,7 @@ export default function SearchPage() {
       search(buildSearchParams());
     }, 400);
     return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [searchQuery, guests, bedrooms, filters.minPrice, filters.maxPrice, filters.propertyType, filters.amenities]);
 
   const handleAIRecommendations = async () => {

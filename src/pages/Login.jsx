@@ -54,7 +54,7 @@ export default function LoginPage() {
       .then(() => { if (!cancelled) navigate('/Search', { replace: true }); })
       .catch(() => {});
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const redirectAfterAuth = () => {
