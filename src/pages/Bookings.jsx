@@ -26,6 +26,9 @@ const statusColors = {
   confirmed: "bg-green-100 text-green-800 border-green-200",
   cancelled: "bg-red-100 text-red-800 border-red-200",
   completed: "bg-blue-100 text-blue-800 border-blue-200",
+  // Paid + still future/current → emphasize the cleared payment with a strong
+  // green badge so the guest immediately sees the booking is locked in.
+  paid: "bg-emerald-100 text-emerald-800 border-emerald-200",
   // payment_expired is a sub-status of cancelled — the guest can re-book the
   // same property + dates because checkAvailabilityWebhook only blocks against
   // pending/confirmed bookings. Distinct amber styling so it doesn't look like
@@ -33,10 +36,14 @@ const statusColors = {
   payment_expired: "bg-amber-100 text-amber-800 border-amber-200",
 };
 
-// Returns the right label + key for the status badge, factoring in cancel_reason.
+// Returns the right label + key for the status badge, factoring in payment_status
+// and cancel_reason.
 const labelForStatus = (booking) => {
   if (booking.status === 'cancelled' && booking.cancel_reason === 'payment_expired') {
     return { key: 'payment_expired', label: 'Payment Expired' };
+  }
+  if (booking.payment_status === 'paid' && booking.status !== 'cancelled') {
+    return { key: 'paid', label: '✓ Payment Made' };
   }
   return { key: booking.status, label: booking.status.charAt(0).toUpperCase() + booking.status.slice(1) };
 };

@@ -29,7 +29,14 @@ function computeBucket(b: any, nowMs: number): Bucket {
     const checkInMs = Date.parse(b.check_in);
     const checkOutMs = Date.parse(b.check_out);
     if (Number.isNaN(checkInMs) || Number.isNaN(checkOutMs)) return 'pending-approval';
-    if (nowMs > checkOutMs) return 'past';
+
+    const isPaid = b.payment_status === 'paid';
+
+    // Only paid stays graduate to 'past'. If checkout has passed but the
+    // booking was never paid, treat as cancelled — the autoCancelExpiredBookings
+    // cron will catch up and stamp cancel_reason='payment_expired' on the row.
+    // This guarantees 'past' only ever holds completed/used stays.
+    if (nowMs > checkOutMs) return isPaid ? 'past' : 'cancelled';
     if (nowMs < checkInMs) return 'upcoming';
     return 'current';
 }
