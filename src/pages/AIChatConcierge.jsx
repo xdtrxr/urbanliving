@@ -44,13 +44,25 @@ export default function AIChatConciergePage() {
 
   // Speech-to-text: appends final transcript to whatever's already in the input.
   // Manual flow — tap mic to start, talk, tap mic again to stop, then tap Send.
-  const { isSupported: speechSupported, isListening, transcript, start: startListening, stop: stopListening } = useSpeechToText({
+  const {
+    isSupported: speechSupported,
+    isListening,
+    transcript,
+    error: speechError,
+    start: startListening,
+    stop: stopListening,
+    reset: resetSpeech,
+  } = useSpeechToText({
     onFinal: (text) => setInput((prev) => (prev ? `${prev} ${text}` : text)),
     lang: 'en-US',
   });
   const toggleMic = () => {
-    if (isListening) stopListening();
-    else startListening();
+    if (isListening) {
+      stopListening();
+    } else {
+      resetSpeech();
+      startListening();
+    }
   };
 
   const scrollToBottom = () => {
@@ -1428,6 +1440,19 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
             <div className="mb-2 px-3 py-1.5 bg-slate-100 rounded-md text-xs text-slate-700 flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               <span className="italic">{transcript}</span>
+            </div>
+          )}
+          {/* Voice input error — surfaced so permission/network failures don't fail silently */}
+          {speechError && !isListening && (
+            <div className="mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-800 flex items-start gap-2">
+              <span className="font-semibold flex-shrink-0">Mic:</span>
+              <span className="flex-1">{speechError}</span>
+              <button
+                onClick={resetSpeech}
+                className="text-red-700 hover:text-red-900 underline flex-shrink-0"
+              >
+                Dismiss
+              </button>
             </div>
           )}
           <div className="flex gap-2 items-center">
