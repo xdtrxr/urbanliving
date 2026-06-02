@@ -42,18 +42,18 @@ export default function SearchHeader({
   ];
 
   return (
-    <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-200/50 p-8 mb-8">
-      <div className="flex flex-col gap-6">
+    <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-200/50 p-5 sm:p-8 mb-6 sm:mb-8">
+      <div className="flex flex-col gap-5 sm:gap-6">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-2 tracking-tight">
             Find Your Perfect Stay
           </h1>
-          <p className="text-slate-600 text-lg font-medium">
+          <p className="text-slate-600 text-sm sm:text-lg font-medium">
             AI-powered recommendations for extraordinary experiences
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 sm:gap-4">
           <div className="md:col-span-1">
             <div className="relative">
               <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
@@ -157,19 +157,19 @@ export default function SearchHeader({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button 
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+          <Button
             onClick={onSearch}
-            className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-4 rounded-xl font-semibold text-lg shadow-lg transition-all duration-300 hover:shadow-xl"
+            className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold text-base sm:text-lg shadow-lg transition-all duration-300 hover:shadow-xl"
           >
             <SlidersHorizontal className="mr-2 h-5 w-5" />
             Search Properties
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={onAIRecommendations}
             disabled={isLoadingAI}
-            className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-8 py-4 rounded-xl font-semibold text-lg shadow-lg transition-all duration-300 hover:shadow-xl"
+            className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold text-base sm:text-lg shadow-lg transition-all duration-300 hover:shadow-xl"
           >
             {isLoadingAI ? (
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white mr-2" />

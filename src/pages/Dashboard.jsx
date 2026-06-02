@@ -241,7 +241,7 @@ export default function DashboardPage() {
         <ReferralCodePrompt user={user} onSubmitted={loadDashboardData} />
       )}
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">Welcome back, {user?.full_name?.split(' ')[0]}!</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 break-words">Welcome back, {user?.full_name?.split(' ')[0]}!</h1>
         <p className="text-slate-600">Here's your travel snapshot.</p>
       </div>
 
@@ -296,9 +296,9 @@ export default function DashboardPage() {
       {/* Wishlist Preview Section */}
       {wishlistItems.length > 0 && (
         <div className="mt-8">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-slate-900">From Your Wishlist</h2>
-            <Link to={createPageUrl("Wishlist")}>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">From Your Wishlist</h2>
+            <Link to={createPageUrl("Wishlist")} className="self-start sm:self-auto">
               <Button variant="outline" size="sm" className="rounded-xl">
                 View All ({stats.wishlist}) <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
@@ -332,7 +332,7 @@ export default function DashboardPage() {
       </div>
 
       <div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-4">Quick Links</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4">Quick Links</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <Link to={createPageUrl("Search")}>
             <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 backdrop-blur-sm border-slate-200/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-amber-400/20 before:via-orange-400/20 before:to-red-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">

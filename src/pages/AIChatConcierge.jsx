@@ -1026,9 +1026,9 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
 
   const quickPrompts = [
     "Show me my bookings",
-    "Find me a place in Manhattan",
-    "What's available in Miami for next weekend?",
-    "Show me luxury apartments"
+    "Find me a place in Lekki",
+    "What's available in Maitama for next weekend?",
+    "Show me luxury apartments in Victoria Island"
   ];
 
   const handleQuickPrompt = (prompt) => {
@@ -1101,7 +1101,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
 
   if (isLoadingHistory) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-900 border-t-transparent mx-auto mb-4"></div>
           <p className="text-slate-600">Loading your conversation history...</p>
@@ -1111,7 +1111,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
   }
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50">
+    <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex flex-col bg-slate-50">
       <div className="flex-shrink-0 border-b border-slate-200 bg-white/90 backdrop-blur-lg">
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between">

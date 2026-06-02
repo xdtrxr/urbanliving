@@ -122,17 +122,17 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         <div className="lg:col-span-2">
           {/* Profile Details Card */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">My Profile</h1>
-            <p className="text-slate-600 text-lg">Manage your account and preferences</p>
+          <div className="mb-6 sm:mb-8">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">My Profile</h1>
+            <p className="text-slate-600 text-base sm:text-lg">Manage your account and preferences</p>
           </div>
 
           <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
-            <CardHeader className="p-8 border-b border-slate-100">
-              <div className="flex items-center gap-6">
+            <CardHeader className="p-5 sm:p-8 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
                 {/* Profile Picture Section */}
                 <div className="relative">
                   <div className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center relative group">
@@ -172,13 +172,13 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                <div>
-                  <CardTitle className="text-2xl font-bold text-slate-900">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-xl sm:text-2xl font-bold text-slate-900 break-words">
                     {user?.full_name || "User"}
                   </CardTitle>
-                  <div className="flex items-center gap-2 text-slate-600 mt-1">
-                    <Mail className="w-4 h-4" />
-                    <span>{user?.email}</span>
+                  <div className="flex items-center gap-2 text-slate-600 mt-1 min-w-0">
+                    <Mail className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate text-sm sm:text-base">{user?.email}</span>
                   </div>
                   {isUploadingPicture && (
                     <p className="text-sm text-blue-600 mt-2">Uploading profile picture...</p>
@@ -187,7 +187,7 @@ export default function ProfilePage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-8 space-y-6">
+            <CardContent className="p-5 sm:p-8 space-y-6">
               <div>
                 <Label htmlFor="phone_number" className="text-sm font-semibold text-slate-700">
                   Phone Number *

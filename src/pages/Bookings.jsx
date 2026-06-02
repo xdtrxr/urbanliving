@@ -99,11 +99,11 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
               <MapPin className="w-16 h-16 text-slate-300" />
             </div>
           )}
-          <div className="md:w-2/3 p-6">
+          <div className="md:w-2/3 p-4 sm:p-6">
             <CardHeader className="p-0 mb-4">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <CardTitle className="text-xl font-bold text-slate-900 mb-2">
+                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
                     {property ? property.title : "Property details unavailable"}
                   </CardTitle>
                   {property && (
@@ -210,11 +210,11 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                 </div>
               )}
 
-              <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-                <div className="text-sm text-slate-500">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200">
+                <div className="text-xs sm:text-sm text-slate-500">
                   Requested on {format(new Date(booking.created_date), "MMM d, yyyy 'at' h:mm a")}
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-2">
                   {booking.property_id && (
                     <Link to={createPageUrl(`Property?id=${booking.property_id}`)}>
                       <Button variant="outline" size="sm" className="rounded-xl">
@@ -279,11 +279,11 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
               <MapPin className="w-16 h-16 text-slate-300" />
             </div>
           )}
-          <div className="md:w-2/3 p-6">
+          <div className="md:w-2/3 p-4 sm:p-6">
             <CardHeader className="p-0 mb-4">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <CardTitle className="text-xl font-bold text-slate-900 mb-2">
+                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
                     {property ? property.title : "Property details unavailable"}
                   </CardTitle>
                   {property && (
@@ -397,11 +397,11 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                 );
               })()}
 
-              <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-                <div className="text-sm text-slate-500">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200">
+                <div className="text-xs sm:text-sm text-slate-500">
                   Booked on {format(new Date(booking.created_date), "MMM d, yyyy")}
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-2">
                   {booking.property_id && (
                     <Link to={createPageUrl(`Property?id=${booking.property_id}`)}>
                       <Button variant="outline" size="sm" className="rounded-xl">
@@ -679,17 +679,17 @@ export default function BookingsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-8 flex justify-between items-start">
+        <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">My Bookings</h1>
-            <p className="text-slate-600 text-lg">Manage your travel reservations and plan your trips</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">My Bookings</h1>
+            <p className="text-slate-600 text-base sm:text-lg">Manage your travel reservations and plan your trips</p>
           </div>
           <Button
             variant="outline"
             size="sm"
             onClick={handleManualRefresh}
             disabled={isRefreshing}
-            className="rounded-xl"
+            className="rounded-xl self-start sm:self-auto"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
             {isRefreshing ? 'Refreshing...' : 'Refresh'}
@@ -697,20 +697,20 @@ export default function BookingsPage() {
         </div>
 
         <Tabs defaultValue="pending-approval" className="space-y-6">
-          <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-xl shadow-sm">
-            <TabsTrigger value="pending-approval" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+          <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-xl shadow-sm w-full overflow-x-auto flex justify-start sm:justify-center scrollbar-thin">
+            <TabsTrigger value="pending-approval" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
               Pending Approval {pendingApproval.length > 0 && `(${pendingApproval.length})`}
             </TabsTrigger>
-            <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+            <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
               Upcoming {upcoming.length > 0 && `(${upcoming.length})`}
             </TabsTrigger>
-            <TabsTrigger value="current" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+            <TabsTrigger value="current" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
               Current {current.length > 0 && `(${current.length})`}
             </TabsTrigger>
-            <TabsTrigger value="past" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+            <TabsTrigger value="past" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
               Past {past.length > 0 && `(${past.length})`}
             </TabsTrigger>
-            <TabsTrigger value="cancelled" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+            <TabsTrigger value="cancelled" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
               Cancelled {cancelledBookings.length > 0 && `(${cancelledBookings.length})`}
             </TabsTrigger>
           </TabsList>

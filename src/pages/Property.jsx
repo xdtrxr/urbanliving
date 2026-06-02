@@ -119,9 +119,9 @@ export default function PropertyPage() {
                     </Button>
                 </Link>
 
-                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-6 md:p-8">
+                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-4 sm:p-6 md:p-8">
                     {/* Media Gallery */}
-                    <div className="mb-8">
+                    <div className="mb-6 sm:mb-8">
                         <div className="relative w-full aspect-video bg-slate-200 rounded-2xl overflow-hidden shadow-lg">
                             <AnimatePresence mode="wait">
                                 {selectedMedia && selectedMedia.type === 'image' && (
@@ -180,7 +180,7 @@ export default function PropertyPage() {
                     <CardHeader className="p-0 mb-6">
                         <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                             <div>
-                                <CardTitle className="text-3xl font-bold text-slate-900 mb-2">{property.title}</CardTitle>
+                                <CardTitle className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2 break-words">{property.title}</CardTitle>
                                 <div className="flex items-center gap-2 text-slate-600">
                                     <MapPin className="w-5 h-5" />
                                     <span className="font-medium">{property.location?.city}, {property.location?.country}</span>
@@ -197,7 +197,7 @@ export default function PropertyPage() {
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             <div className="lg:col-span-2">
                                 <div className="border-b pb-6 mb-6">
-                                    <div className="flex items-center gap-6 text-slate-700">
+                                    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-slate-700">
                                         <div className="flex items-center gap-2"><Users className="w-5 h-5 text-amber-500" /> <span>{property.max_guests} guests</span></div>
                                         <div className="flex items-center gap-2"><Bed className="w-5 h-5 text-amber-500" /> <span>{property.bedrooms || 1} bedroom(s)</span></div>
                                         <div className="flex items-center gap-2"><Bath className="w-5 h-5 text-amber-500" /> <span>{property.bathrooms || 1} bathroom(s)</span></div>
@@ -223,7 +223,7 @@ export default function PropertyPage() {
                             </div>
 
                             <div className="lg:col-span-1">
-                                <Card className="bg-slate-50/80 border-slate-200 shadow-md rounded-2xl p-6 sticky top-24">
+                                <Card className="bg-slate-50/80 border-slate-200 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
                                     <div className="mb-6">
                                         <div className="text-3xl font-bold text-slate-900">
                                             {currencySymbol}{property.price_per_night.toLocaleString()}

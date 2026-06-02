@@ -1019,7 +1019,7 @@ export default function AdminPage() {
                   id="mcp-city"
                   value={mcpCity}
                   onChange={(e) => setMcpCity(e.target.value)}
-                  placeholder="e.g., London, Paris, New York"
+                  placeholder="e.g., Abuja, Lagos"
                   className="rounded-xl"
                 />
                 <Button
