@@ -216,6 +216,32 @@ Deno.serve(async (req) => {
             return new Response(JSON.stringify({ success: false, error: 'check_out must be after check_in' }), { status: 400, headers });
         }
 
+        // Same-user same-property guard: if this guest already has an open
+        // pending booking on this property — whether still awaiting admin
+        // approval OR approved-and-awaiting-payment — they must finish (or let
+        // it expire / cancel) before requesting another. Re-booking is only
+        // unlocked once their prior booking is paid (status='confirmed'),
+        // cancelled, or completed. Per product rule: paid/cancelled/current/past
+        // are all re-bookable, only 'upcoming + unpaid' blocks.
+        const userPending = await base44.asServiceRole.entities.Booking.filter({
+            property_id,
+            guest_email: user.email,
+            status: 'pending',
+        });
+        if (userPending && userPending.length > 0) {
+            const open = userPending[0];
+            const awaitingPayment = !!open.approved_at;
+            const msg = awaitingPayment
+                ? 'You already have an approved booking for this property awaiting payment. Please complete payment (or let it expire) before booking it again.'
+                : 'You already have a pending request for this property awaiting admin approval. Please wait for the response before submitting another.';
+            return new Response(JSON.stringify({
+                success: false,
+                error: msg,
+                code: awaitingPayment ? 'EXISTING_AWAITING_PAYMENT' : 'EXISTING_PENDING_APPROVAL',
+                existing_booking_id: open.id,
+            }), { status: 409, headers });
+        }
+
         // Conflict detection: any existing pending/confirmed booking on the same property whose dates overlap
         const existing = await base44.asServiceRole.entities.Booking.filter({
             property_id,

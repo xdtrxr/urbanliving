@@ -38,6 +38,9 @@ export default function PropertyPage() {
     // Approved-but-unpaid booking by the current user for this property — when
     // present we swap the "Book Now" CTA for "Proceed to Payment".
     const [pendingPaymentBooking, setPendingPaymentBooking] = useState(null);
+    // Pending-approval booking by the current user for this property — they
+    // can't request another booking on this property until this one resolves.
+    const [pendingApprovalBooking, setPendingApprovalBooking] = useState(null);
     const location = useLocation();
 
     useEffect(() => {
@@ -59,8 +62,11 @@ export default function PropertyPage() {
                         setSelectedMedia(combinedMedia[0]);
                     }
 
-                    // If the user has an approved-but-unpaid booking for this property,
-                    // surface it so the CTA becomes "Proceed to Payment" instead of "Book Now".
+                    // If the user has a non-paid pending booking for this property,
+                    // surface the right CTA: "Proceed to Payment" for approved-unpaid,
+                    // or a locked "Awaiting Admin Approval" pill for pre-approval.
+                    // Same-user re-bookings are blocked by checkAvailabilityWebhook
+                    // until this prior booking is paid, cancelled, or expired.
                     if (isAuthenticated) {
                         try {
                             const me = await base44.auth.me();
@@ -69,8 +75,10 @@ export default function PropertyPage() {
                                 guest_email: me.email,
                                 status: 'pending',
                             });
-                            const eligible = (matches || []).find(b => b.approved_at && b.payment_status !== 'paid');
-                            if (eligible) setPendingPaymentBooking(eligible);
+                            const approvedUnpaid = (matches || []).find(b => b.approved_at && b.payment_status !== 'paid');
+                            const awaitingApproval = (matches || []).find(b => !b.approved_at);
+                            if (approvedUnpaid) setPendingPaymentBooking(approvedUnpaid);
+                            else if (awaitingApproval) setPendingApprovalBooking(awaitingApproval);
                         } catch (lookupErr) {
                             console.warn('Could not look up existing booking for this property:', lookupErr);
                         }
@@ -271,6 +279,12 @@ export default function PropertyPage() {
                                                 Proceed to Payment
                                             </Button>
                                         </Link>
+                                    ) : pendingApprovalBooking ? (
+                                        <Link to={createPageUrl('Bookings')}>
+                                            <Button size="lg" className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-semibold rounded-xl">
+                                                Awaiting Admin Approval
+                                            </Button>
+                                        </Link>
                                     ) : (
                                         <Link to={createPageUrl(`Checkout?property=${property.id}`)}>
                                             <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
@@ -284,7 +298,9 @@ export default function PropertyPage() {
                                             ? 'Create an account or sign in to book.'
                                             : pendingPaymentBooking
                                                 ? 'Your booking has been approved — complete payment to confirm.'
-                                                : "You won't be charged yet"}
+                                                : pendingApprovalBooking
+                                                    ? "You have a pending request on this property — you'll be able to re-book once it's resolved."
+                                                    : "You won't be charged yet"}
                                     </p>
                                 </Card>
                             </div>
