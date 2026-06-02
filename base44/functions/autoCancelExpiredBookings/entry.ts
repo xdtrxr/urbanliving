@@ -4,6 +4,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 // admin via Telegram. Runs on a schedule (Deno.cron) and is also exposed as a
 // manual POST endpoint for testing or admin re-runs.
 
+const APP_BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://urbanstays.io';
+const bookingLink = (bookingId: string) => `${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(bookingId)}#booking-${encodeURIComponent(bookingId)}`;
+
 const HOUR_MS = 60 * 60 * 1000;
 const PAYMENT_WINDOW_MS = 1 * HOUR_MS;
 const APPROVAL_CAP_MS = 3 * HOUR_MS;
@@ -59,6 +62,30 @@ async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number 
                 cancel_reason: 'payment_expired',
             });
             await notifyAdmin(b);
+            // Notify the guest so they know their booking lapsed and can re-book.
+            try {
+                const guestEmailBody = `Hi ${b.guest_name || 'there'},
+
+Your booking reservation has expired because payment was not completed within the allowed window.
+
+🔖 Status: CANCELLED (Payment Expired)
+👉 View your booking: ${bookingLink(b.id)}
+
+You are welcome to start a new booking for the same property or choose another.
+
+If you believe this is an error, please contact our support team.
+
+— Urban Stays`;
+                await sdk.asServiceRole.integrations.Core.SendEmail({
+                    to: b.guest_email,
+                    subject: 'Your Urban Stays booking has expired',
+                    body: guestEmailBody,
+                    from_name: 'Urban Stays',
+                });
+                console.log(`📧 Expiry email sent to ${b.guest_email} for booking ${b.id}`);
+            } catch (emailErr) {
+                console.warn(`Guest expiry email failed for booking ${b.id} (non-fatal):`, emailErr);
+            }
             cancelled += 1;
             console.log(`⏰ Auto-cancelled expired booking ${b.id} (payment_expired)`);
         } catch (err) {

@@ -111,13 +111,23 @@
     },
     "host_details_status": {
       "type": "string",
-      "enum": ["complete", "awaiting_admin", "filled_by_admin", "default_saved"],
-      "description": "Tracks the host-detail fallback flow: complete=Property had everything; awaiting_admin=Telegram prompt sent; filled_by_admin=admin replied and email sent; default_saved=admin also saved values back to Property"
+      "enum": [
+        "complete",
+        "awaiting_admin",
+        "filled_by_admin",
+        "default_saved"
+      ],
+      "description": "Tracks the host-detail fallback flow"
     },
     "cancel_reason": {
       "type": "string",
-      "enum": ["admin_rejected", "payment_expired", "user_cancelled", "other"],
-      "description": "Why a cancelled booking ended. Distinguishes 'Payment Expired' rows (guest can still re-book) from admin/user cancellations."
+      "enum": [
+        "admin_rejected",
+        "payment_expired",
+        "user_cancelled",
+        "other"
+      ],
+      "description": "Why a cancelled booking ended. Distinguishes Payment Expired rows (guest can still re-book) from admin/user cancellations."
     }
   },
   "required": [

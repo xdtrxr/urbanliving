@@ -16,7 +16,11 @@
     },
     "city": {
       "type": "string",
-      "enum": ["Abuja", "Lagos", "Other"],
+      "enum": [
+        "Abuja",
+        "Lagos",
+        "Other"
+      ],
       "description": "Preferred city"
     },
     "area": {
@@ -47,7 +51,14 @@
     },
     "apartment_type": {
       "type": "string",
-      "enum": ["Studio", "1 Bedroom", "2 Bedroom", "3 Bedroom", "Family Apartment", "Any"],
+      "enum": [
+        "Studio",
+        "1 Bedroom",
+        "2 Bedroom",
+        "3 Bedroom",
+        "Family Apartment",
+        "Any"
+      ],
       "description": "Preferred apartment type"
     },
     "special_requests": {
@@ -73,7 +84,12 @@
     },
     "source": {
       "type": "string",
-      "enum": ["chat", "web", "referral", "other"],
+      "enum": [
+        "chat",
+        "web",
+        "referral",
+        "other"
+      ],
       "default": "chat",
       "description": "Where the lead came from"
     },
@@ -94,27 +110,37 @@
       "description": "Admin user email this lead is assigned to (optional)"
     }
   },
-  "required": ["name", "phone", "email"],
+  "required": [
+    "name",
+    "phone",
+    "email"
+  ],
   "rls": {
-    "create": {
-      "$or": [
-        { "data.email": "{{user.email}}" },
-        { "user_condition": { "role": "admin" } },
-        { "user_condition": { "role": "anonymous" } }
-      ]
-    },
+    "create": {},
     "read": {
       "$or": [
-        { "data.email": "{{user.email}}" },
-        { "data.user_email": "{{user.email}}" },
-        { "user_condition": { "role": "admin" } }
+        {
+          "data.email": "{{user.email}}"
+        },
+        {
+          "data.user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
       ]
     },
     "update": {
-      "user_condition": { "role": "admin" }
+      "user_condition": {
+        "role": "admin"
+      }
     },
     "delete": {
-      "user_condition": { "role": "admin" }
+      "user_condition": {
+        "role": "admin"
+      }
     }
   }
 }

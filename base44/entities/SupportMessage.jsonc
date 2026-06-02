@@ -45,7 +45,12 @@
     },
     "nova_draft_status": {
       "type": "string",
-      "enum": ["pending", "sent_as_is", "edited", "replaced"],
+      "enum": [
+        "pending",
+        "sent_as_is",
+        "edited",
+        "replaced"
+      ],
       "description": "Outcome of admin review on the Nova draft"
     },
     "telegram_message_id": {
