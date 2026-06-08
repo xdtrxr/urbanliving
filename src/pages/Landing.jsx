@@ -46,33 +46,33 @@ export default function LandingPage() {
   const { isAuthenticated } = useAuth();
 
   return (
-    <div className="min-h-[100dvh] bg-[radial-gradient(ellipse_at_top,_#1a0e08_0%,_#0a0a0a_55%,_#000000_100%)] text-white">
+    <div className="min-h-[100dvh] bg-gradient-to-b from-white via-amber-50/30 to-white text-slate-900">
       {/* Top nav — minimal, just brand + sign in / dashboard */}
       <header className="px-5 sm:px-8 pt-6 pb-2 flex items-center justify-between max-w-6xl mx-auto">
         <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:shadow-amber-500/40 transition-shadow">
-            <Home className="w-5 h-5 text-slate-900" strokeWidth={2.5} />
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+            <Home className="w-5 h-5 text-amber-400" strokeWidth={2.5} />
           </div>
-          <span className="text-lg font-bold tracking-tight">UrbanStays</span>
+          <span className="text-lg font-bold tracking-tight text-slate-900">UrbanStays</span>
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
             to={createPageUrl('Install')}
-            className="text-sm font-medium text-slate-300 hover:text-white transition-colors px-3 py-2 hidden sm:inline-block"
+            className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-3 py-2 hidden sm:inline-block"
           >
             Install app
           </Link>
           {isAuthenticated ? (
             <Link
               to={createPageUrl('Dashboard')}
-              className="text-sm font-semibold text-slate-900 bg-white hover:bg-slate-100 transition-colors px-4 py-2 rounded-full"
+              className="text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors px-4 py-2 rounded-full shadow-md"
             >
               Dashboard
             </Link>
           ) : (
             <Link
               to="/login"
-              className="text-sm font-semibold text-slate-900 bg-white hover:bg-slate-100 transition-colors px-4 py-2 rounded-full"
+              className="text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors px-4 py-2 rounded-full shadow-md"
             >
               Sign in
             </Link>
@@ -83,14 +83,14 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="px-5 sm:px-8 py-12 sm:py-20 max-w-6xl mx-auto">
         <div className="text-center max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
             Live in Abuja & Lagos
           </div>
-          <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-5 leading-[1.05]">
-            Short-stays you can <span className="text-amber-400">actually trust</span>.
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight mb-5 leading-[1.05] text-slate-900">
+            Short-stays you can <span className="text-amber-600">actually trust</span>.
           </h1>
-          <p className="text-base sm:text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+          <p className="text-base sm:text-xl text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
             Verified apartments across Nigeria’s capital and economic hub. Book
             direct, pay in naira, and have Agent Nova answer every question
             before you arrive.
@@ -108,7 +108,7 @@ export default function LandingPage() {
             </Link>
             <Link
               to={createPageUrl('Install')}
-              className="group flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/15 hover:border-white/25 text-white font-bold text-base transition-all"
+              className="group flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-4 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-900 font-bold text-base shadow-sm transition-all"
             >
               <Download className="w-5 h-5" />
               Install the app
@@ -126,13 +126,13 @@ export default function LandingPage() {
             return (
               <div
                 key={f.title}
-                className="group bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-amber-500/30 rounded-2xl p-6 transition-all"
+                className="group bg-white hover:bg-amber-50/40 border border-slate-200 hover:border-amber-300 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all"
               >
-                <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-4 group-hover:bg-amber-500/20 transition-colors">
-                  <Icon className="w-5 h-5 text-amber-400" />
+                <div className="w-11 h-11 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center mb-4 group-hover:bg-amber-200/70 transition-colors">
+                  <Icon className="w-5 h-5 text-amber-700" />
                 </div>
-                <h3 className="font-semibold text-white mb-1.5 text-base">{f.title}</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">{f.body}</p>
+                <h3 className="font-semibold text-slate-900 mb-1.5 text-base">{f.title}</h3>
+                <p className="text-sm text-slate-600 leading-relaxed">{f.body}</p>
               </div>
             );
           })}
@@ -140,22 +140,22 @@ export default function LandingPage() {
       </section>
 
       {/* Footer band */}
-      <footer className="border-t border-white/10 px-5 sm:px-8 py-8 max-w-6xl mx-auto">
+      <footer className="border-t border-slate-200 px-5 sm:px-8 py-8 max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-sm">
           <p className="text-slate-500">
             © {new Date().getFullYear()} HOMESHARES LTD. UrbanStays.io
           </p>
           <div className="flex items-center gap-5">
-            <Link to={createPageUrl('Install')} className="text-slate-400 hover:text-white transition-colors">
+            <Link to={createPageUrl('Install')} className="text-slate-500 hover:text-slate-900 transition-colors">
               Install
             </Link>
-            <Link to={createPageUrl('Search')} className="text-slate-400 hover:text-white transition-colors">
+            <Link to={createPageUrl('Search')} className="text-slate-500 hover:text-slate-900 transition-colors">
               Browse
             </Link>
-            <Link to={createPageUrl('FAQ')} className="text-slate-400 hover:text-white transition-colors">
+            <Link to={createPageUrl('FAQ')} className="text-slate-500 hover:text-slate-900 transition-colors">
               FAQs
             </Link>
-            <Link to={createPageUrl('PrivacyPolicy')} className="text-slate-400 hover:text-white transition-colors">
+            <Link to={createPageUrl('PrivacyPolicy')} className="text-slate-500 hover:text-slate-900 transition-colors">
               Privacy
             </Link>
           </div>
