@@ -12,8 +12,9 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarProvider,
-  SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { User as UserEntity } from "@/entities/User";
 import ReferralTracker from "@/components/utils/ReferralTracker";
@@ -126,6 +127,28 @@ export default function Layout({ children, currentPageName }) {
 
   return (
     <SidebarProvider defaultOpen={true}>
+      <LayoutShell
+        user={user}
+        menuItems={menuItems}
+        location={location}
+        handleLogout={handleLogout}
+      >
+        {children}
+      </LayoutShell>
+    </SidebarProvider>
+  );
+}
+
+// Inner shell so we can use the `useSidebar` hook (it needs the SidebarProvider
+// in the tree above it). Lets the mobile sheet auto-close after nav clicks.
+function LayoutShell({ user, menuItems, location, handleLogout, children }) {
+  const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
+  const closeMobileSheet = () => {
+    if (isMobile) setOpenMobile(false);
+  };
+
+  return (
+    <>
       {/* Referral Tracker - runs silently in the background */}
       <ReferralTracker />
       
@@ -192,7 +215,7 @@ export default function Layout({ children, currentPageName }) {
                           }`}
                           tooltip={item.title}
                         >
-                          <Link to={item.url} className="flex items-center gap-3 px-3 py-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2">
+                          <Link to={item.url} onClick={closeMobileSheet} className="flex items-center gap-3 px-3 py-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2">
                             <item.icon className={`w-5 h-5 transition-colors flex-shrink-0 ${
                               location.pathname === item.url ? 'text-amber-400' : 'group-hover:text-amber-500'
                             }`} />
@@ -216,15 +239,17 @@ export default function Layout({ children, currentPageName }) {
             <div className="mt-auto pt-3 border-t border-slate-100">
               <div className="sidebar-footer-text group-data-[collapsible=icon]:hidden">
                 <div className="flex items-center justify-center gap-3 px-3 py-2">
-                  <Link 
-                    to={createPageUrl("PrivacyPolicy")} 
+                  <Link
+                    to={createPageUrl("PrivacyPolicy")}
+                    onClick={closeMobileSheet}
                     className="text-xs text-slate-500 hover:text-slate-700 transition-colors duration-200"
                   >
                     Privacy policy
                   </Link>
                   <span className="text-xs text-slate-300">|</span>
-                  <Link 
-                    to={createPageUrl("FAQ")} 
+                  <Link
+                    to={createPageUrl("FAQ")}
+                    onClick={closeMobileSheet}
                     className="text-xs text-slate-500 hover:text-slate-700 transition-colors duration-200"
                   >
                     FAQs
@@ -241,7 +266,7 @@ export default function Layout({ children, currentPageName }) {
                       tooltip="Privacy Policy"
                       className="hover:bg-slate-100/80 transition-all duration-300 rounded-xl"
                     >
-                      <Link to={createPageUrl("PrivacyPolicy")} className="flex items-center justify-center px-2 py-2">
+                      <Link to={createPageUrl("PrivacyPolicy")} onClick={closeMobileSheet} className="flex items-center justify-center px-2 py-2">
                         <Shield className="w-4 h-4 text-slate-500" />
                       </Link>
                     </SidebarMenuButton>
@@ -252,7 +277,7 @@ export default function Layout({ children, currentPageName }) {
                       tooltip="FAQs"
                       className="hover:bg-slate-100/80 transition-all duration-300 rounded-xl"
                     >
-                      <Link to={createPageUrl("FAQ")} className="flex items-center justify-center px-2 py-2">
+                      <Link to={createPageUrl("FAQ")} onClick={closeMobileSheet} className="flex items-center justify-center px-2 py-2">
                         <HelpCircle className="w-4 h-4 text-slate-500" />
                       </Link>
                     </SidebarMenuButton>
@@ -269,7 +294,15 @@ export default function Layout({ children, currentPageName }) {
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 {user && (
-                  <SidebarTrigger className="hover:bg-slate-100 p-2 rounded-xl transition-colors duration-200 flex-shrink-0" />
+                  <button
+                    type="button"
+                    onClick={toggleSidebar}
+                    aria-label="Open navigation menu"
+                    className="flex-shrink-0 inline-flex items-center gap-2 h-10 px-3 sm:px-4 rounded-xl bg-slate-900 text-white hover:bg-slate-800 hover:text-amber-400 shadow-md transition-colors duration-200 font-semibold text-sm"
+                  >
+                    <Menu className="w-5 h-5" />
+                    <span className="hidden sm:inline">Menu</span>
+                  </button>
                 )}
                 {/* When sidebar is hidden (signed out) the desktop has no brand,
                     so always show the wordmark for unauthenticated users. Clicking
@@ -315,6 +348,6 @@ export default function Layout({ children, currentPageName }) {
           </div>
         </main>
       </div>
-    </SidebarProvider>
+    </>
   );
 }

@@ -1,0 +1,21 @@
+{
+  "name": "UrbanStays — Short-stay apartments in Abuja & Lagos",
+  "short_name": "UrbanStays",
+  "description": "Verified short-stay apartments in Abuja and Lagos. Book directly with HOMESHARES.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
+  "lang": "en-NG",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["travel", "lifestyle", "business"]
+}
