@@ -19,13 +19,18 @@ const PageFallback = () => (
   </div>
 );
 
-const { Pages, Layout, mainPage } = pagesConfig;
+const { Pages, Layout, mainPage, barePages } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 
-const LayoutWrapper = ({ children, currentPageName }) => Layout ?
-  <Layout currentPageName={currentPageName}>{children}</Layout>
-  : <>{children}</>;
+// Marketing/install pages render edge-to-edge with no sidebar/header.
+// Anything in barePages bypasses the Layout shell entirely.
+const isBarePage = (name) => !!barePages && barePages.has(name);
+
+const LayoutWrapper = ({ children, currentPageName }) => {
+  if (!Layout || isBarePage(currentPageName)) return <>{children}</>;
+  return <Layout currentPageName={currentPageName}>{children}</Layout>;
+};
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();

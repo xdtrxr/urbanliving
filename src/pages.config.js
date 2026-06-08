@@ -20,8 +20,16 @@ const PaymentPage = lazy(() => import('./pages/PaymentPage'));
 const BankAccounts = lazy(() => import('./pages/BankAccounts'));
 const Withdrawals = lazy(() => import('./pages/Withdrawals'));
 const ReferralTest = lazy(() => import('./pages/ReferralTest'));
+const Landing = lazy(() => import('./pages/Landing'));
+const Install = lazy(() => import('./pages/Install'));
+
+// Pages that render edge-to-edge without the standard Layout chrome
+// (no sidebar, no floating header). Marketing/install pages only.
+export const BARE_PAGES = new Set(["Landing", "Install"]);
 
 export const PAGES = {
+    "Landing": Landing,
+    "Install": Install,
     "Search": Search,
     "Property": Property,
     "Bookings": Bookings,
@@ -44,7 +52,8 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "Search",
+    mainPage: "Landing",
     Pages: PAGES,
     Layout: __Layout,
+    barePages: BARE_PAGES,
 };
