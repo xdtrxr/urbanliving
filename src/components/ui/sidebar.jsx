@@ -162,9 +162,15 @@ const Sidebar = React.forwardRef((
           data-sidebar="sidebar"
           data-mobile="true"
           className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          // paddingTop/Bottom respect the iOS status bar + Dynamic Island and
+          // the Android gesture bar when the app is launched as an installed
+          // PWA. Without this, the SidebarHeader (brand + Urban Stays text)
+          // slides under the clock and the first menu items become untappable.
           style={
             {
-              "--sidebar-width": SIDEBAR_WIDTH_MOBILE
+              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+              paddingTop: 'env(safe-area-inset-top, 0px)',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
             }
           }
           side={side}>
