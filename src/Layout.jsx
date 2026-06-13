@@ -352,11 +352,17 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
             </div>
           </header>
 
-          {/* Push content below the floating header. Same safe-area math so
-              the gap stays consistent regardless of where the header lands. */}
+          {/* Push content below the floating header and clear of the
+              bottom gesture bar / home indicator. env(safe-area-inset-*)
+              is supported by Chromium (Chrome / Edge / Samsung Internet),
+              Gecko (Firefox), and WebKit (Safari) on both Android and iOS
+              — returns 0 anywhere without an inset so no harm on desktop. */}
           <div
             className="flex-1 overflow-auto"
-            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 5rem)' }}
+            style={{
+              paddingTop: 'calc(env(safe-area-inset-top, 0px) + 5rem)',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            }}
           >
             {children}
           </div>

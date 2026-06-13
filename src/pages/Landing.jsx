@@ -168,8 +168,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer band */}
-      <footer className="border-t border-slate-200 px-5 sm:px-8 py-8 max-w-6xl mx-auto">
+      {/* Footer band — paddingBottom clears the Android gesture bar /
+          iOS home indicator when launched as a standalone PWA. */}
+      <footer
+        className="border-t border-slate-200 px-5 sm:px-8 pt-8 max-w-6xl mx-auto"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 2rem)' }}
+      >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-sm">
           <p className="text-slate-500">
             © {new Date().getFullYear()} HOMESHARES LTD. UrbanStays.io
