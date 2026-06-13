@@ -834,35 +834,35 @@ export default function QuestsPage() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
+          className="text-center mb-8 sm:mb-12"
         >
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <Trophy className="w-12 h-12 text-amber-500" />
-            <h1 className="text-4xl font-bold text-slate-900">Quest Center</h1>
+          <div className="flex flex-wrap items-center justify-center gap-3 mb-3 sm:mb-4">
+            <Trophy className="w-9 h-9 sm:w-12 sm:h-12 text-amber-500" />
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900">Quest Center</h1>
           </div>
-          <p className="text-xl text-slate-600">
+          <p className="text-base sm:text-xl text-slate-600 px-2">
             Complete quests to earn Urban Points and unlock exclusive rewards!
           </p>
         </motion.div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-2xl mx-auto mb-8">
+        <div className="grid grid-cols-3 gap-3 sm:gap-6 max-w-2xl mx-auto mb-8">
           <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-2xl hover:shadow-lg transition-shadow">
-            <CardContent className="p-6 text-center">
-              <div className="text-4xl font-bold text-amber-600 mb-2">{metrics.totalPoints}</div>
-              <div className="text-sm text-slate-600 font-medium">Total Points Earned</div>
+            <CardContent className="p-4 sm:p-6 text-center">
+              <div className="text-2xl sm:text-4xl font-bold text-amber-600 mb-1 sm:mb-2 break-words">{metrics.totalPoints}</div>
+              <div className="text-[11px] sm:text-sm text-slate-600 font-medium">Total Points</div>
             </CardContent>
           </Card>
           <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-2xl hover:shadow-lg transition-shadow">
-            <CardContent className="p-6 text-center">
-              <div className="text-4xl font-bold text-green-600 mb-2">{metrics.completedCount}</div>
-              <div className="text-sm text-slate-600 font-medium">Quests Completed</div>
+            <CardContent className="p-4 sm:p-6 text-center">
+              <div className="text-2xl sm:text-4xl font-bold text-green-600 mb-1 sm:mb-2 break-words">{metrics.completedCount}</div>
+              <div className="text-[11px] sm:text-sm text-slate-600 font-medium">Completed</div>
             </CardContent>
           </Card>
           <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-2xl hover:shadow-lg transition-shadow">
-            <CardContent className="p-6 text-center">
-              <div className="text-4xl font-bold text-blue-600 mb-2">{metrics.progressPercent}%</div>
-              <div className="text-sm text-slate-600 font-medium">Progress</div>
+            <CardContent className="p-4 sm:p-6 text-center">
+              <div className="text-2xl sm:text-4xl font-bold text-blue-600 mb-1 sm:mb-2 break-words">{metrics.progressPercent}%</div>
+              <div className="text-[11px] sm:text-sm text-slate-600 font-medium">Progress</div>
             </CardContent>
           </Card>
         </div>

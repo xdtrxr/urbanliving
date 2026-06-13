@@ -241,9 +241,9 @@ export default function TripPlannerPage() {
                     </Link>
                 </div>
 
-                <header className="mb-8">
-                    <h1 className="text-4xl font-bold text-slate-900">{trip.name}</h1>
-                    <p className="text-lg text-slate-600">
+                <header className="mb-6 sm:mb-8">
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 break-words">{trip.name}</h1>
+                    <p className="text-base sm:text-lg text-slate-600">
                         Your personalized itinerary for {property.location.city}, {property.location.country}.
                     </p>
                 </header>

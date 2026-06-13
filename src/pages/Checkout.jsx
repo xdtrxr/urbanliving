@@ -399,39 +399,76 @@ export default function CheckoutPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Booking confirmation modal — full-screen backdrop, centered card,
+          impossible to miss on any device. Replaces the earlier top-anchored
+          toast that mobile users were missing or scrolling past. */}
       <AnimatePresence>
         {showSuccessMessage && availabilityStatus === 'pending' && (
           <motion.div
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 max-w-lg w-full mx-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            onClick={() => setShowSuccessMessage(false)}
           >
-            <Alert className="bg-green-50 border-green-200 shadow-2xl">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <AlertTitle className="text-green-900 font-bold">Request Submitted Successfully! 🎉</AlertTitle>
-              <AlertDescription className="text-green-800">
-                <div className="space-y-2 mt-2">
-                  <p>Your booking request has been created and is now awaiting admin approval.</p>
-                  <div className="flex gap-2 mt-3">
-                    <Button 
-                      size="sm" 
-                      onClick={() => navigate(createPageUrl('Bookings'))}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      View in Pending Approvals
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => setShowSuccessMessage(false)}
-                    >
-                      Dismiss
-                    </Button>
-                  </div>
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="booking-submitted-title"
+            >
+              {/* Green hero — big checkmark so the success is unmistakable */}
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 px-6 pt-8 pb-6 text-center">
+                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <CheckCircle className="w-9 h-9 text-white" strokeWidth={2.5} />
                 </div>
-              </AlertDescription>
-            </Alert>
+                <h2 id="booking-submitted-title" className="text-2xl font-bold text-white">
+                  Booking submitted
+                </h2>
+                <p className="text-green-50 text-sm mt-1.5">
+                  Awaiting admin approval
+                </p>
+              </div>
+
+              {/* Body — what happens next */}
+              <div className="px-6 py-6">
+                <ol className="space-y-3 mb-6">
+                  <li className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                    <p className="text-sm text-slate-700">Admin reviews your request — usually within minutes.</p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                    <p className="text-sm text-slate-700">Once approved, complete payment to confirm.</p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                    <p className="text-sm text-slate-700">Track everything from <strong>My Bookings</strong>.</p>
+                  </li>
+                </ol>
+
+                <div className="flex flex-col gap-2.5">
+                  <Button
+                    onClick={() => navigate(createPageUrl('Bookings'))}
+                    className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-base"
+                  >
+                    Check my bookings
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowSuccessMessage(false)}
+                    className="w-full h-12 rounded-xl text-base"
+                  >
+                    Stay here
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

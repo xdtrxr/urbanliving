@@ -72,7 +72,7 @@ export default function LoginPage() {
         // Malformed URL — fall through to default
       }
     }
-    navigate('/Search', { replace: true });
+    navigate('/Dashboard', { replace: true });
   };
 
   const handleProvider = (provider) => {
@@ -80,7 +80,7 @@ export default function LoginPage() {
     try {
       // Return to the originally-requested page after auth, falling back to /Search.
       // Same-origin only (already enforced when we read from_url).
-      let returnPath = '/Search';
+      let returnPath = '/Dashboard';
       const params = new URLSearchParams(location.search);
       const fromUrl = params.get('from_url');
       if (fromUrl) {
@@ -201,9 +201,9 @@ export default function LoginPage() {
 
   if (mode === 'verify') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
-          <CardContent className="p-8">
+          <CardContent className="p-6 sm:p-8">
             <div className="text-center mb-6">
               <div className="w-12 h-12 mx-auto mb-3 bg-slate-900 rounded-full flex items-center justify-center">
                 <ShieldCheck className="w-6 h-6 text-amber-400" />
@@ -283,14 +283,52 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
-        <CardContent className="p-8">
+        <CardContent className="p-6 sm:p-8">
           <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-slate-900">UrbanStays</h1>
-            <p className="text-slate-600 mt-1">
-              {mode === 'signin' ? 'Welcome back — sign in to continue' : 'Create an account to get started'}
+            <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-lg">
+              <span className="text-amber-400 font-bold text-lg">US</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+              {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+            </h1>
+            <p className="text-slate-600 mt-1 text-sm sm:text-base">
+              {mode === 'signin'
+                ? 'Sign in to continue to UrbanStays'
+                : 'Sign up to book verified short-stays'}
             </p>
+          </div>
+
+          {/* Tabs — make the Sign In / Sign Up choice front-and-center so new
+              vs. existing users know exactly where they should go. */}
+          <div role="tablist" className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl mb-6">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'signin'}
+              onClick={() => { setMode('signin'); setError(null); }}
+              className={`h-11 rounded-lg text-sm font-semibold transition-colors ${
+                mode === 'signin'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'signup'}
+              onClick={() => { setMode('signup'); setError(null); }}
+              className={`h-11 rounded-lg text-sm font-semibold transition-colors ${
+                mode === 'signup'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Create account
+            </button>
           </div>
 
           <div className="grid grid-cols-1 gap-3 mb-5">
@@ -446,31 +484,8 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="text-center mt-6 text-sm text-slate-600">
-            {mode === 'signin' ? (
-              <>
-                Don&apos;t have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => { setMode('signup'); setError(null); }}
-                  className="text-slate-900 font-semibold hover:underline"
-                >
-                  Create one
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{' '}
-                <button
-                  type="button"
-                  onClick={() => { setMode('signin'); setError(null); }}
-                  className="text-slate-900 font-semibold hover:underline"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
+          {/* Sign in / Create account toggle lives in the tab row at the
+              top — no need for a redundant text link down here. */}
         </CardContent>
       </Card>
     </div>

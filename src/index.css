@@ -155,4 +155,27 @@ button:focus-visible {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Mobile guard: prevent any single oversized child from forcing the whole
+     page into horizontal scrolling on narrow screens. Individual elements
+     that intentionally scroll (carousels, tabs) still get their own
+     overflow-x-auto and aren't affected. */
+  html, body {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* iOS Safari respects safe-area insets only when the viewport meta
+     declares viewport-fit=cover. We added that in index.html — this padding
+     applies it project-wide to anything anchored to the visual edges. */
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Make every native button feel tappable. shadcn already sets min-h-9 on
+     its Button component; this is the floor for raw <button> elements. */
+  button {
+    touch-action: manipulation;
+  }
 }

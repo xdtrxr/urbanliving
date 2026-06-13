@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { useAuth } from '@/lib/AuthContext';
 import {
@@ -42,8 +42,33 @@ const FEATURES = [
   },
 ];
 
+// True when the page is being rendered inside an installed PWA window
+// (Chrome/Edge/Android = display-mode: standalone; iOS = navigator.standalone).
+function isStandalonePWA() {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (window.matchMedia?.('(display-mode: standalone)').matches) return true;
+  } catch { /* matchMedia may throw in some embedded environments */ }
+  return !!window.navigator?.standalone;
+}
+
 export default function LandingPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoadingAuth } = useAuth();
+  const navigate = useNavigate();
+
+  // When launched from a home-screen / desktop PWA install, send guests
+  // straight to the sign-in screen — matches what users expect from a
+  // "native-feeling" app. Authenticated users go to their dashboard.
+  // Browser visitors still see the marketing landing.
+  useEffect(() => {
+    if (isLoadingAuth) return;
+    if (!isStandalonePWA()) return;
+    if (isAuthenticated) {
+      navigate('/Dashboard', { replace: true });
+    } else {
+      navigate('/login', { replace: true });
+    }
+  }, [isAuthenticated, isLoadingAuth, navigate]);
 
   return (
     <div className="min-h-[100dvh] bg-gradient-to-b from-white via-amber-50/30 to-white text-slate-900">

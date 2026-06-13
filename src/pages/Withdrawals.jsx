@@ -139,21 +139,21 @@ export default function WithdrawalsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Withdrawals</h1>
-          <p className="text-slate-600 text-lg">Withdraw your earnings to your bank account</p>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">Withdrawals</h1>
+          <p className="text-slate-600 text-base sm:text-lg">Withdraw your earnings to your bank account</p>
         </div>
 
         {/* Balance Card */}
-        <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl shadow-xl mb-8">
-          <CardContent className="p-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-slate-300 mb-2">Available Balance</p>
-                <p className="text-4xl font-bold">₦{availableBalance.toLocaleString()}</p>
-                <p className="text-sm text-slate-400 mt-2">From referrals and other earnings</p>
+        <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl shadow-xl mb-6 sm:mb-8">
+          <CardContent className="p-5 sm:p-8">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-slate-300 mb-1 sm:mb-2 text-sm sm:text-base">Available Balance</p>
+                <p className="text-2xl sm:text-4xl font-bold break-words">₦{availableBalance.toLocaleString()}</p>
+                <p className="text-xs sm:text-sm text-slate-400 mt-2">From referrals and other earnings</p>
               </div>
-              <Wallet className="w-16 h-16 text-amber-400 opacity-50" />
+              <Wallet className="w-12 h-12 sm:w-16 sm:h-16 text-amber-400 opacity-50 flex-shrink-0" />
             </div>
           </CardContent>
         </Card>

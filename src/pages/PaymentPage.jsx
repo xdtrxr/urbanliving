@@ -590,10 +590,10 @@ export default function PaymentPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 py-6 sm:py-8">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <Button
             variant="ghost"
             onClick={() => {
@@ -607,8 +607,8 @@ export default function PaymentPage() {
             Back
           </Button>
           <div className="text-center">
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">Secure Checkout</h1>
-            <p className="text-slate-600">Complete your booking payment</p>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-2">Secure Checkout</h1>
+            <p className="text-slate-600 text-sm sm:text-base">Complete your booking payment</p>
           </div>
         </div>
 

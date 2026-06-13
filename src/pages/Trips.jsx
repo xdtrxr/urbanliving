@@ -43,15 +43,15 @@ export default function TripsPage() {
 
     return (
         <div className="p-4 md:p-8">
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 sm:mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-900">My Trips</h1>
-                    <p className="text-slate-600">Your planned adventures and itineraries.</p>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">My Trips</h1>
+                    <p className="text-slate-600 text-sm sm:text-base">Your planned adventures and itineraries.</p>
                 </div>
-                <Link to={createPageUrl("Bookings")}>
+                <Link to={createPageUrl("Bookings")} className="self-start sm:self-auto">
                     <Button>
                         <Plus className="w-4 h-4 mr-2" />
-                        Plan New Trip from Booking
+                        Plan from booking
                     </Button>
                 </Link>
             </div>

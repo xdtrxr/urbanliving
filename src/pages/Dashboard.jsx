@@ -17,15 +17,15 @@ function StatCard({ icon, title, value, description }) {
   return (
     <Card className="group bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm hover:shadow-2xl transition-all duration-500 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-blue-400/20 before:via-purple-400/20 before:to-pink-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
       <div className="relative z-10">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors duration-300">{title}</CardTitle>
-          <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3">
+        <CardHeader className="flex flex-row items-start sm:items-center justify-between space-y-0 pb-2 gap-2">
+          <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors duration-300 leading-tight">{title}</CardTitle>
+          <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 flex-shrink-0">
             {icon}
           </div>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-slate-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text transition-all duration-300">{value}</div>
-          <p className="text-xs text-slate-500 group-hover:text-slate-600 transition-colors duration-300">{description}</p>
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text transition-all duration-300 break-words leading-tight">{value}</div>
+          <p className="text-[11px] sm:text-xs text-slate-500 group-hover:text-slate-600 transition-colors duration-300 mt-1">{description}</p>
         </CardContent>
       </div>
     </Card>

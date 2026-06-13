@@ -86,16 +86,16 @@ export default function WishlistPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-8 flex justify-between items-center">
+        <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">My Wishlist</h1>
-            <p className="text-slate-600 text-lg">Your saved properties for later</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">My Wishlist</h1>
+            <p className="text-slate-600 text-base sm:text-lg">Your saved properties for later</p>
           </div>
           <Button
             variant="outline"
             onClick={refreshWishlist}
             disabled={isRefreshing}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 self-start sm:self-auto"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh

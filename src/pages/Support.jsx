@@ -245,19 +245,19 @@ export default function SupportPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <HelpCircle className="w-8 h-8 text-blue-600" />
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900">Support Center</h1>
-                <p className="text-slate-600">Get help with your bookings, payments, and account</p>
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <HelpCircle className="w-7 h-7 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Support Center</h1>
+                <p className="text-slate-600 text-sm sm:text-base">Get help with your bookings, payments, and account</p>
               </div>
             </div>
-            
+
             <Dialog open={showNewTicketDialog} onOpenChange={setShowNewTicketDialog}>
               <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700">
+                <Button className="bg-blue-600 hover:bg-blue-700 self-start sm:self-auto">
                   <Plus className="w-4 h-4 mr-2" />
                   New Ticket
                 </Button>
