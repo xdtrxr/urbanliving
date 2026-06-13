@@ -72,8 +72,12 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-[100dvh] bg-gradient-to-b from-white via-amber-50/30 to-white text-slate-900">
-      {/* Top nav — minimal, just brand + sign in / dashboard */}
-      <header className="px-5 sm:px-8 pt-6 pb-2 flex items-center justify-between max-w-6xl mx-auto">
+      {/* Top nav — minimal, just brand + sign in / dashboard.
+          paddingTop respects the iOS status bar in standalone PWA mode. */}
+      <header
+        className="px-5 sm:px-8 pb-2 flex items-center justify-between max-w-6xl mx-auto"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
+      >
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
             <Home className="w-5 h-5 text-amber-400" strokeWidth={2.5} />

@@ -290,7 +290,16 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
         )}
 
         <main className="flex-1 flex flex-col relative">
-          <header className="absolute top-4 sm:top-6 left-4 sm:left-6 right-4 sm:right-6 z-10 bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-lg rounded-2xl px-4 py-2">
+          {/* The floating header has to clear the iOS status bar when the app
+              runs in standalone PWA mode (otherwise the time / battery icons
+              cover the Menu button). env(safe-area-inset-top) is 0 in the
+              browser and ~47px on iPhone with Dynamic Island. */}
+          <header
+            className="absolute left-4 sm:left-6 right-4 sm:right-6 z-10 bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-lg rounded-2xl px-4 py-2"
+            style={{
+              top: 'calc(env(safe-area-inset-top, 0px) + 1rem)',
+            }}
+          >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 {user && (
@@ -343,7 +352,12 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
             </div>
           </header>
 
-          <div className="flex-1 overflow-auto pt-20 sm:pt-24">
+          {/* Push content below the floating header. Same safe-area math so
+              the gap stays consistent regardless of where the header lands. */}
+          <div
+            className="flex-1 overflow-auto"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 5rem)' }}
+          >
             {children}
           </div>
         </main>

@@ -57,7 +57,12 @@ export default function InstallPage() {
 
   return (
     <div className="min-h-[100dvh] bg-[radial-gradient(ellipse_at_top,_#1a0e08_0%,_#0a0a0a_55%,_#000000_100%)] text-white">
-      <div className="max-w-2xl mx-auto px-5 sm:px-6 py-12 sm:py-20">
+      {/* paddingTop accounts for the iOS status bar in standalone PWA mode so
+          the hero icon never sits behind the time / Dynamic Island. */}
+      <div
+        className="max-w-2xl mx-auto px-5 sm:px-6 pb-12 sm:pb-20"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3rem)' }}
+      >
         {/* Hero */}
         <div className="flex flex-col items-center text-center mb-10">
           <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 shadow-[0_0_60px_-10px_rgba(245,158,11,0.6)] flex items-center justify-center mb-6">
