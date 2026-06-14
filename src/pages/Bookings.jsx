@@ -422,10 +422,10 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                     </Link>
                   )}
                   {booking.status === 'confirmed' && (
-                    <Link to={createPageUrl(`TripPlanner?booking_id=${booking.id}`)}>
+                    <Link to={createPageUrl(`PlanTrip?property_booking_id=${booking.id}`)}>
                       <Button size="sm" className="rounded-xl bg-slate-900 hover:bg-slate-800">
                         <Compass className="w-4 h-4 mr-2" />
-                        Plan Trip
+                        Add a Ride
                       </Button>
                     </Link>
                   )}

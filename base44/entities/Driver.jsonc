@@ -1,0 +1,72 @@
+{
+  "name": "Driver",
+  "type": "object",
+  "description": "A chauffeur on the UrbanStays roster. Drivers are a small pool independent of the vehicle inventory — admin assigns a driver to each confirmed RideBooking. One driver can pilot any vehicle on different days.",
+  "properties": {
+    "full_name": {
+      "type": "string",
+      "description": "Driver's full name. Revealed to the guest only after the booking is confirmed + paid."
+    },
+    "phone": {
+      "type": "string",
+      "description": "Driver's contact phone (E.164 or local format). Revealed to the guest only after the booking is confirmed + paid."
+    },
+    "photo": {
+      "type": "string",
+      "description": "Driver portrait URL — helps the guest recognize the driver on pickup."
+    },
+    "city": {
+      "type": "string",
+      "enum": ["Abuja", "Lagos"],
+      "description": "Primary city the driver operates in"
+    },
+    "languages": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Languages spoken (English, Pidgin, Hausa, Yoruba, Igbo, French, etc.)"
+    },
+    "years_experience": {
+      "type": "number",
+      "description": "Years the driver has been chauffeuring"
+    },
+    "bio": {
+      "type": "string",
+      "description": "Short blurb shown on the confirmed-booking driver card"
+    },
+    "licence_number": {
+      "type": "string",
+      "description": "Driver's licence number for internal records (never shown to guests)"
+    },
+    "licence_expiry": {
+      "type": "string",
+      "format": "date",
+      "description": "Driver's licence expiry — admin gets a reminder when this approaches"
+    },
+    "rating": {
+      "type": "number",
+      "default": 0,
+      "description": "Average guest rating 0-5"
+    },
+    "trips_completed": {
+      "type": "number",
+      "default": 0
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Admin toggle — inactive drivers don't appear in the assignment picker"
+    },
+    "admin_approved": {
+      "type": "boolean",
+      "default": false,
+      "description": "Admin must explicitly approve a driver before they can be assigned to bookings"
+    }
+  },
+  "required": ["full_name", "phone", "city"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

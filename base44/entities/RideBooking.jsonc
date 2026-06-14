@@ -1,0 +1,154 @@
+{
+  "name": "RideBooking",
+  "type": "object",
+  "description": "A booking for a Vehicle (chauffeur-driven hire). Mirrors the Booking entity's lifecycle so the Bookings page can show rides in the same Pending/Upcoming/Active/Completed/Cancelled tabs.",
+  "properties": {
+    "vehicle_id": {
+      "type": "string",
+      "description": "FK to Vehicle"
+    },
+    "vehicle_name": {
+      "type": "string",
+      "description": "Snapshotted at booking time so the row keeps a readable label even if the Vehicle row is later deleted"
+    },
+    "vehicle_image": {
+      "type": "string",
+      "description": "Snapshot of the primary vehicle image at booking time"
+    },
+    "guest_name": {
+      "type": "string"
+    },
+    "guest_email": {
+      "type": "string"
+    },
+    "guest_phone": {
+      "type": "string",
+      "description": "Required at booking time — admin uses this to coordinate pickup"
+    },
+    "service_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The pickup date (YYYY-MM-DD). For multi-day bookings this is day 1."
+    },
+    "start_time": {
+      "type": "string",
+      "description": "Pickup time in HH:MM (24h)"
+    },
+    "duration_tier": {
+      "type": "string",
+      "enum": ["12hr", "24hr", "multi_day", "weekly", "monthly"],
+      "description": "Which pricing tier was selected at checkout"
+    },
+    "duration_days": {
+      "type": "number",
+      "description": "For multi_day bookings, the total number of days. Always 1 for 12hr/24hr."
+    },
+    "end_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Computed end datetime in ISO format. Drives conflict detection."
+    },
+    "pickup_location": {
+      "type": "object",
+      "properties": {
+        "address": { "type": "string" },
+        "area": { "type": "string", "description": "Neighborhood / district (Maitama, Lekki, etc.)" },
+        "city": { "type": "string", "enum": ["Abuja", "Lagos"] },
+        "coordinates": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        }
+      }
+    },
+    "dropoff_location": {
+      "type": "object",
+      "description": "Optional. For known one-way trips. Otherwise the driver follows the guest's plan throughout the booking window.",
+      "properties": {
+        "address": { "type": "string" },
+        "area": { "type": "string" },
+        "city": { "type": "string" }
+      }
+    },
+    "passengers": {
+      "type": "number",
+      "default": 1
+    },
+    "special_requests": {
+      "type": "string"
+    },
+    "total_price": {
+      "type": "number",
+      "description": "Final NGN total billed"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "confirmed", "completed", "cancelled"],
+      "default": "pending"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": ["unpaid", "paid", "refunded"],
+      "default": "unpaid"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When admin approved the availability request — same role as Booking.approved_at"
+    },
+    "payment_deadline": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Auto-cancel timer — same role as Booking.payment_deadline"
+    },
+    "payment_started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "cancel_reason": {
+      "type": "string",
+      "enum": ["admin_rejected", "payment_expired", "user_cancelled", "other"],
+      "description": "Why the booking ended. Matches the Booking enum so the UI can reuse the same status badge component."
+    },
+    "transaction_hash": {
+      "type": "string",
+      "description": "Paystack transaction reference for idempotency"
+    },
+    "driver_id": {
+      "type": "string",
+      "description": "FK to Driver. Assigned by admin when confirming the booking — null until then. RLS hides this field from guests until the booking is confirmed AND paid."
+    },
+    "driver_assigned_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When admin assigned a driver. Used by the UI to know when to surface the driver contact card."
+    },
+    "linked_property_booking_id": {
+      "type": "string",
+      "description": "Optional FK to a Booking row when the ride was added from an existing property stay (Phase 3 hook)"
+    }
+  },
+  "required": ["vehicle_id", "guest_email", "guest_phone", "service_date", "start_time", "duration_tier"],
+  "rls": {
+    "create": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.guest_email": "{{user.email}}" }
+      ]
+    },
+    "read": {
+      "$or": [
+        { "user_condition": { "role": "admin" } },
+        { "data.guest_email": "{{user.email}}" }
+      ]
+    },
+    "update": {
+      "user_condition": { "role": "admin" }
+    },
+    "delete": {
+      "user_condition": { "role": "admin" }
+    }
+  }
+}

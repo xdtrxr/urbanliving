@@ -1,0 +1,126 @@
+{
+  "name": "Vehicle",
+  "type": "object",
+  "description": "A vehicle available for hire on UrbanStays. Vehicles are inventory; drivers are a separate pool (Driver entity) that gets assigned per booking by the admin. One driver can pilot many vehicles over time — admin doesn't need to onboard a driver for every car.",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Display name shown on the browse card (e.g. 'Toyota Prado VXR 2022')"
+    },
+    "brand": {
+      "type": "string",
+      "description": "Vehicle brand / make (Toyota, Mercedes Benz, Lexus, Range Rover, etc.)"
+    },
+    "vehicle_type": {
+      "type": "string",
+      "enum": ["sedan", "suv", "luxury_sedan", "luxury_suv", "executive", "van", "minibus", "coupe"],
+      "description": "Body style — drives filtering on the browse page"
+    },
+    "model_year": {
+      "type": "number",
+      "description": "Year of manufacture (e.g. 2022)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Free-text description shown on the detail page"
+    },
+    "images": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "URLs of vehicle photos. Minimum 5 recommended."
+    },
+    "videos": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional walk-through video URLs."
+    },
+    "city": {
+      "type": "string",
+      "enum": ["Abuja", "Lagos"],
+      "description": "City where the vehicle is based"
+    },
+    "price_12hr_ngn": {
+      "type": "number",
+      "description": "Price for a 12-hour booking in NGN"
+    },
+    "price_24hr_ngn": {
+      "type": "number",
+      "description": "Price for a 24-hour booking in NGN"
+    },
+    "price_per_extra_day_ngn": {
+      "type": "number",
+      "description": "Price per additional day past the first 24h in NGN (used for multi-day bookings)"
+    },
+    "price_per_week_ngn": {
+      "type": "number",
+      "description": "Optional weekly rate — Phase 2 feature, fall back to 7x daily if unset"
+    },
+    "price_per_month_ngn": {
+      "type": "number",
+      "description": "Optional monthly rate — Phase 2 feature"
+    },
+    "max_passengers": {
+      "type": "number",
+      "description": "Seat capacity (excluding the driver)"
+    },
+    "amenities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Features: air_conditioning, leather_seats, wifi, child_seat, bottled_water, sound_system, tinted_windows, executive_partition"
+    },
+    "driver_included": {
+      "type": "boolean",
+      "default": true,
+      "description": "Always true for V1 — every hire comes with a driver from the Driver pool. Kept as a field for future self-drive support."
+    },
+    "fuel_policy": {
+      "type": "string",
+      "enum": ["fuel_included", "guest_pays_fuel", "fuel_capped"],
+      "description": "Who covers fuel"
+    },
+    "fuel_cap_daily_ngn": {
+      "type": "number",
+      "description": "If fuel_policy='fuel_capped', the daily cap in NGN before guest pays."
+    },
+    "pickup_locations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Areas / neighborhoods the vehicle can pick up from (Maitama, Wuse, VI, Lekki, NAIA, MMA, etc.)"
+    },
+    "service_area": {
+      "type": "string",
+      "description": "Free-text description of where the vehicle can take you (e.g. 'Anywhere in Abuja + Suleja. Inter-state on request.')"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Admin toggle — false hides from the browse page without deleting the row"
+    },
+    "admin_approved": {
+      "type": "boolean",
+      "default": false,
+      "description": "Admin must explicitly approve a vehicle before it appears in the browse list"
+    },
+    "rating": {
+      "type": "number",
+      "default": 0,
+      "description": "Average rating 0-5"
+    },
+    "reviews_count": {
+      "type": "number",
+      "default": 0
+    },
+    "min_hours_per_booking": {
+      "type": "number",
+      "default": 12,
+      "description": "Minimum hours a guest can book — V1 default 12 (matches the cheapest tier)"
+    }
+  },
+  "required": ["name", "brand", "vehicle_type", "city", "price_12hr_ngn", "price_24hr_ngn", "images"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": {},
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}
