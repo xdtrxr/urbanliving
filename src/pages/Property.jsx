@@ -13,6 +13,7 @@ import {
 import { createPageUrl } from '@/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext';
+import MediaLightbox from '@/components/media/MediaLightbox';
 
 const amenityIcons = {
   wifi: Wifi,
@@ -41,6 +42,11 @@ export default function PropertyPage() {
     // Pending-approval booking by the current user for this property — they
     // can't request another booking on this property until this one resolves.
     const [pendingApprovalBooking, setPendingApprovalBooking] = useState(null);
+    // Lightbox state — full-screen gallery viewer. Opens on hero/thumbnail
+    // click; `lightboxIndex` is the entry to open at so the viewer starts on
+    // whatever the user tapped.
+    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const [lightboxIndex, setLightboxIndex] = useState(0);
     const location = useLocation();
 
     useEffect(() => {
@@ -128,9 +134,21 @@ export default function PropertyPage() {
                 </Link>
 
                 <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-4 sm:p-6 md:p-8">
-                    {/* Media Gallery */}
+                    {/* Media Gallery — hero is tap-to-open-lightbox; thumbnails jump
+                        to that media inside the lightbox. No more in-place swap. */}
                     <div className="mb-6 sm:mb-8">
-                        <div className="relative w-full aspect-video bg-slate-200 rounded-2xl overflow-hidden shadow-lg">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const heroIdx = selectedMedia
+                                    ? media.findIndex((m) => m.url === selectedMedia.url)
+                                    : 0;
+                                setLightboxIndex(Math.max(0, heroIdx));
+                                setLightboxOpen(true);
+                            }}
+                            className="group relative block w-full aspect-video bg-slate-200 rounded-2xl overflow-hidden shadow-lg cursor-zoom-in"
+                            aria-label="Open photo gallery"
+                        >
                             <AnimatePresence mode="wait">
                                 {selectedMedia && selectedMedia.type === 'image' && (
                                     <motion.img
@@ -141,7 +159,7 @@ export default function PropertyPage() {
                                         transition={{ duration: 0.3 }}
                                         src={selectedMedia.url}
                                         alt={property.title}
-                                        className="w-full h-full object-cover"
+                                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
                                     />
                                 )}
                                 {selectedMedia && selectedMedia.type === 'video' && (
@@ -153,24 +171,37 @@ export default function PropertyPage() {
                                         transition={{ duration: 0.3 }}
                                         src={selectedMedia.url}
                                         className="w-full h-full object-cover"
-                                        controls
-                                        autoPlay
                                         muted
                                         loop
+                                        playsInline
                                     >
                                         Your browser does not support the video tag.
                                     </motion.video>
                                 )}
                             </AnimatePresence>
-                        </div>
-                        
+                            {/* Photo count overlay so users know there's more */}
+                            {media.length > 1 && (
+                                <div className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-xs font-semibold">
+                                    <ImageIcon className="w-3.5 h-3.5" />
+                                    {media.length} photos
+                                </div>
+                            )}
+                        </button>
+
                         {media.length > 1 && (
                             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 mt-4">
                                 {media.map((item, index) => (
                                     <button
+                                        type="button"
                                         key={index}
-                                        onClick={() => setSelectedMedia(item)}
-                                        className={`relative aspect-square rounded-lg overflow-hidden ring-2 transition-all duration-200 ${selectedMedia.url === item.url ? 'ring-amber-500 ring-offset-2' : 'ring-transparent hover:ring-amber-300'}`}
+                                        onClick={() => {
+                                            setLightboxIndex(index);
+                                            setLightboxOpen(true);
+                                            // Also update the hero so when the lightbox closes
+                                            // the page reflects the user's last viewed item.
+                                            setSelectedMedia(item);
+                                        }}
+                                        className={`relative aspect-square rounded-lg overflow-hidden ring-2 transition-all duration-200 ${selectedMedia?.url === item.url ? 'ring-amber-500 ring-offset-2' : 'ring-transparent hover:ring-amber-300'}`}
                                     >
                                         <img src={item.type === 'image' ? item.url : 'https://static.thenounproject.com/png/11204-200.png'} alt={`${property.title} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
                                         {item.type === 'video' && (
@@ -178,12 +209,18 @@ export default function PropertyPage() {
                                                 <PlayCircle className="w-6 h-6 text-white" />
                                             </div>
                                         )}
-                                        <div className={`absolute inset-0 transition-all duration-200 ${selectedMedia.url === item.url ? 'border-2 border-amber-500' : 'border-2 border-transparent'}`} />
                                     </button>
                                 ))}
                             </div>
                         )}
                     </div>
+
+                    <MediaLightbox
+                        media={media}
+                        startIndex={lightboxIndex}
+                        open={lightboxOpen}
+                        onClose={() => setLightboxOpen(false)}
+                    />
 
                     <CardHeader className="p-0 mb-6">
                         <div className="flex flex-col md:flex-row justify-between items-start gap-4">

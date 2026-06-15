@@ -11,6 +11,7 @@ import {
 import { createPageUrl } from '@/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext';
+import MediaLightbox from '@/components/media/MediaLightbox';
 
 const AMENITY_LABELS = {
   air_conditioning: { label: 'Air conditioning', icon: Snowflake },
@@ -42,6 +43,9 @@ export default function VehiclePage() {
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [selectedTier, setSelectedTier] = useState('24hr');
   const [multiDayCount, setMultiDayCount] = useState(2);
+  // Lightbox state — full-screen gallery viewer with swipe / arrow navigation.
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const location = useLocation();
 
   useEffect(() => {
@@ -121,9 +125,21 @@ export default function VehiclePage() {
         </Link>
 
         <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-4 sm:p-6 md:p-8">
-          {/* Media gallery — image + video mix, click thumbnail to swap */}
+          {/* Media gallery — hero opens the full-screen lightbox; thumbnails
+              jump to a specific item inside it. No more click-to-swap. */}
           <div className="mb-6 sm:mb-8">
-            <div className="relative w-full aspect-video bg-slate-200 rounded-2xl overflow-hidden shadow-lg">
+            <button
+              type="button"
+              onClick={() => {
+                const heroIdx = selectedMedia
+                  ? media.findIndex((m) => m.url === selectedMedia.url)
+                  : 0;
+                setLightboxIndex(Math.max(0, heroIdx));
+                setLightboxOpen(true);
+              }}
+              className="group relative block w-full aspect-video bg-slate-200 rounded-2xl overflow-hidden shadow-lg cursor-zoom-in"
+              aria-label="Open photo gallery"
+            >
               <AnimatePresence mode="wait">
                 {selectedMedia?.type === 'image' && (
                   <motion.img
@@ -134,7 +150,7 @@ export default function VehiclePage() {
                     transition={{ duration: 0.3 }}
                     src={selectedMedia.url}
                     alt={vehicle.name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
                   />
                 )}
                 {selectedMedia?.type === 'video' && (
@@ -146,23 +162,34 @@ export default function VehiclePage() {
                     transition={{ duration: 0.3 }}
                     src={selectedMedia.url}
                     className="w-full h-full object-cover"
-                    controls
-                    autoPlay
                     muted
                     loop
+                    playsInline
                   >
                     Your browser does not support the video tag.
                   </motion.video>
                 )}
               </AnimatePresence>
-            </div>
+              {/* Photo count overlay so users know there's more */}
+              {media.length > 1 && (
+                <div className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-xs font-semibold">
+                  <PlayCircle className="w-3.5 h-3.5" />
+                  {media.length} items
+                </div>
+              )}
+            </button>
 
             {media.length > 1 && (
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 mt-4">
                 {media.map((item, index) => (
                   <button
+                    type="button"
                     key={index}
-                    onClick={() => setSelectedMedia(item)}
+                    onClick={() => {
+                      setLightboxIndex(index);
+                      setLightboxOpen(true);
+                      setSelectedMedia(item);
+                    }}
                     className={`relative aspect-square rounded-lg overflow-hidden ring-2 transition-all duration-200 ${
                       selectedMedia?.url === item.url ? 'ring-amber-500 ring-offset-2' : 'ring-transparent hover:ring-amber-300'
                     }`}
@@ -182,6 +209,13 @@ export default function VehiclePage() {
               </div>
             )}
           </div>
+
+          <MediaLightbox
+            media={media}
+            startIndex={lightboxIndex}
+            open={lightboxOpen}
+            onClose={() => setLightboxOpen(false)}
+          />
 
           <CardHeader className="p-0 mb-6">
             <div className="flex flex-col md:flex-row justify-between items-start gap-4">
