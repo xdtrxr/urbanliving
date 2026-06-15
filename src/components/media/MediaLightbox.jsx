@@ -124,7 +124,13 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
         )}
 
         {/* Media slide — draggable for swipe. Each entry keyed by index so the
-            crossfade transition fires when navigating. */}
+            crossfade transition fires when navigating. Constraints:
+              - portrait phones: roughly 92vw x 65vh so the photo never feels
+                like it's swallowing the whole screen and there's breathing
+                room for the close button, counter, and bottom dot indicator
+              - sm+ (tablets / desktop): expand to 88vw x 82vh for impact
+            We size the wrapper to its content (no w-full / h-full) so the
+            image itself dictates the bounding box. */}
         <AnimatePresence mode="wait">
           <motion.div
             key={index}
@@ -136,7 +142,7 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.2}
             onDragEnd={handleDragEnd}
-            className="max-w-[95vw] max-h-[88vh] w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
+            className="flex items-center justify-center cursor-grab active:cursor-grabbing px-4"
             onClick={(e) => e.stopPropagation()}
           >
             {current.type === 'image' ? (
@@ -144,7 +150,7 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
                 src={current.url}
                 alt=""
                 draggable={false}
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl select-none pointer-events-none"
+                className="max-w-[92vw] max-h-[65vh] sm:max-w-[88vw] sm:max-h-[82vh] w-auto h-auto object-contain rounded-lg shadow-2xl select-none pointer-events-none"
               />
             ) : (
               <video
@@ -152,13 +158,32 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
                 controls
                 autoPlay
                 playsInline
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                className="max-w-[92vw] max-h-[65vh] sm:max-w-[88vw] sm:max-h-[82vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
               >
                 Your browser does not support video.
               </video>
             )}
           </motion.div>
         </AnimatePresence>
+
+        {/* Mobile-only dot indicator — replaces the desktop thumbnail strip with
+            a much smaller visual hint of "you can keep swiping". Tap-friendly
+            without crowding the photo. */}
+        {count > 1 && (
+          <div className="sm:hidden absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm">
+            {media.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setIndex(i)}
+                aria-label={`Show item ${i + 1}`}
+                className={`rounded-full transition-all ${
+                  i === index ? 'w-5 h-1.5 bg-amber-400' : 'w-1.5 h-1.5 bg-white/40'
+                }`}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Thumbnail strip at the bottom — tap to jump. Hidden on very short
             viewports so it doesn't crowd the main media on landscape phones. */}
