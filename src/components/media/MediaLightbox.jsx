@@ -123,48 +123,53 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
           </>
         )}
 
-        {/* Media slide — draggable for swipe. Each entry keyed by index so the
-            crossfade transition fires when navigating. Constraints:
-              - portrait phones: roughly 92vw x 65vh so the photo never feels
-                like it's swallowing the whole screen and there's breathing
-                room for the close button, counter, and bottom dot indicator
-              - sm+ (tablets / desktop): expand to 88vw x 82vh for impact
-            We size the wrapper to its content (no w-full / h-full) so the
-            image itself dictates the bounding box. */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={index}
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -30 }}
-            transition={{ duration: 0.18 }}
-            drag={count > 1 ? 'x' : false}
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.2}
-            onDragEnd={handleDragEnd}
-            className="flex items-center justify-center cursor-grab active:cursor-grabbing px-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {current.type === 'image' ? (
-              <img
-                src={current.url}
-                alt=""
-                draggable={false}
-                className="max-w-[92vw] max-h-[65vh] sm:max-w-[88vw] sm:max-h-[82vh] w-auto h-auto object-contain rounded-lg shadow-2xl select-none pointer-events-none"
-              />
-            ) : (
-              <video
-                src={current.url}
-                controls
-                autoPlay
-                playsInline
-                className="max-w-[92vw] max-h-[65vh] sm:max-w-[88vw] sm:max-h-[82vh] w-auto h-auto object-contain rounded-lg shadow-2xl"
-              >
-                Your browser does not support video.
-              </video>
-            )}
-          </motion.div>
-        </AnimatePresence>
+        {/* Media slide — fills the entire viewport area minus reserved control
+            zones (top for close button + counter, bottom for dot indicator /
+            thumbnails). Image uses object-contain so it scales up to use ALL
+            available space while preserving aspect ratio — minimal black
+            margin around the photo on every screen. */}
+        <div
+          className="absolute inset-0 flex items-center justify-center pointer-events-none px-3 sm:px-6"
+          style={{
+            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4rem)',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 4rem)',
+          }}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -30 }}
+              transition={{ duration: 0.18 }}
+              drag={count > 1 ? 'x' : false}
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.2}
+              onDragEnd={handleDragEnd}
+              className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {current.type === 'image' ? (
+                <img
+                  src={current.url}
+                  alt=""
+                  draggable={false}
+                  className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-2xl select-none pointer-events-none"
+                />
+              ) : (
+                <video
+                  src={current.url}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-2xl"
+                >
+                  Your browser does not support video.
+                </video>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
         {/* Mobile-only dot indicator — replaces the desktop thumbnail strip with
             a much smaller visual hint of "you can keep swiping". Tap-friendly
