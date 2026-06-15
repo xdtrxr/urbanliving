@@ -48,6 +48,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // NEW Tabs components
 import LeadsAdmin from '@/components/admin/LeadsAdmin';
 import ConfirmedBookingsAdmin from '@/components/admin/ConfirmedBookingsAdmin';
+import VehiclesAdmin from '@/components/admin/VehiclesAdmin';
+import { Car } from 'lucide-react';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -1088,22 +1090,32 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* NEW: Tabs for Manual Entry and Property Management */}
+        {/* NEW: Tabs for Manual Entry, Property Management, Vehicles, and Leads */}
         <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 mb-8">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1">
             <TabsTrigger value="add-manual">
               <Plus className="w-4 h-4 mr-2" />
-              {editingPropertyId ? 'Edit Property' : 'Add New Property'}
+              <span className="hidden sm:inline">{editingPropertyId ? 'Edit Property' : 'Add Property'}</span>
+              <span className="sm:hidden">Property</span>
             </TabsTrigger>
             <TabsTrigger value="manage-properties">
               <List className="w-4 h-4 mr-2" />
-              Manage Properties
+              <span className="hidden sm:inline">Manage Properties</span>
+              <span className="sm:hidden">Manage</span>
+            </TabsTrigger>
+            <TabsTrigger value="vehicles">
+              <Car className="w-4 h-4 mr-2" />
+              Vehicles
             </TabsTrigger>
             <TabsTrigger value="leads">
               <Users className="w-4 h-4 mr-2" />
               Leads
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="vehicles">
+            <VehiclesAdmin />
+          </TabsContent>
 
           <TabsContent value="add-manual">
             <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
