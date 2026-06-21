@@ -519,13 +519,13 @@ export default function CheckoutPage() {
           >
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Complete Your Booking</h1>
-            <p className="text-slate-600">You're just steps away from your perfect stay.</p>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 break-words">Complete Your Booking</h1>
+            <p className="text-slate-600 text-sm sm:text-base">You're just steps away from your perfect stay.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           <div className="space-y-6">
             <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden">
               <img

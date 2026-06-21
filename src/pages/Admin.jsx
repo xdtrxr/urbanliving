@@ -759,25 +759,25 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Database className="w-8 h-8 text-slate-900" />
-            <h1 className="text-3xl font-bold text-slate-900">Property Data Admin</h1>
-            <Badge className="bg-red-100 text-red-800 border-red-200">Admin Only</Badge>
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+            <Database className="w-7 h-7 sm:w-8 sm:h-8 text-slate-900 flex-shrink-0" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 break-words min-w-0">Property Data Admin</h1>
+            <Badge className="bg-red-100 text-red-800 border-red-200 text-[10px] sm:text-xs">Admin Only</Badge>
           </div>
-          <p className="text-slate-600 text-lg">Manage property data via manual entry or live data fetch</p>
+          <p className="text-slate-600 text-sm sm:text-lg">Manage property data via manual entry or live data fetch</p>
         </div>
 
         {/* Platform Overview */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-6 sm:mb-8">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Briefcase className="w-5 h-5" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <Briefcase className="w-5 h-5 flex-shrink-0" />
                 Platform Overview
               </CardTitle>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-500">
+              <div className="flex items-center justify-between sm:justify-end gap-3">
+                <span className="text-[11px] sm:text-xs text-slate-500">
                   {platformStatsAt ? `Updated ${platformStatsAt.toLocaleTimeString()}` : 'Loading...'}
                 </span>
                 <Button
@@ -785,7 +785,7 @@ export default function AdminPage() {
                   size="sm"
                   onClick={() => loadPlatformStats()}
                   disabled={isRefreshingPlatformStats}
-                  className="rounded-xl"
+                  className="rounded-xl flex-shrink-0"
                 >
                   <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingPlatformStats ? 'animate-spin' : ''}`} />
                   Refresh
@@ -1458,7 +1458,7 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end space-x-3">
+                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
                     <Button
                       type="button"
                       variant="outline"
@@ -1470,13 +1470,14 @@ export default function AdminPage() {
                         setActiveAdminTab('manage-properties'); // Go back to manage tab
                       }}
                       disabled={isSavingProperty}
+                      className="w-full sm:w-auto"
                     >
                       Cancel
                     </Button>
                     <Button
                       type="submit"
                       disabled={isSavingProperty || isUploadingImages || isUploadingVideos}
-                      className="bg-green-600 hover:bg-green-700"
+                      className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
                     >
                       {isSavingProperty ? (
                         <>
@@ -1496,16 +1497,17 @@ export default function AdminPage() {
           <TabsContent value="manage-properties">
             <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <List className="w-5 h-5" />
-                    Property Management ({properties.length} properties)
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg min-w-0">
+                    <List className="w-5 h-5 flex-shrink-0" />
+                    <span className="truncate">Property Management ({properties.length})</span>
                   </CardTitle>
                   <Button
                     onClick={loadProperties}
                     disabled={isLoadingProperties}
                     variant="outline"
                     size="sm"
+                    className="self-start sm:self-auto flex-shrink-0"
                   >
                     {isLoadingProperties ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1697,14 +1699,14 @@ export default function AdminPage() {
               <div className="md:col-span-2 flex flex-col">
                 {selectedTicket ? (
                   <>
-                    <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-200">
-                      <div>
-                        <h3 className="font-bold text-slate-900">{selectedTicket.subject}</h3>
-                        <p className="text-sm text-slate-600">From: {selectedTicket.user_email}</p>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 pb-4 border-b border-slate-200">
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-slate-900 truncate">{selectedTicket.subject}</h3>
+                        <p className="text-sm text-slate-600 truncate">From: {selectedTicket.user_email}</p>
                       </div>
-                      <div>
+                      <div className="flex-shrink-0">
                         <Select value={selectedTicket.status} onValueChange={handleUpdateTicketStatus}>
-                          <SelectTrigger className="w-[180px] rounded-xl">
+                          <SelectTrigger className="w-full sm:w-[180px] rounded-xl">
                             <SelectValue placeholder="Update status" />
                           </SelectTrigger>
                           <SelectContent>

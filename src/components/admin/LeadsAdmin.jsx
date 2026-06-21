@@ -80,14 +80,14 @@ export default function LeadsAdmin() {
 
   return (
     <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="w-6 h-6 text-amber-500" /> Leads
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <Users className="w-6 h-6 text-amber-500 flex-shrink-0" /> Leads
           </CardTitle>
-          <CardDescription>Captured by Agent Nova — work them through the pipeline.</CardDescription>
+          <CardDescription className="text-xs sm:text-sm">Captured by Agent Nova — work them through the pipeline.</CardDescription>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger className="h-10 w-44 rounded-xl">
               <SelectValue />
@@ -99,7 +99,7 @@ export default function LeadsAdmin() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" onClick={() => load()} className="rounded-xl">
+          <Button variant="outline" size="icon" onClick={() => load()} className="rounded-xl flex-shrink-0">
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
@@ -114,8 +114,8 @@ export default function LeadsAdmin() {
         ) : (
           <div className="space-y-3">
             {filtered.map((lead) => (
-              <div key={lead.id} className="border border-slate-200 rounded-2xl p-4 hover:border-slate-300 transition-colors">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div key={lead.id} className="border border-slate-200 rounded-2xl p-3 sm:p-4 hover:border-slate-300 transition-colors">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-semibold text-slate-900 truncate">{lead.name}</h4>
@@ -142,13 +142,13 @@ export default function LeadsAdmin() {
                       Captured {fmt(lead.created_date)} · source: {lead.source || 'chat'}
                     </p>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex flex-row sm:flex-col items-stretch sm:items-end gap-2 sm:flex-shrink-0">
                     <Select
                       value={lead.status}
                       onValueChange={(v) => updateStatus(lead, v)}
                       disabled={updatingId === lead.id}
                     >
-                      <SelectTrigger className="h-9 w-44 rounded-xl text-sm">
+                      <SelectTrigger className="h-9 flex-1 sm:flex-initial sm:w-44 rounded-xl text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

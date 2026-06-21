@@ -513,7 +513,7 @@ export default function PaymentPage() {
         {/* Payment timer */}
         {msLeft != null && !paymentComplete && (
           <div
-            className={`mb-6 rounded-2xl border px-5 py-4 flex items-center justify-between shadow-sm ${
+            className={`mb-6 rounded-2xl border px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm ${
               msLeft < 5 * 60 * 1000
                 ? 'bg-red-50 border-red-200 text-red-800'
                 : 'bg-amber-50 border-amber-200 text-amber-800'
@@ -521,45 +521,46 @@ export default function PaymentPage() {
             role="status"
             aria-live="polite"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <Clock className="w-5 h-5 flex-shrink-0" />
-              <div>
-                <p className="font-semibold">
+              <div className="min-w-0">
+                <p className="font-semibold text-sm sm:text-base">
                   {msLeft > 0 ? 'Complete payment within' : 'Payment window expired'}
                 </p>
-                <p className="text-sm opacity-80">
+                <p className="text-xs sm:text-sm opacity-80">
                   Booking will be auto-cancelled if not paid in time.
                 </p>
               </div>
             </div>
-            <div className="font-mono text-2xl font-bold tabular-nums">
+            <div className="font-mono text-xl sm:text-2xl font-bold tabular-nums self-end sm:self-auto">
               {formatRemaining(msLeft)}
             </div>
           </div>
         )}
 
-        {/* Booking Summary */}
+        {/* Booking Summary — rows stack on mobile so long property titles,
+            emails, and booking IDs don't horizontal-scroll the page. */}
         <Card className="mb-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
-          <CardContent className="p-6">
-            <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Booking Summary</h3>
+          <CardContent className="p-4 sm:p-6">
+            <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-4 sm:p-6">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-4">Booking Summary</h3>
               <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-600">Property:</span>
-                  <span className="font-semibold text-slate-900">{bookingData.property_title}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                  <span className="text-slate-600 text-sm">Property:</span>
+                  <span className="font-semibold text-slate-900 sm:text-right break-words min-w-0">{bookingData.property_title}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-600">Guest Email:</span>
-                  <span className="font-medium text-slate-700">{bookingData.guest_email}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                  <span className="text-slate-600 text-sm">Guest Email:</span>
+                  <span className="font-medium text-slate-700 sm:text-right break-all min-w-0">{bookingData.guest_email}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-600">Booking ID:</span>
-                  <span className="font-mono text-sm text-slate-600">{bookingData.id}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                  <span className="text-slate-600 text-sm">Booking ID:</span>
+                  <span className="font-mono text-xs sm:text-sm text-slate-600 sm:text-right break-all min-w-0">{bookingData.id}</span>
                 </div>
                 <hr className="border-slate-200" />
-                <div className="flex justify-between items-center pt-2">
-                  <span className="text-lg font-bold text-slate-900">Total Amount:</span>
-                  <span className="text-2xl font-bold text-slate-900">
+                <div className="flex justify-between items-baseline gap-3 pt-2">
+                  <span className="text-base sm:text-lg font-bold text-slate-900">Total:</span>
+                  <span className="text-xl sm:text-2xl font-bold text-slate-900 text-right break-words">
                     ₦{bookingData.total_price.toLocaleString()}
                   </span>
                 </div>

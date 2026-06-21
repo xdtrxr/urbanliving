@@ -50,12 +50,12 @@ export default function ConfirmedBookingsAdmin() {
   return (
     <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5" />
-            Confirmed Bookings &amp; Guest IDs
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg min-w-0">
+            <ShieldCheck className="w-5 h-5 flex-shrink-0" />
+            <span className="truncate">Confirmed Bookings &amp; Guest IDs</span>
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={() => load()} disabled={loading} className="rounded-xl">
+          <Button variant="outline" size="sm" onClick={() => load()} disabled={loading} className="rounded-xl self-start sm:self-auto flex-shrink-0">
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
