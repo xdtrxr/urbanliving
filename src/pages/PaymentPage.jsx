@@ -25,16 +25,13 @@ const PaystackLogo = () => (
   </svg>
 );
 
-const StripeLogo = () => (
-  <img 
-    src="https://www.vectorlogo.zone/logos/stripe/stripe-ar21.svg" 
-    alt="Stripe" 
-    className="h-10 w-auto"
-  />
-);
+// Stripe logo + handler removed — Paystack is the sole payment processor.
 
 export default function PaymentPage() {
-  const [selectedMethod, setSelectedMethod] = useState(null);
+  // Paystack is the only processor. Kept as a const rather than removed
+  // because validatePaymentDetails + the button label still reference it,
+  // and it makes re-introducing a picker trivial later.
+  const selectedMethod = 'paystack';
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [isPageLoading, setIsPageLoading] = useState(true);
@@ -230,7 +227,7 @@ export default function PaymentPage() {
       errors.fullName = 'Full name is required';
     }
 
-    if (!selectedMethod || !['paystack', 'stripe'].includes(selectedMethod)) {
+    if (selectedMethod !== 'paystack') {
       errors.method = 'Please select a payment method';
     }
 
@@ -245,38 +242,24 @@ export default function PaymentPage() {
       dlog('Method:', method);
 
       if (bookingData.id && !bookingData.id.startsWith('temp_')) {
-        if (method === 'paystack') {
-          // Server verifies with Paystack (authoritative); also notifies admin and triggers referral reward.
-          const result = await base44.functions.invoke('verifyPaystackPayment', {
-            booking_id: bookingData.id,
-            reference: transactionRef,
+        // Paystack is the only processor — server verifies the transaction
+        // (authoritative), notifies admin, and triggers the referral reward.
+        const result = await base44.functions.invoke('verifyPaystackPayment', {
+          booking_id: bookingData.id,
+          reference: transactionRef,
+        });
+        if (!result?.data?.success) {
+          throw new Error(result?.data?.error || 'Payment verification failed');
+        }
+        dlog('✅ Payment verified server-side');
+        // Award client-driven loyalty milestones (5% + first-booking + 3-in-month)
+        try {
+          await awardBookingMilestones({
+            id: bookingData.id,
+            total_price: bookingData.total_price,
           });
-          if (!result?.data?.success) {
-            throw new Error(result?.data?.error || 'Payment verification failed');
-          }
-          dlog('✅ Payment verified server-side');
-          // Award client-driven loyalty milestones (5% + first-booking + 3-in-month)
-          try {
-            await awardBookingMilestones({
-              id: bookingData.id,
-              total_price: bookingData.total_price,
-            });
-          } catch (e) {
-            console.warn('Loyalty milestone award failed (non-fatal):', e);
-          }
-        } else {
-          // Non-Paystack methods (e.g. Stripe simulation) still go via direct update.
-          await base44.entities.Booking.update(bookingData.id, {
-            payment_status: 'paid',
-            status: 'confirmed',
-            payment_method: method,
-            transaction_hash: transactionRef,
-          });
-          try {
-            await base44.functions.invoke('processReferralReward', { booking_id: bookingData.id });
-          } catch (refErr) {
-            console.warn('Referral reward call failed (non-fatal):', refErr);
-          }
+        } catch (e) {
+          console.warn('Loyalty milestone award failed (non-fatal):', e);
         }
       }
 
@@ -383,57 +366,14 @@ export default function PaymentPage() {
 
     } catch (error) {
       console.error('❌ Paystack error:', error);
-      alert(`Failed to initialize Paystack: ${error.message}. Please try again or use Stripe.`);
-      setIsProcessing(false);
-    }
-  };
-
-  const handleStripePayment = async () => {
-    try {
-      dlog('=== INITIALIZING STRIPE ===');
-      
-      // Load Stripe script if not already loaded
-      if (!window.Stripe) {
-        const script = document.createElement('script');
-        script.src = 'https://js.stripe.com/v3/';
-        script.async = true;
-        document.body.appendChild(script);
-        
-        // FIX: Ensure 'reject' is defined in the Promise constructor
-        await new Promise((resolve, reject) => {
-          script.onload = () => {
-            dlog('✅ Stripe script loaded');
-            resolve();
-          };
-          script.onerror = (err) => {
-            console.error('❌ Failed to load Stripe script', err);
-            reject(err);
-          };
-        });
-      }
-
-      // const stripe = window.Stripe('pk_test_your_stripe_public_key'); // TODO: Replace with actual key
-
-      // For demo purposes, simulate successful payment after a delay
-      dlog('Simulating Stripe payment...');
-      
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const simulatedReference = `stripe_sim_${Date.now()}`;
-      dlog('✅ Simulated Stripe payment successful');
-      
-      await handlePaymentSuccess(simulatedReference, 'stripe');
-      
-    } catch (error) {
-      console.error('❌ Stripe error:', error);
-      alert(`Failed to process Stripe payment: ${error.message}. Please try again or use Paystack.`);
+      alert(`Failed to initialize Paystack: ${error.message}. Please try again.`);
       setIsProcessing(false);
     }
   };
 
   const handlePayment = async () => {
     dlog('=== PAYMENT BUTTON CLICKED ===');
-    
+
     if (!validatePaymentDetails()) {
       dlog('❌ Validation failed', validationErrors);
       return;
@@ -441,19 +381,15 @@ export default function PaymentPage() {
 
     dlog('✅ Validation passed, processing payment...');
     setIsProcessing(true);
-    
+
     try {
-      if (selectedMethod === 'paystack') {
-        await handlePaystackPayment();
-      } else if (selectedMethod === 'stripe') {
-        await handleStripePayment();
-      }
+      await handlePaystackPayment();
     } catch (error) {
       console.error('❌ Payment error:', error);
-      // The individual payment handlers (Paystack/Stripe) should already display alerts and set isProcessing(false)
-      // This catch block is mostly for unexpected errors not handled within those functions.
+      // handlePaystackPayment displays its own alerts + resets isProcessing.
+      // This catch is only for unexpected errors not handled inside that path.
       alert(`An unexpected error occurred during payment initiation: ${error.message}. Please try again.`);
-      setIsProcessing(false); 
+      setIsProcessing(false);
     }
   };
 
@@ -548,46 +484,8 @@ export default function PaymentPage() {
     );
   }
 
-  const PaymentMethodCard = ({ id, logo, name, recommended }) => (
-    <div
-      onClick={() => setSelectedMethod(id)}
-      className={`relative p-6 border-2 rounded-2xl cursor-pointer transition-all duration-300 transform hover:scale-102 ${
-        selectedMethod === id
-          ? 'border-blue-500 bg-blue-50 shadow-xl ring-4 ring-blue-500/20'
-          : 'border-slate-200 hover:border-slate-300 bg-white hover:shadow-lg'
-      }`}
-    >
-      {recommended && (
-        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-          <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
-            RECOMMENDED
-          </span>
-        </div>
-      )}
-      
-      {selectedMethod === id && (
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="absolute -top-2 -right-2"
-        >
-          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
-            <CheckCircle className="w-5 h-5 text-white" />
-          </div>
-        </motion.div>
-      )}
-      
-      <div className="flex flex-col items-center space-y-4">
-        <div className="flex items-center justify-center h-16">
-          {logo}
-        </div>
-        <span className="font-semibold text-slate-800">{name}</span>
-        <p className="text-xs text-slate-500 text-center">
-          {id === 'paystack' ? 'Pay with cards, bank transfer, or USSD' : 'Pay with credit/debit cards'}
-        </p>
-      </div>
-    </div>
-  );
+  // PaymentMethodCard removed — payment-method picker collapsed since
+  // Paystack is the only processor.
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 py-6 sm:py-8">
@@ -720,58 +618,44 @@ export default function PaymentPage() {
           </CardContent>
         </Card>
 
-        {/* Payment Methods */}
+        {/* Payment Method — Paystack only. No selector since there's only one
+            processor; surface the Paystack badge so the guest still recognises
+            who they're paying through, then go straight to the pay button. */}
         <Card className="mb-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
-          <CardHeader className="text-center pb-4">
-            <CardTitle className="text-xl">Select Payment Method</CardTitle>
-            <p className="text-sm text-slate-600 mt-2">Choose how you'd like to pay</p>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <PaymentMethodCard 
-                id="paystack" 
-                logo={<PaystackLogo />} 
-                name="Paystack" 
-                recommended={true}
-              />
-              <PaymentMethodCard 
-                id="stripe" 
-                logo={<StripeLogo />} 
-                name="Stripe" 
-              />
+          <CardContent className="p-6 space-y-5">
+            <div className="flex items-center justify-between gap-4 rounded-2xl border-2 border-slate-900 bg-slate-50 p-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex-shrink-0">
+                  <PaystackLogo />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-900 text-sm sm:text-base">Pay with Paystack</p>
+                  <p className="text-xs text-slate-500">Card, bank transfer, USSD or mobile money</p>
+                </div>
+              </div>
+              <Badge className="bg-green-100 text-green-800 border-green-200 flex-shrink-0">
+                <ShieldCheck className="w-3 h-3 mr-1" />
+                Secured
+              </Badge>
             </div>
 
-            {validationErrors.method && (
-              <p className="text-sm text-red-600 text-center mb-4">{validationErrors.method}</p>
-            )}
-
-            <AnimatePresence>
-              {selectedMethod && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                >
-                  <Button
-                    onClick={handlePayment}
-                    disabled={isProcessing}
-                    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-6 rounded-xl text-lg shadow-lg transition-all duration-300 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="w-5 h-5 mr-2" />
-                        Pay ₦{bookingData.total_price.toLocaleString()} with {selectedMethod === 'paystack' ? 'Paystack' : 'Stripe'}
-                      </>
-                    )}
-                  </Button>
-                </motion.div>
+            <Button
+              onClick={handlePayment}
+              disabled={isProcessing}
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-6 rounded-xl text-lg shadow-lg transition-all duration-300 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="w-5 h-5 mr-2" />
+                  Pay ₦{bookingData.total_price.toLocaleString()} with Paystack
+                </>
               )}
-            </AnimatePresence>
+            </Button>
           </CardContent>
         </Card>
 
@@ -799,7 +683,7 @@ export default function PaymentPage() {
             </div>
 
             <p className="text-center text-xs text-slate-500 mt-4">
-              Payments are processed securely through {selectedMethod === 'paystack' ? 'Paystack' : selectedMethod === 'stripe' ? 'Stripe' : 'our payment partners'}
+              Payments are processed securely through Paystack
             </p>
           </CardContent>
         </Card>
