@@ -365,7 +365,7 @@ export default function SupportPage() {
                         >
                           <div className="flex items-start justify-between mb-2">
                             <h4 className="font-semibold text-slate-900 dark:text-white truncate">{ticket.subject}</h4>
-                            <StatusIcon className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 flex-shrink-0 ml-2" />
+                            <StatusIcon className="w-4 h-4 text-slate-500 dark:text-slate-400 flex-shrink-0 ml-2" />
                           </div>
                           <div className="flex items-center gap-2 mb-2">
                             <Badge className={categoryColors[ticket.category]}>
@@ -423,7 +423,7 @@ export default function SupportPage() {
                           }`}>
                             <p className="text-sm">{message.message}</p>
                             <p className={`text-xs mt-1 ${
-                              message.sender_type === 'user' ? 'text-blue-200' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'
+                              message.sender_type === 'user' ? 'text-blue-200' : 'text-slate-500 dark:text-slate-400'
                             }`}>
                               {new Date(message.created_date).toLocaleTimeString()}
                             </p>

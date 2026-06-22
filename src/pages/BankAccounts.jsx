@@ -252,7 +252,7 @@ export default function BankAccountsPage() {
                             )}
                           </div>
                           <p className="text-slate-600 dark:text-slate-300 mb-1">{account.account_name}</p>
-                          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 font-mono">{account.account_number}</p>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{account.account_number}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -452,7 +452,7 @@ export default function BankAccountsPage() {
                   <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                     <p className="font-semibold text-slate-900 dark:text-white">{accountToDelete.bank_name}</p>
                     <p className="text-sm text-slate-600 dark:text-slate-300">{accountToDelete.account_name}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 font-mono">{accountToDelete.account_number}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{accountToDelete.account_number}</p>
                   </div>
                 )}
                 <p className="mt-3 text-red-600 font-semibold">

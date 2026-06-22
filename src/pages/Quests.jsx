@@ -760,7 +760,7 @@ export default function QuestsPage() {
                 </span>
               </div>
               {config.isDaily && (
-                <p className="text-xs text-center text-slate-500 dark:text-slate-400 dark:text-slate-500">Come back tomorrow!</p>
+                <p className="text-xs text-center text-slate-500 dark:text-slate-400">Come back tomorrow!</p>
               )}
             </div>
           ) : (
@@ -870,7 +870,7 @@ export default function QuestsPage() {
         {/* Progress Bar */}
         <div className="max-w-xl mx-auto mb-12">
           <Progress value={metrics.progressPercent} className="h-3" />
-          <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2 text-center">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
             {metrics.completedCount} of {metrics.totalCount} quests completed
           </p>
         </div>
@@ -921,7 +921,7 @@ export default function QuestsPage() {
                   </CardHeader>
                   <CardContent className="px-6 pb-6 mt-auto">
                     <div className="flex items-center justify-center gap-2 p-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl">
-                      <Gift className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                      <Gift className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                       <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Auto-credited</span>
                     </div>
                   </CardContent>

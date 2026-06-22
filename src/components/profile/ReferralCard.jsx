@@ -102,17 +102,17 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                     <div className="grid grid-cols-3 gap-4 py-4 border-y border-slate-200 dark:border-slate-800">
                         <div className="text-center">
                             <div className="text-2xl font-bold text-slate-900 dark:text-white">{referrals.length}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Total Referrals</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Total Referrals</div>
                         </div>
                         <div className="text-center">
                             <div className="text-2xl font-bold text-green-600">{completedReferrals.length}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Completed</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Completed</div>
                         </div>
                         <div className="text-center">
                             <div className="text-2xl font-bold text-amber-600">
                                 ₦{referrals.reduce((sum, ref) => sum + (ref.amount_earned_ngn || 0), 0).toLocaleString()}
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Earned (NGN)</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Earned (NGN)</div>
                         </div>
                     </div>
                 )}
@@ -134,7 +134,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                                         )}
                                         <div>
                                             <div className="font-medium text-slate-700 dark:text-slate-200">{ref.referred_email}</div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">
                                                 {ref.status === 'booking_completed' ? 'Booked' : 'Signed up'}
                                             </div>
                                         </div>
@@ -144,12 +144,12 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                                             <span>+₦{ref.amount_earned_ngn.toLocaleString()}</span>
                                         </div>
                                     ) : (
-                                        <span className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 italic">Pending</span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400 italic">Pending</span>
                                     )}
                                 </div>
                             ))
                         ) : (
-                            <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center py-4">You haven't referred anyone yet.</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4">You haven't referred anyone yet.</p>
                         )}
                     </div>
                     {pendingReferrals.length > 0 && (

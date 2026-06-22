@@ -108,21 +108,21 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
           )}
           <div className="md:w-2/3 p-4 sm:p-6">
             <CardHeader className="p-0 mb-4">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-2">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-2 break-words">
                     {property ? property.title : "Property details unavailable"}
                   </CardTitle>
                   {property && (
-                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 mb-3">
-                      <MapPin className="w-4 h-4" />
-                      <span className="text-sm font-medium">
+                    <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300 mb-3">
+                      <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm font-medium break-words">
                         {property.location?.city}, {property.location?.country}
                       </span>
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-row flex-wrap sm:flex-col items-start sm:items-end gap-2 flex-shrink-0">
                   <Badge className={`${approvalStatusColors[approvalStatus]} border font-medium`}>
                     {approvalStatus === 'pending' && '⏳ Awaiting Approval'}
                     {approvalStatus === 'approved' && '✅ Approved'}
@@ -145,32 +145,32 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
             <CardContent className="p-0 space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-in</p>
+                    <p className="text-slate-500 dark:text-slate-400">Check-in</p>
                     <p className="font-semibold text-slate-900 dark:text-white">{format(checkIn, "MMM d, yyyy")}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">from 2:00 PM</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">from 2:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-out</p>
+                    <p className="text-slate-500 dark:text-slate-400">Check-out</p>
                     <p className="font-semibold text-slate-900 dark:text-white">{format(checkOut, "MMM d, yyyy")}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">by 12:00 PM</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">by 12:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Guests</p>
+                    <p className="text-slate-500 dark:text-slate-400">Guests</p>
                     <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Total</p>
+                    <p className="text-slate-500 dark:text-slate-400">Total</p>
                     <p className="font-semibold text-slate-900 dark:text-white">₦{booking.total_price.toLocaleString()}</p>
                   </div>
                 </div>
@@ -220,7 +220,7 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
               )}
 
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                   Requested on {format(new Date(booking.created_date), "MMM d, yyyy 'at' h:mm a")}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -290,27 +290,27 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
           )}
           <div className="md:w-2/3 p-4 sm:p-6">
             <CardHeader className="p-0 mb-4">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-2">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-2 break-words">
                     {property ? property.title : "Property details unavailable"}
                   </CardTitle>
                   {property && (
-                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 mb-3">
-                      <MapPin className="w-4 h-4" />
-                      <span className="text-sm font-medium">
+                    <div className="flex items-start gap-2 text-slate-600 dark:text-slate-300 mb-3">
+                      <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm font-medium break-words">
                         {property.location?.city}, {property.location?.country}
                       </span>
                     </div>
                   )}
                   {!property && booking.property_id && !isValidSystemId(booking.property_id) && (
-                    <p className="text-xs text-red-500">Invalid property ID: {booking.property_id}</p>
+                    <p className="text-xs text-red-500 break-all">Invalid property ID: {booking.property_id}</p>
                   )}
                 </div>
                 {(() => {
                   const s = labelForStatus(booking);
                   return (
-                    <Badge className={`${statusColors[s.key]} border font-medium`}>
+                    <Badge className={`${statusColors[s.key]} border font-medium flex-shrink-0 self-start`}>
                       {s.label}
                     </Badge>
                   );
@@ -321,32 +321,32 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
             <CardContent className="p-0 space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-in</p>
+                    <p className="text-slate-500 dark:text-slate-400">Check-in</p>
                     <p className="font-semibold text-slate-900 dark:text-white">{format(checkIn, "MMM d, yyyy")}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">from 2:00 PM</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">from 2:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-out</p>
+                    <p className="text-slate-500 dark:text-slate-400">Check-out</p>
                     <p className="font-semibold text-slate-900 dark:text-white">{format(checkOut, "MMM d, yyyy")}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">by 12:00 PM</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">by 12:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Guests</p>
+                    <p className="text-slate-500 dark:text-slate-400">Guests</p>
                     <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Total</p>
+                    <p className="text-slate-500 dark:text-slate-400">Total</p>
                     <p className="font-semibold text-slate-900 dark:text-white">₦{booking.total_price.toLocaleString()}</p>
                   </div>
                 </div>
@@ -409,7 +409,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
               })()}
 
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                   Booked on {format(new Date(booking.created_date), "MMM d, yyyy")}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -674,12 +674,12 @@ export default function BookingsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-slate-200 rounded-xl w-48" />
+            <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-48" />
             {Array(3).fill(0).map((_, i) => (
-              <div key={i} className="h-48 bg-slate-200 rounded-3xl" />
+              <div key={i} className="h-48 bg-slate-200 dark:bg-slate-800 rounded-3xl" />
             ))}
           </div>
         </div>
@@ -738,11 +738,11 @@ export default function BookingsPage() {
                   />
                 ))
               ) : (
-                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-12 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-6 sm:p-12 text-center">
                   <div className="text-6xl mb-6">⏳</div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Pending Approvals</h3>
                   <p className="text-slate-600 dark:text-slate-300 mb-6">You don't have any bookings awaiting approval.</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-6">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
                     When you request to book a property, it will appear here while the admin reviews availability.
                   </p>
                   <Link to={createPageUrl("Search")}>
@@ -760,7 +760,7 @@ export default function BookingsPage() {
               {upcoming.length > 0 ? (
                 upcoming.map(renderUpcomingItem)
               ) : (
-                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-12 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-6 sm:p-12 text-center">
                   <div className="text-6xl mb-6">📅</div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Upcoming Bookings</h3>
                   <p className="text-slate-600 dark:text-slate-300 mb-6">Start planning your next adventure!</p>
@@ -779,7 +779,7 @@ export default function BookingsPage() {
               {current.length > 0 ? (
                 current.map(renderUpcomingItem)
               ) : (
-                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-8 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-6 sm:p-8 text-center">
                   <div className="text-6xl mb-4">🏠</div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Current Stays</h3>
                   <p className="text-slate-600 dark:text-slate-300">You don't have any active bookings at the moment.</p>
@@ -802,7 +802,7 @@ export default function BookingsPage() {
                   />
                 ))
               ) : (
-                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-8 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-6 sm:p-8 text-center">
                   <div className="text-6xl mb-4">🕰️</div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Past Bookings</h3>
                   <p className="text-slate-600 dark:text-slate-300">Your booking history will appear here.</p>
@@ -825,7 +825,7 @@ export default function BookingsPage() {
                   />
                 ))
               ) : (
-                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-8 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-6 sm:p-8 text-center">
                   <div className="text-6xl mb-4">✅</div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Cancelled Bookings</h3>
                   <p className="text-slate-600 dark:text-slate-300">You haven't cancelled any bookings.</p>

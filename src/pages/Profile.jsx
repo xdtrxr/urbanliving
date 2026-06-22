@@ -203,7 +203,7 @@ export default function ProfilePage() {
                     className="pl-10 rounded-xl border-slate-200 dark:border-slate-800"
                   />
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   Required for booking confirmations and property communication
                 </p>
               </div>

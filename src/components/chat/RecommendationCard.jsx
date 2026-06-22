@@ -30,7 +30,7 @@ export default function RecommendationCard({ recommendation, onCheckAvailability
           ) : (
             <div className="w-full h-56 bg-slate-200 flex flex-col items-center justify-center">
               <ImageIcon className="w-16 h-16 text-slate-400 dark:text-slate-500" />
-              <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2">Image not available</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Image not available</p>
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />

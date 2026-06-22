@@ -97,7 +97,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
             <h3 className="font-bold text-xl text-slate-900 dark:text-white group-hover:text-amber-600 transition-colors duration-300 line-clamp-1">
               {property.title}
             </h3>
-            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 mt-1">
               <MapPin className="w-4 h-4" />
               <span className="text-sm font-medium">
                 {property.location?.city}, {property.location?.country}
@@ -125,7 +125,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
               <div className="flex items-center gap-1">
                 <Star className="w-4 h-4 text-amber-400 fill-current" />
                 <span className="font-semibold text-slate-900 dark:text-white">{property.rating}</span>
-                <span className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">({property.reviews_count || 0})</span>
+                <span className="text-slate-500 dark:text-slate-400 text-sm">({property.reviews_count || 0})</span>
               </div>
             )}
           </div>

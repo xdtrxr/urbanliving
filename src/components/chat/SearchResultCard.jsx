@@ -93,7 +93,7 @@ export default function SearchResultCard({ property, user: initialUser }) {
               </Button>
             </div>
             
-            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">
+            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 text-xs">
               <MapPin className="w-3 h-3" />
               <span>{property.location?.city}, {property.location?.country}</span>
             </div>

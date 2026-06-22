@@ -221,7 +221,7 @@ export default function PlanTripPage() {
               variant="ghost"
               size="sm"
               onClick={() => setFilters({ city: 'any', type: 'any', seats: 'any' })}
-              className="h-10 rounded-full text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:text-slate-100 px-3"
+              className="h-10 rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 px-3"
             >
               Clear
             </Button>

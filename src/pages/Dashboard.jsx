@@ -25,7 +25,7 @@ function StatCard({ icon, title, value, description }) {
         </CardHeader>
         <CardContent>
           <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text transition-all duration-300 break-words leading-tight">{value}</div>
-          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300 mt-1">{description}</p>
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300 mt-1">{description}</p>
         </CardContent>
       </div>
     </Card>
@@ -247,7 +247,7 @@ export default function DashboardPage() {
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             {dashStatsAt ? `Updated ${dashStatsAt.toLocaleTimeString()}` : 'Loading stats...'}
           </p>
           <Button
@@ -266,28 +266,28 @@ export default function DashboardPage() {
             title="Total Bookings"
             value={dashStats?.bookings.total ?? '—'}
             description="All your trips"
-            icon={<Briefcase className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-500 transition-colors duration-300" />}
+            icon={<Briefcase className="h-4 w-4 text-slate-500 dark:text-slate-400 group-hover:text-blue-500 transition-colors duration-300" />}
           />
           <StatCard
             title="Pending"
             value={dashStats?.bookings.pending ?? '—'}
             description="Awaiting approval or payment"
-            icon={<Clock className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-amber-500 transition-colors duration-300" />}
+            icon={<Clock className="h-4 w-4 text-slate-500 dark:text-slate-400 group-hover:text-amber-500 transition-colors duration-300" />}
           />
           <StatCard
             title="Total Spend"
             value={dashStats ? `₦${dashStats.revenue.paidNGN.toLocaleString()}` : '—'}
             description="Paid bookings"
-            icon={<Wallet className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-green-500 transition-colors duration-300" />}
+            icon={<Wallet className="h-4 w-4 text-slate-500 dark:text-slate-400 group-hover:text-green-500 transition-colors duration-300" />}
           />
           <StatCard
             title="Referral Earnings"
             value={dashStats ? `₦${dashStats.referrals.earningsNGN.toLocaleString()}` : '—'}
             description={dashStats ? `${dashStats.referrals.successful}/${dashStats.referrals.count} successful` : ''}
-            icon={<Gift className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-purple-500 transition-colors duration-300" />}
+            icon={<Gift className="h-4 w-4 text-slate-500 dark:text-slate-400 group-hover:text-purple-500 transition-colors duration-300" />}
           />
         </div>
-        <div className="mt-4 flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
+        <div className="mt-4 flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
           <Heart className="w-4 h-4 text-pink-500" />
           <span>{stats.wishlist} wishlisted properties</span>
         </div>
@@ -342,7 +342,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-amber-600 group-hover:to-orange-600 group-hover:bg-clip-text transition-all duration-300">New Search</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">Find your next destination</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">Find your next destination</p>
                 </div>
               </div>
             </Card>
@@ -355,7 +355,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-indigo-600 group-hover:bg-clip-text transition-all duration-300">Manage Profile</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">Update your preferences</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">Update your preferences</p>
                 </div>
               </div>
             </Card>
@@ -368,7 +368,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-green-600 group-hover:to-emerald-600 group-hover:bg-clip-text transition-all duration-300">All Bookings</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">View your trip history</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">View your trip history</p>
                 </div>
               </div>
             </Card>

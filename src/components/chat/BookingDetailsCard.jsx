@@ -43,34 +43,34 @@ export default function BookingDetailsCard({ booking, property }) {
 
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-start gap-2">
-            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5" />
+            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 mt-0.5" />
             <div>
-              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">Check-in</p>
+              <p className="text-slate-500 dark:text-slate-400 text-xs">Check-in</p>
               <p className="font-semibold text-slate-900 dark:text-white">
                 {format(parseISO(booking.check_in), "MMM d, yyyy")}
               </p>
             </div>
           </div>
           <div className="flex items-start gap-2">
-            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5" />
+            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 mt-0.5" />
             <div>
-              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">Check-out</p>
+              <p className="text-slate-500 dark:text-slate-400 text-xs">Check-out</p>
               <p className="font-semibold text-slate-900 dark:text-white">
                 {format(parseISO(booking.check_out), "MMM d, yyyy")}
               </p>
             </div>
           </div>
           <div className="flex items-start gap-2">
-            <Users className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5" />
+            <Users className="w-4 h-4 text-slate-500 dark:text-slate-400 mt-0.5" />
             <div>
-              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">Guests</p>
+              <p className="text-slate-500 dark:text-slate-400 text-xs">Guests</p>
               <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
             </div>
           </div>
           <div className="flex items-start gap-2">
-            <Wallet className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5" />
+            <Wallet className="w-4 h-4 text-slate-500 dark:text-slate-400 mt-0.5" />
             <div>
-              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">Total</p>
+              <p className="text-slate-500 dark:text-slate-400 text-xs">Total</p>
               <p className="font-semibold text-slate-900 dark:text-white">₦{Number(booking.total_price || 0).toLocaleString()}</p>
             </div>
           </div>
@@ -78,7 +78,7 @@ export default function BookingDetailsCard({ booking, property }) {
 
         {booking.special_requests && (
           <div className="bg-slate-50 rounded-lg p-2 text-xs">
-            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Special Requests:</p>
+            <p className="text-slate-500 dark:text-slate-400">Special Requests:</p>
             <p className="text-slate-700 dark:text-slate-200">{booking.special_requests}</p>
           </div>
         )}

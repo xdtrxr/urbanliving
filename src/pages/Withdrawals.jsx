@@ -244,7 +244,7 @@ export default function WithdrawalsPage() {
                     onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
                     className="mt-1 rounded-xl"
                   />
-                  <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                     Minimum: ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} • Maximum: ₦{availableBalance.toLocaleString()}
                   </p>
                 </div>
@@ -326,11 +326,11 @@ export default function WithdrawalsPage() {
                                 To: {account.bank_name} - {account.account_number}
                               </p>
                             )}
-                            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
                               Requested {format(new Date(withdrawal.created_date), 'MMM d, yyyy • h:mm a')}
                             </p>
                             {withdrawal.processed_at && (
-                              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
                                 Processed {format(new Date(withdrawal.processed_at), 'MMM d, yyyy • h:mm a')}
                               </p>
                             )}

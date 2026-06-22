@@ -104,10 +104,10 @@ function InFlightBookingRow({ booking, onExpire }) {
         <div className="flex-1 min-w-[260px]">
           <p className="font-semibold text-slate-900 dark:text-white">
             {booking.guest_name || booking.guest_email}
-            <span className="text-slate-500 dark:text-slate-400 dark:text-slate-500 font-normal"> · {booking.guest_email}</span>
+            <span className="text-slate-500 dark:text-slate-400 font-normal"> · {booking.guest_email}</span>
           </p>
           <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">
-            <code className="text-xs font-mono text-slate-500 dark:text-slate-400 dark:text-slate-500">{booking.property_id}</code>
+            <code className="text-xs font-mono text-slate-500 dark:text-slate-400">{booking.property_id}</code>
             {' · '}{booking.check_in} → {booking.check_out}
             {' · '}{booking.guests} guest{booking.guests === 1 ? '' : 's'}
             {' · '}₦{(booking.total_price || 0).toLocaleString()}
@@ -125,7 +125,7 @@ function InFlightBookingRow({ booking, onExpire }) {
               }`}>
                 {formatLeft(approvalLeft)}
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">time left after approval</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">time left after approval</p>
             </div>
           )}
           {paymentLeft !== null ? (
@@ -135,7 +135,7 @@ function InFlightBookingRow({ booking, onExpire }) {
               }`}>
                 {formatLeft(paymentLeft)}
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">time left after page opened</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">time left after page opened</p>
             </div>
           ) : (
             <div>
@@ -747,7 +747,7 @@ export default function AdminPage() {
             <p className="text-slate-600 dark:text-slate-300 mb-6">
               You need administrator privileges to access this page.
             </p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Current role: {user.role || 'user'}
             </p>
           </CardContent>
@@ -777,7 +777,7 @@ export default function AdminPage() {
                 Platform Overview
               </CardTitle>
               <div className="flex items-center justify-between sm:justify-end gap-3">
-                <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
                   {platformStatsAt ? `Updated ${platformStatsAt.toLocaleTimeString()}` : 'Loading...'}
                 </span>
                 <Button
@@ -801,7 +801,7 @@ export default function AdminPage() {
                   <Briefcase className="w-4 h-4 text-blue-500" />
                 </div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.bookings.total ?? '—'}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   {platformStats ? `${platformStats.bookings.upcoming} upcoming, ${platformStats.bookings.current} current` : ''}
                 </p>
               </div>
@@ -811,7 +811,7 @@ export default function AdminPage() {
                   <Clock className="w-4 h-4 text-amber-500" />
                 </div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.bookings.pending ?? '—'}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   {platformStats ? `${platformStats.bookings.cancelled} cancelled total` : ''}
                 </p>
               </div>
@@ -823,7 +823,7 @@ export default function AdminPage() {
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {platformStats ? `₦${platformStats.revenue.paidNGN.toLocaleString()}` : '—'}
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   {platformStats ? `₦${platformStats.revenue.pendingNGN.toLocaleString()} pending` : ''}
                 </p>
               </div>
@@ -833,7 +833,7 @@ export default function AdminPage() {
                   <Users className="w-4 h-4 text-purple-500" />
                 </div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.referrals.count ?? '—'}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   {platformStats ? `${platformStats.referrals.successful} successful · ₦${platformStats.referrals.earningsNGN.toLocaleString()} paid out` : ''}
                 </p>
               </div>
@@ -868,9 +868,9 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {isLoadingRequests && pendingRequests.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">Loading requests...</div>
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400 text-sm">Loading requests...</div>
             ) : pendingRequests.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">No pending requests right now.</div>
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400 text-sm">No pending requests right now.</div>
             ) : (
               <div className="space-y-3">
                 {pendingRequests.map((req) => (
@@ -962,9 +962,9 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {isLoadingInFlight && inFlightBookings.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">Loading…</div>
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400 text-sm">Loading…</div>
             ) : inFlightBookings.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">No bookings awaiting payment right now.</div>
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400 text-sm">No bookings awaiting payment right now.</div>
             ) : (
               <div className="space-y-3">
                 {inFlightBookings.map((booking) => (
@@ -1039,7 +1039,7 @@ export default function AdminPage() {
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
                 Fetches live property listings from Airbnb and saves them to your database
               </p>
             </div>
@@ -1259,7 +1259,7 @@ export default function AdminPage() {
                           placeholder="e.g., 20000"
                           className="mt-1"
                         />
-                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Optional refundable deposit for property security</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Optional refundable deposit for property security</p>
                       </div>
                     </div>
                   </div>
@@ -1315,7 +1315,7 @@ export default function AdminPage() {
                         placeholder="e.g., wifi, kitchen, parking"
                         className="mt-1"
                       />
-                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         Common: wifi, kitchen, parking, pool, gym, balcony, air_conditioning, heating, washer, dryer, pets_allowed, smoking_allowed, workspace
                       </p>
                     </div>
@@ -1376,7 +1376,7 @@ export default function AdminPage() {
                           <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         Supported formats: MP4, WebM, AVI, MOV (Max size: 100MB per video)
                       </p>
                       {propertyFormData.videos.length > 0 && (
@@ -1431,7 +1431,7 @@ export default function AdminPage() {
                         placeholder="e.g., +234 801 234 5678"
                         className="mt-1"
                       />
-                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Shown to guests after payment so they can call on arrival.</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Shown to guests after payment so they can call on arrival.</p>
                     </div>
                     <div>
                       <Label htmlFor="arrival_instructions">Arrival Instructions</Label>
@@ -1442,7 +1442,7 @@ export default function AdminPage() {
                         placeholder="Gate code, parking notes, key handover process, landmark directions, etc."
                         className="mt-1 min-h-[80px]"
                       />
-                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Revealed to the guest only after payment confirms.</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Revealed to the guest only after payment confirms.</p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <input
@@ -1521,10 +1521,10 @@ export default function AdminPage() {
                 {isLoadingProperties ? (
                   <div className="text-center py-12">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-slate-400 dark:text-slate-500" />
-                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Loading properties...</p>
+                    <p className="text-slate-500 dark:text-slate-400">Loading properties...</p>
                   </div>
                 ) : properties.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <div className="text-center py-12 text-slate-500 dark:text-slate-400">
                     <Database className="w-12 h-12 mx-auto mb-4 text-slate-300" />
                     <p>No properties found.</p>
                     <p className="text-sm mt-2">Add properties using the form or fetch live data.</p>
@@ -1558,7 +1558,7 @@ export default function AdminPage() {
                                 />
                                 <div>
                                   <p className="font-medium text-slate-900 dark:text-white">{property.title}</p>
-                                  <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">ID: {property.id.substring(0, 8)}...</p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">ID: {property.id.substring(0, 8)}...</p>
                                 </div>
                               </div>
                             </td>
@@ -1687,7 +1687,7 @@ export default function AdminPage() {
                         className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedTicket?.id === ticket.id ? 'bg-blue-50 border-blue-200 border' : 'hover:bg-slate-50 border border-transparent'}`}
                       >
                         <p className="font-semibold text-sm truncate">{ticket.subject}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 truncate">{ticket.user_email}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{ticket.user_email}</p>
                         <Badge variant="outline" className="mt-1 text-xs capitalize">{ticket.status.replace('_', ' ')}</Badge>
                       </div>
                     ))}
@@ -1729,7 +1729,7 @@ export default function AdminPage() {
                             </div>
                         </div>
                       ))}
-                      {ticketMessages.length === 0 && <p className="text-center text-slate-500 dark:text-slate-400 dark:text-slate-500">No messages yet.</p>}
+                      {ticketMessages.length === 0 && <p className="text-center text-slate-500 dark:text-slate-400">No messages yet.</p>}
                     </div>
                     <div className="flex items-center gap-2">
                       <Input
@@ -1746,7 +1746,7 @@ export default function AdminPage() {
                     </div>
                   </>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-center text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <div className="flex items-center justify-center h-full text-center text-slate-500 dark:text-slate-400">
                     <div>
                       <MessageSquare className="w-12 h-12 mx-auto mb-2" />
                       <p>Select a ticket to view the conversation.</p>

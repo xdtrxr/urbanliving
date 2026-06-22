@@ -631,7 +631,7 @@ export default function PaymentPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Pay with Paystack</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Card, bank transfer, USSD or mobile money</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Card, bank transfer, USSD or mobile money</p>
                 </div>
               </div>
               <Badge className="bg-green-100 text-green-800 border-green-200 flex-shrink-0">
@@ -668,7 +668,7 @@ export default function PaymentPage() {
               <span className="font-semibold">Your payment is encrypted & secure</span>
             </div>
             
-            <div className="flex items-center justify-center space-x-8 text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
+            <div className="flex items-center justify-center space-x-8 text-xs text-slate-500 dark:text-slate-400">
               <div className="flex items-center space-x-2">
                 <ShieldCheck className="w-4 h-4 text-green-600" />
                 <span>256-bit SSL</span>
@@ -683,7 +683,7 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            <p className="text-center text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-4">
+            <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-4">
               Payments are processed securely through Paystack
             </p>
           </CardContent>

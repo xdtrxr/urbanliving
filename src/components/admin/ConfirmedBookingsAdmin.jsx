@@ -70,7 +70,7 @@ export default function ConfirmedBookingsAdmin() {
             <Loader2 className="w-5 h-5 animate-spin text-slate-400 dark:text-slate-500" />
           </div>
         ) : bookings.length === 0 ? (
-          <p className="text-center text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm py-6">No confirmed bookings yet.</p>
+          <p className="text-center text-slate-500 dark:text-slate-400 text-sm py-6">No confirmed bookings yet.</p>
         ) : (
           <div className="space-y-2">
             {bookings.map((b) => {

@@ -186,7 +186,7 @@ export default function LeadOtpGate({ lead, onVerified, onCancel }) {
             <button
               type="button"
               onClick={() => { setStep('confirm-email'); setOtpCode(''); setError(null); setInfo(null); }}
-              className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200 flex items-center gap-1"
+              className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200 flex items-center gap-1"
               disabled={working}
             >
               <ArrowLeft className="w-3 h-3" /> Change email

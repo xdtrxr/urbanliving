@@ -171,7 +171,7 @@ export default function SearchPage() {
               variant="ghost"
               size="sm"
               onClick={() => { clearCache(); handleSearch(); }}
-              className="text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200"
+              className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200"
             >
               <RefreshCw className="w-4 h-4 mr-1" />
               Refresh

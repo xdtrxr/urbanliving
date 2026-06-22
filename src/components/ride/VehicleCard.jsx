@@ -51,7 +51,7 @@ export default function VehicleCard({ vehicle }) {
             <h3 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg leading-tight line-clamp-1">
               {vehicle.name}
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {vehicle.brand}{vehicle.model_year ? ` · ${vehicle.model_year}` : ''}
             </p>
           </div>
@@ -69,18 +69,18 @@ export default function VehicleCard({ vehicle }) {
           {/* Pricing row — both 12h and 24h so the guest sees the upgrade math */}
           <div className="flex items-end justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
             <div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">From</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">From</div>
               <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-none">
                 ₦{(price12 || 0).toLocaleString()}
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">/ 12 hours</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">/ 12 hours</div>
             </div>
             {price24 ? (
               <div className="text-right">
                 <div className="text-sm font-semibold text-amber-700">
                   ₦{price24.toLocaleString()}
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">/ 24 hours</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">/ 24 hours</div>
               </div>
             ) : null}
           </div>

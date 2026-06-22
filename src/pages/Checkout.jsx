@@ -563,7 +563,7 @@ export default function CheckoutPage() {
                       className="mt-1"
                       disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                     />
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Check-in from 2:00 PM</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Check-in from 2:00 PM</p>
                   </div>
                   <div>
                     <Label>Check-out Date</Label>
@@ -577,7 +577,7 @@ export default function CheckoutPage() {
                       className="mt-1"
                       disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                     />
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Check-out by 12:00 PM</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Check-out by 12:00 PM</p>
                   </div>
                 </div>
 
@@ -704,7 +704,7 @@ export default function CheckoutPage() {
                   className={`w-full py-3 rounded-xl font-semibold transition-all ${
                     availabilityStatus === 'available' && nights > 0
                       ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl'
-                      : 'bg-slate-300 text-slate-500 dark:text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-300 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                   }`}
                 >
                   {availabilityStatus !== 'available'

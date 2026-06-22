@@ -195,15 +195,15 @@ export default function ReferralTestPage() {
           <CardContent className="space-y-3">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Email</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Email</p>
                 <p className="font-semibold text-slate-900 dark:text-white">{user?.email}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Name</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Name</p>
                 <p className="font-semibold text-slate-900 dark:text-white">{user?.full_name}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Your Referral Code</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Your Referral Code</p>
                 <div className="flex items-center gap-2">
                   <p className="font-mono font-bold text-amber-600">{user?.referral_code || 'Not set'}</p>
                   {user?.referral_code && (
@@ -214,17 +214,17 @@ export default function ReferralTestPage() {
                 </div>
               </div>
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Referred By</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Referred By</p>
                 <p className="font-mono text-slate-900 dark:text-white">{user?.referred_by_code || 'None'}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Prompt Seen</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Prompt Seen</p>
                 <Badge variant={user?.referral_prompt_seen ? 'default' : 'secondary'}>
                   {user?.referral_prompt_seen ? 'Yes' : 'No'}
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Referral Balance</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Referral Balance</p>
                 <p className="font-semibold text-green-600">₦{user?.referral_balance_ngn?.toLocaleString() || 0}</p>
               </div>
             </div>
@@ -267,7 +267,7 @@ export default function ReferralTestPage() {
           <CardContent>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {testResults.length === 0 ? (
-                <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center py-8">No test results yet. Run a check to see results.</p>
+                <p className="text-slate-500 dark:text-slate-400 text-center py-8">No test results yet. Run a check to see results.</p>
               ) : (
                 testResults.map((result, idx) => (
                   <div 
@@ -313,14 +313,14 @@ export default function ReferralTestPage() {
           </CardHeader>
           <CardContent>
             {referrals.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center py-8">No referrals yet. Share your link to get started!</p>
+              <p className="text-slate-500 dark:text-slate-400 text-center py-8">No referrals yet. Share your link to get started!</p>
             ) : (
               <div className="space-y-3">
                 {referrals.map(ref => (
                   <div key={ref.id} className="p-4 border border-slate-200 dark:border-slate-800 rounded-xl flex justify-between items-center">
                     <div>
                       <p className="font-semibold text-slate-900 dark:text-white">{ref.referred_email}</p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         Joined: {new Date(ref.created_date).toLocaleDateString()}
                       </p>
                     </div>
@@ -358,7 +358,7 @@ export default function ReferralTestPage() {
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="font-semibold text-slate-900 dark:text-white">{u.email}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                           Code: <span className="font-mono text-amber-600">{u.referral_code || 'None'}</span>
                         </p>
                       </div>

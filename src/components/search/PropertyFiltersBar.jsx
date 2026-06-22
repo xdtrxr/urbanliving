@@ -131,7 +131,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
           {priceActive && (
             <button
               onClick={() => handlePriceChange([PRICE_MIN, PRICE_MAX])}
-              className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200 underline mt-3"
+              className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200 underline mt-3"
             >
               Reset price
             </button>
@@ -189,7 +189,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
           {amenitiesActive && (
             <button
               onClick={() => onFiltersChange({ ...filters, amenities: [] })}
-              className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200 underline mt-3"
+              className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200 underline mt-3"
             >
               Clear amenities
             </button>
@@ -307,7 +307,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
           variant="ghost"
           size="sm"
           onClick={clearAll}
-          className="h-10 rounded-full text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:text-slate-100 px-3"
+          className="h-10 rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 px-3"
         >
           <X className="w-4 h-4 mr-1" />
           Clear

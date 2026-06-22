@@ -74,10 +74,10 @@ export default function SearchHeader({
                   className={`h-14 rounded-xl justify-start pl-4 font-medium transition-colors ${
                     checkIn
                       ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 text-slate-500 dark:text-slate-400 dark:text-slate-500'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 text-slate-500 dark:text-slate-400'
                   }`}
                 >
-                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500 dark:text-slate-400" />
                   {checkIn ? format(checkIn, "MMM d") : "Check-in"}
                 </Button>
               </PopoverTrigger>
@@ -100,10 +100,10 @@ export default function SearchHeader({
                   className={`h-14 rounded-xl justify-start pl-4 font-medium transition-colors ${
                     checkOut
                       ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 text-slate-500 dark:text-slate-400 dark:text-slate-500'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 text-slate-500 dark:text-slate-400'
                   }`}
                 >
-                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500 dark:text-slate-400" />
                   {checkOut ? format(checkOut, "MMM d") : "Check-out"}
                 </Button>
               </PopoverTrigger>

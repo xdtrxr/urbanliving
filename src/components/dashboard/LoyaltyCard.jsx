@@ -115,7 +115,7 @@ export default function LoyaltyCard({ user }) {
             </div>
           )}
 
-          <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">
+          <div className="text-xs text-slate-500 dark:text-slate-400 text-center group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">
             Earn points through bookings, reviews, and referrals
           </div>
         </CardContent>

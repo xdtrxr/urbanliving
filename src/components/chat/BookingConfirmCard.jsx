@@ -143,7 +143,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
     <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
       <CardContent className="p-5">
         <div className="mb-4">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-1">Confirm your booking</p>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Confirm your booking</p>
           <h4 className="text-lg font-bold text-slate-900 dark:text-white">{booking.property_title}</h4>
           {booking.property_location && (
             <p className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-1 mt-1">
@@ -155,27 +155,27 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
 
         <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs mb-1 flex items-center gap-1">
+            <p className="text-slate-500 dark:text-slate-400 text-xs mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> Check-in
             </p>
             <p className="font-semibold text-slate-900 dark:text-white">{safeDate(booking.check_in)}</p>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500">from 2:00 PM</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">from 2:00 PM</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs mb-1 flex items-center gap-1">
+            <p className="text-slate-500 dark:text-slate-400 text-xs mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> Check-out
             </p>
             <p className="font-semibold text-slate-900 dark:text-white">{safeDate(booking.check_out)}</p>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500">by 12:00 PM</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">by 12:00 PM</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs mb-1 flex items-center gap-1">
+            <p className="text-slate-500 dark:text-slate-400 text-xs mb-1 flex items-center gap-1">
               <Users className="w-3.5 h-3.5" /> Guests
             </p>
             <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs mb-1">Nights</p>
+            <p className="text-slate-500 dark:text-slate-400 text-xs mb-1">Nights</p>
             <p className="font-semibold text-slate-900 dark:text-white">{breakdown.nights || ''}</p>
           </div>
         </div>
@@ -236,7 +236,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
             'Submit Booking Request'
           )}
         </Button>
-        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center mt-2">
+        <p className="text-xs text-slate-500 dark:text-slate-400 text-center mt-2">
           Admin reviews availability via Telegram. Payment happens after approval.
         </p>
       </CardContent>

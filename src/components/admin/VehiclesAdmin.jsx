@@ -283,7 +283,7 @@ export default function VehiclesAdmin() {
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* IDENTITY */}
                 <section>
-                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Vehicle details
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -347,7 +347,7 @@ export default function VehiclesAdmin() {
 
                 {/* MEDIA */}
                 <section>
-                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Media (one URL per line)
                   </h3>
                   <div className="grid grid-cols-1 gap-3">
@@ -365,7 +365,7 @@ export default function VehiclesAdmin() {
                         className="font-mono text-xs"
                         required
                       />
-                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         {linesToArray(form.images).length} image{linesToArray(form.images).length === 1 ? '' : 's'} added
                       </p>
                     </div>
@@ -388,7 +388,7 @@ export default function VehiclesAdmin() {
 
                 {/* LOCATION */}
                 <section>
-                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Location
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -436,7 +436,7 @@ export default function VehiclesAdmin() {
 
                 {/* PRICING */}
                 <section>
-                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Pricing (₦ NGN)
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -480,7 +480,7 @@ export default function VehiclesAdmin() {
 
                 {/* AMENITIES */}
                 <section>
-                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Amenities
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -503,7 +503,7 @@ export default function VehiclesAdmin() {
 
                 {/* FUEL */}
                 <section>
-                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Fuel policy
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -534,14 +534,14 @@ export default function VehiclesAdmin() {
 
                 {/* VISIBILITY */}
                 <section>
-                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Visibility
                   </h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800">
                       <div>
                         <p className="font-medium text-slate-900 dark:text-white text-sm">Active</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Show this vehicle in the browse list</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Show this vehicle in the browse list</p>
                       </div>
                       <Switch
                         checked={form.active}
@@ -551,7 +551,7 @@ export default function VehiclesAdmin() {
                     <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800">
                       <div>
                         <p className="font-medium text-slate-900 dark:text-white text-sm">Admin approved</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Required for guests to see it</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">Required for guests to see it</p>
                       </div>
                       <Switch
                         checked={form.admin_approved}
@@ -601,7 +601,7 @@ export default function VehiclesAdmin() {
             </CardHeader>
             <CardContent>
               {isLoading && vehicles.length === 0 && (
-                <div className="text-center py-12 text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                <div className="text-center py-12 text-slate-500 dark:text-slate-400">
                   <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3" />
                   Loading vehicles…
                 </div>
@@ -611,7 +611,7 @@ export default function VehiclesAdmin() {
                 <div className="text-center py-12">
                   <Car className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <h3 className="font-semibold text-slate-900 dark:text-white mb-1">No vehicles yet</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-4">Add your first vehicle to get started.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Add your first vehicle to get started.</p>
                   <Button onClick={() => setInnerTab('add')}>
                     <Plus className="w-4 h-4 mr-2" />
                     Add a vehicle
@@ -638,7 +638,7 @@ export default function VehiclesAdmin() {
                           <div className="flex flex-wrap items-center gap-2 mb-1">
                             <h4 className="font-bold text-slate-900 dark:text-white truncate">{v.name}</h4>
                             {v.active === false && (
-                              <Badge variant="outline" className="border-slate-300 text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                              <Badge variant="outline" className="border-slate-300 text-slate-500 dark:text-slate-400">
                                 <EyeOff className="w-3 h-3 mr-1" />
                                 Hidden
                               </Badge>
@@ -656,7 +656,7 @@ export default function VehiclesAdmin() {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-2">
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
                             {v.brand} · {v.vehicle_type?.replace(/_/g, ' ')} · {v.city} · {v.max_passengers || 0} seats
                           </p>
                           <div className="flex flex-wrap gap-3 text-xs text-slate-700 dark:text-slate-200">

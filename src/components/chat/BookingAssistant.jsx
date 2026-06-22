@@ -113,10 +113,10 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
                 className={`h-12 rounded-xl justify-start pl-3 transition-colors ${
                   checkIn
                     ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
-                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-400 text-slate-500 dark:text-slate-400 dark:text-slate-500'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-400 text-slate-500 dark:text-slate-400'
                 }`}
               >
-                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500 dark:text-slate-400" />
                 <span>{checkIn ? format(checkIn, "MMM d") : "Check-in"}</span>
               </Button>
             </PopoverTrigger>
@@ -140,10 +140,10 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
                 className={`h-12 rounded-xl justify-start pl-3 transition-colors ${
                   checkOut
                     ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
-                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-400 text-slate-500 dark:text-slate-400 dark:text-slate-500'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-400 text-slate-500 dark:text-slate-400'
                 }`}
               >
-                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500 dark:text-slate-400" />
                 <span>{checkOut ? format(checkOut, "MMM d") : "Check-out"}</span>
               </Button>
             </PopoverTrigger>

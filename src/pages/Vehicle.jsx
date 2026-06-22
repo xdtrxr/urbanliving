@@ -290,11 +290,11 @@ export default function VehiclePage() {
                     <div className="space-y-3 text-sm text-slate-700 dark:text-slate-200">
                       {vehicle.fuel_policy && (
                         <div className="flex items-start gap-3">
-                          <Fuel className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 flex-shrink-0 mt-0.5" />
+                          <Fuel className="w-5 h-5 text-slate-500 dark:text-slate-400 flex-shrink-0 mt-0.5" />
                           <div>
                             <p className="font-semibold text-slate-900 dark:text-white">{FUEL_POLICY_LABELS[vehicle.fuel_policy] || vehicle.fuel_policy}</p>
                             {vehicle.fuel_policy === 'fuel_capped' && vehicle.fuel_cap_daily_ngn ? (
-                              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                 Fuel covered up to ₦{vehicle.fuel_cap_daily_ngn.toLocaleString()}/day. Anything over is on you.
                               </p>
                             ) : null}
@@ -303,7 +303,7 @@ export default function VehiclePage() {
                       )}
                       {vehicle.service_area && (
                         <div className="flex items-start gap-3">
-                          <MapPin className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 flex-shrink-0 mt-0.5" />
+                          <MapPin className="w-5 h-5 text-slate-500 dark:text-slate-400 flex-shrink-0 mt-0.5" />
                           <div>
                             <p className="font-semibold text-slate-900 dark:text-white">Service area</p>
                             <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{vehicle.service_area}</p>
@@ -312,7 +312,7 @@ export default function VehiclePage() {
                       )}
                       {(vehicle.pickup_locations?.length || 0) > 0 && (
                         <div className="flex items-start gap-3">
-                          <MapPin className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 flex-shrink-0 mt-0.5" />
+                          <MapPin className="w-5 h-5 text-slate-500 dark:text-slate-400 flex-shrink-0 mt-0.5" />
                           <div>
                             <p className="font-semibold text-slate-900 dark:text-white">Pickup areas</p>
                             <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{vehicle.pickup_locations.join(', ')}</p>
@@ -348,7 +348,7 @@ export default function VehiclePage() {
               <div className="lg:col-span-1">
                 <Card className="bg-slate-50/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
                   <div className="mb-5">
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
                       Choose a duration
                     </p>
                     <div className="space-y-2">
@@ -368,7 +368,7 @@ export default function VehiclePage() {
                           >
                             <div>
                               <p className="font-semibold text-slate-900 dark:text-white">{tier.label}</p>
-                              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">{tier.suffix}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400">{tier.suffix}</p>
                             </div>
                             <p className="font-bold text-slate-900 dark:text-white">₦{price.toLocaleString()}</p>
                           </button>
@@ -386,7 +386,7 @@ export default function VehiclePage() {
                         >
                           <div>
                             <p className="font-semibold text-slate-900 dark:text-white">Multiple days</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">+ ₦{(vehicle.price_per_extra_day_ngn || 0).toLocaleString()} / extra day</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">+ ₦{(vehicle.price_per_extra_day_ngn || 0).toLocaleString()} / extra day</p>
                           </div>
                           <p className="font-bold text-slate-900 dark:text-white">From ₦{tier24.toLocaleString()}</p>
                         </button>
@@ -432,7 +432,7 @@ export default function VehiclePage() {
                         ₦{computedTotal.toLocaleString()}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       You won&apos;t be charged until admin confirms availability.
                     </p>
                   </div>

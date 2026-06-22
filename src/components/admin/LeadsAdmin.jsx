@@ -110,7 +110,7 @@ export default function LeadsAdmin() {
             <Loader2 className="w-6 h-6 animate-spin text-slate-400 dark:text-slate-500" />
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-center text-slate-500 dark:text-slate-400 dark:text-slate-500 py-10">No leads yet.</p>
+          <p className="text-center text-slate-500 dark:text-slate-400 py-10">No leads yet.</p>
         ) : (
           <div className="space-y-3">
             {filtered.map((lead) => (
@@ -136,7 +136,7 @@ export default function LeadsAdmin() {
                       <span className="flex items-center gap-1.5"><Home className="w-3.5 h-3.5" /> {lead.apartment_type || 'Any'}</span>
                     </div>
                     {lead.special_requests && (
-                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 italic">"{lead.special_requests}"</p>
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 italic">"{lead.special_requests}"</p>
                     )}
                     <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
                       Captured {fmt(lead.created_date)} · source: {lead.source || 'chat'}
@@ -159,7 +159,7 @@ export default function LeadsAdmin() {
                     </Select>
                     <a
                       href={`tel:${lead.phone}`}
-                      className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200"
+                      className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200"
                     >
                       Call
                     </a>

@@ -146,7 +146,7 @@ export default function IdUploadGate({ bookingId, onComplete }) {
     return (
       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-md">
         <CardContent className="p-6 text-center">
-          <Loader2 className="w-6 h-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 mx-auto mb-2 animate-spin" />
+          <Loader2 className="w-6 h-6 text-slate-500 dark:text-slate-400 mx-auto mb-2 animate-spin" />
           <p className="text-sm text-slate-600 dark:text-slate-300">Checking your account for an ID on file…</p>
         </CardContent>
       </Card>
@@ -195,11 +195,11 @@ export default function IdUploadGate({ bookingId, onComplete }) {
             className="block w-full mt-1 text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-900 file:text-white file:text-sm file:font-medium hover:file:bg-slate-800 file:cursor-pointer"
           />
           {file && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Selected: <span className="font-medium text-slate-700 dark:text-slate-200">{file.name}</span> ({(file.size / 1024).toFixed(0)} KB)
             </p>
           )}
-          <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">JPG, PNG, or PDF — max 10 MB.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">JPG, PNG, or PDF — max 10 MB.</p>
         </div>
 
         {error && (
@@ -221,7 +221,7 @@ export default function IdUploadGate({ bookingId, onComplete }) {
           )}
         </Button>
 
-        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center">
+        <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
           Your ID is encrypted and visible only to UrbanStays staff. Required by HOMESHARES policy.
         </p>
       </CardContent>

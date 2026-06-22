@@ -1139,7 +1139,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Agent Nova</h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Your AI Travel Concierge</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Your AI Travel Concierge</p>
               </div>
             </div>
             {user && (
@@ -1147,7 +1147,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                 variant="ghost"
                 size="sm"
                 onClick={startFreshConversation}
-                className="text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200"
+                className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200"
               >
                 <RotateCcw className="w-4 h-4 mr-1" />
                 Start Fresh
@@ -1411,7 +1411,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
 
             {!showBookingAssistant && isIntroComplete && messages.length === 1 && !isLoading && (
               <div className="mt-6">
-                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-3 text-center">Or try one of these:</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3 text-center">Or try one of these:</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {quickPrompts.map((prompt, index) => (
                     <Card 
