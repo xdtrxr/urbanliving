@@ -290,7 +290,12 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
         </Sidebar>
         )}
 
-        <main className="flex-1 flex flex-col relative">
+        {/* min-w-0 is critical: as a flex child <main> would otherwise
+            inherit its content's min-content width and any single oversized
+            descendant (a long booking ID, an un-wrapped status row, a tab
+            strip) would push the whole page sideways. Pinning min-w-0
+            forces the flex layout to respect the parent width. */}
+        <main className="flex-1 min-w-0 flex flex-col relative">
           {/* The floating header has to clear the iOS status bar when the app
               runs in standalone PWA mode (otherwise the time / battery icons
               cover the Menu button). env(safe-area-inset-top) is 0 in the
@@ -362,7 +367,7 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
               Gecko (Firefox), and WebKit (Safari) on both Android and iOS
               — returns 0 anywhere without an inset so no harm on desktop. */}
           <div
-            className="flex-1 overflow-auto"
+            className="flex-1 overflow-y-auto overflow-x-hidden"
             style={{
               paddingTop: 'calc(env(safe-area-inset-top, 0px) + 5rem)',
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
