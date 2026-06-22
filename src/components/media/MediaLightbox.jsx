@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, X, PlayCircle } from 'lucide-react';
 
@@ -16,6 +17,9 @@ import { ChevronLeft, ChevronRight, X, PlayCircle } from 'lucide-react';
 //   - Swipe left / right (mobile) cycles. Threshold prevents accidental swipes.
 //   - Body scroll locked while open so the page underneath doesn't drift.
 //   - Videos auto-play when they become the active slide; pause when navigated away.
+//   - Rendered through a portal to document.body so ancestor filter /
+//     backdrop-filter / transform rules (which create new containing blocks)
+//     can't trap our fixed-position viewer inside a parent's width.
 export default function MediaLightbox({ media, startIndex = 0, open, onClose }) {
   const [index, setIndex] = useState(startIndex);
   const containerRef = useRef(null);
@@ -61,7 +65,8 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
     else if (info.offset.x < -60) goNext();
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <AnimatePresence>
       <motion.div
         ref={containerRef}
@@ -69,7 +74,7 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-sm"
+        className="fixed inset-0 z-[60] bg-black/95"
         onClick={(e) => {
           // Backdrop click — only close if the user clicked the dim layer,
           // not the actual media element.
@@ -228,6 +233,7 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
           </div>
         )}
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
