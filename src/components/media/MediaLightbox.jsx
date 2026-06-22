@@ -69,33 +69,34 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-sm flex items-center justify-center"
+        className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-sm"
         onClick={(e) => {
           // Backdrop click — only close if the user clicked the dim layer,
           // not the actual media element.
           if (e.target === e.currentTarget) onClose?.();
         }}
-        style={{
-          paddingTop: 'env(safe-area-inset-top, 0px)',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        }}
         role="dialog"
         aria-modal="true"
         aria-label="Image viewer"
       >
-        {/* Close button — top-right, large enough to tap with confidence */}
+        {/* Close button — top-right, large enough to tap with confidence.
+            Safe-area aware so it clears the iPhone notch / Dynamic Island. */}
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-4 right-4 z-10 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+          className="absolute right-4 z-10 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Counter — top-left, so the user knows they can keep swiping */}
         {count > 1 && (
-          <div className="absolute top-4 left-4 z-10 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm text-white text-sm font-medium">
+          <div
+            className="absolute left-4 z-10 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm text-white text-sm font-medium"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
+          >
             {index + 1} / {count}
           </div>
         )}
@@ -123,18 +124,15 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
           </>
         )}
 
-        {/* Media slide — fills the ENTIRE viewport. Controls (close, counter,
-            arrows, dots, thumbs) float OVER the image as overlays so we don't
-            waste space reserving bands for them; their backdrop-blur pills
-            stay legible regardless of the photo behind them. The only padding
-            is the safe-area insets so iPhone notches don't clip the image. */}
-        <div
-          className="absolute inset-0 flex items-center justify-center pointer-events-none"
-          style={{
-            paddingTop: 'env(safe-area-inset-top, 0px)',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          }}
-        >
+        {/* Media slide — fills the ENTIRE viewport, edge to edge. Controls
+            (close, counter, arrows, dots, thumbs) float OVER the image as
+            overlays so we don't waste space reserving bands for them; their
+            backdrop-blur pills stay legible regardless of the photo behind
+            them. No safe-area padding here — the image is free to extend
+            behind the iPhone notch / home indicator so it can actually use
+            the whole screen; controls have their own safe-area padding to
+            stay clear of those zones. */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <AnimatePresence mode="wait">
             <motion.div
               key={index}
@@ -149,12 +147,17 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
               className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* w-full h-full (instead of max-w-full max-h-full w-auto h-auto)
+                  forces the img element to fill the viewport box; object-contain
+                  scales the photo to fit while preserving aspect. Without this,
+                  small / awkwardly-sized source images shrank to their intrinsic
+                  size and left huge black margins on tall mobile viewports. */}
               {current.type === 'image' ? (
                 <img
                   src={current.url}
                   alt=""
                   draggable={false}
-                  className="max-w-full max-h-full w-auto h-auto object-contain select-none pointer-events-none"
+                  className="w-full h-full object-contain select-none pointer-events-none"
                 />
               ) : (
                 <video
@@ -162,7 +165,7 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
                   controls
                   autoPlay
                   playsInline
-                  className="max-w-full max-h-full w-auto h-auto object-contain"
+                  className="w-full h-full object-contain"
                 >
                   Your browser does not support video.
                 </video>
@@ -175,7 +178,10 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
             a much smaller visual hint of "you can keep swiping". Tap-friendly
             without crowding the photo. */}
         {count > 1 && (
-          <div className="sm:hidden absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm">
+          <div
+            className="sm:hidden absolute left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm"
+            style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}
+          >
             {media.map((_, i) => (
               <button
                 key={i}
@@ -193,7 +199,10 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
         {/* Thumbnail strip at the bottom — tap to jump. Hidden on very short
             viewports so it doesn't crowd the main media on landscape phones. */}
         {count > 1 && (
-          <div className="hidden sm:flex absolute bottom-4 left-1/2 -translate-x-1/2 z-10 gap-2 max-w-[90vw] overflow-x-auto p-2 rounded-2xl bg-white/5 backdrop-blur-sm">
+          <div
+            className="hidden sm:flex absolute left-1/2 -translate-x-1/2 z-10 gap-2 max-w-[90vw] overflow-x-auto p-2 rounded-2xl bg-white/5 backdrop-blur-sm"
+            style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}
+          >
             {media.map((m, i) => (
               <button
                 key={i}
