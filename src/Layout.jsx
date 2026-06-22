@@ -20,6 +20,7 @@ import { User as UserEntity } from "@/entities/User";
 import ReferralTracker from "@/components/utils/ReferralTracker";
 import { useAuth } from "@/lib/AuthContext";
 import { LogIn } from "lucide-react";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 const navigationItems = [
   {
@@ -184,17 +185,17 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
         }
       `}</style>
       
-      <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
+      <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900">
         {user && (
-        <Sidebar collapsible="icon" className="border-r border-slate-200/60 bg-white/80 backdrop-blur-xl">
-          <SidebarHeader className="border-b border-slate-100 p-4">
+        <Sidebar collapsible="icon" className="border-r border-slate-200/60 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl">
+          <SidebarHeader className="border-b border-slate-100 dark:border-slate-800 p-4">
             <div className="flex items-center gap-3 justify-center group-data-[collapsible=icon]:justify-center">
               <div className="w-8 h-8 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
                 <Home className="w-4 h-4 text-amber-400" />
               </div>
               <div className="sidebar-header-text group-data-[collapsible=icon]:hidden">
-                <h2 className="font-bold text-slate-900 text-base tracking-tight">Urban Stays</h2>
-                <p className="text-xs text-slate-500 font-medium">Luxury Stays Worldwide</p>
+                <h2 className="font-bold text-slate-900 dark:text-white text-base tracking-tight">Urban Stays</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Luxury Stays Worldwide</p>
               </div>
             </div>
           </SidebarHeader>
@@ -206,23 +207,23 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
                   <SidebarMenu className="space-y-1">
                     {menuItems.map((item) => (
                       <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton 
-                          asChild 
-                          className={`relative hover:bg-slate-100/80 transition-all duration-300 rounded-xl group ${
-                            location.pathname === item.url 
-                              ? 'bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-lg' 
-                              : 'text-slate-600 hover:text-slate-900'
+                        <SidebarMenuButton
+                          asChild
+                          className={`relative hover:bg-slate-100/80 dark:hover:bg-slate-800/80 transition-all duration-300 rounded-xl group ${
+                            location.pathname === item.url
+                              ? 'bg-gradient-to-r from-slate-900 to-slate-800 dark:from-amber-500 dark:to-amber-600 text-white shadow-lg'
+                              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                           }`}
                           tooltip={item.title}
                         >
                           <Link to={item.url} onClick={closeMobileSheet} className="flex items-center gap-3 px-3 py-2.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2">
                             <item.icon className={`w-5 h-5 transition-colors flex-shrink-0 ${
-                              location.pathname === item.url ? 'text-amber-400' : 'group-hover:text-amber-500'
+                              location.pathname === item.url ? 'text-amber-400 dark:text-white' : 'group-hover:text-amber-500'
                             }`} />
                             <div className="sidebar-menu-text flex flex-col group-data-[collapsible=icon]:hidden">
                               <span className="font-semibold text-sm leading-tight">{item.title}</span>
                               <span className={`text-[10px] leading-tight ${
-                                location.pathname === item.url ? 'text-slate-300' : 'text-slate-400'
+                                location.pathname === item.url ? 'text-slate-300 dark:text-amber-100' : 'text-slate-400 dark:text-slate-500'
                               }`}>
                                 {item.description}
                               </span>
@@ -236,21 +237,21 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
               </SidebarGroup>
             </div>
             
-            <div className="mt-auto pt-3 border-t border-slate-100">
+            <div className="mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
               <div className="sidebar-footer-text group-data-[collapsible=icon]:hidden">
                 <div className="flex items-center justify-center gap-3 px-3 py-2">
                   <Link
                     to={createPageUrl("PrivacyPolicy")}
                     onClick={closeMobileSheet}
-                    className="text-xs text-slate-500 hover:text-slate-700 transition-colors duration-200"
+                    className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors duration-200"
                   >
                     Privacy policy
                   </Link>
-                  <span className="text-xs text-slate-300">|</span>
+                  <span className="text-xs text-slate-300 dark:text-slate-600">|</span>
                   <Link
                     to={createPageUrl("FAQ")}
                     onClick={closeMobileSheet}
-                    className="text-xs text-slate-500 hover:text-slate-700 transition-colors duration-200"
+                    className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors duration-200"
                   >
                     FAQs
                   </Link>
@@ -295,7 +296,7 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
               cover the Menu button). env(safe-area-inset-top) is 0 in the
               browser and ~47px on iPhone with Dynamic Island. */}
           <header
-            className="absolute left-4 sm:left-6 right-4 sm:right-6 z-10 bg-white/80 backdrop-blur-xl border border-slate-200/60 shadow-lg rounded-2xl px-4 py-2"
+            className="absolute left-4 sm:left-6 right-4 sm:right-6 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800 shadow-lg rounded-2xl px-4 py-2"
             style={{
               top: 'calc(env(safe-area-inset-top, 0px) + 1rem)',
             }}
@@ -307,7 +308,7 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
                     type="button"
                     onClick={toggleSidebar}
                     aria-label="Open navigation menu"
-                    className="flex-shrink-0 inline-flex items-center gap-2 h-10 px-3 sm:px-4 rounded-xl bg-slate-900 text-white hover:bg-slate-800 hover:text-amber-400 shadow-md transition-colors duration-200 font-semibold text-sm"
+                    className="flex-shrink-0 inline-flex items-center gap-2 h-10 px-3 sm:px-4 rounded-xl bg-slate-900 text-white hover:bg-slate-800 hover:text-amber-400 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-950 dark:hover:text-white shadow-md transition-colors duration-200 font-semibold text-sm"
                   >
                     <Menu className="w-5 h-5" />
                     <span className="hidden sm:inline">Menu</span>
@@ -318,7 +319,7 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
                     the wordmark always takes the user to the home (Search) page. */}
                 <Link
                   to={createPageUrl('Search')}
-                  className={`text-xl font-bold text-slate-900 ${user ? 'md:hidden' : ''} flex items-center gap-2 hover:opacity-80 transition-opacity`}
+                  className={`text-xl font-bold text-slate-900 dark:text-white ${user ? 'md:hidden' : ''} flex items-center gap-2 hover:opacity-80 transition-opacity`}
                   aria-label="Urban Stays — go to home"
                 >
                   <span className="w-7 h-7 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-lg flex items-center justify-center">
@@ -327,28 +328,31 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
                   Urban Stays
                 </Link>
               </div>
-              {user ? (
-                <Button
-                  onClick={handleLogout}
-                  variant="ghost"
-                  size="icon"
-                  className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-full"
-                  title="Sign Out"
-                >
-                  <LogOut className="w-5 h-5" />
-                </Button>
-              ) : (
-                <Link to="/login">
+              <div className="flex items-center gap-1">
+                <ThemeToggle />
+                {user ? (
                   <Button
+                    onClick={handleLogout}
                     variant="ghost"
-                    size="sm"
-                    className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-full font-medium"
+                    size="icon"
+                    className="text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 rounded-full"
+                    title="Sign Out"
                   >
-                    <LogIn className="w-4 h-4 mr-2" />
-                    Sign in
+                    <LogOut className="w-5 h-5" />
                   </Button>
-                </Link>
-              )}
+                ) : (
+                  <Link to="/login">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-200 dark:hover:text-white dark:hover:bg-slate-800 rounded-full font-medium"
+                    >
+                      <LogIn className="w-4 h-4 mr-2" />
+                      Sign in
+                    </Button>
+                  </Link>
+                )}
+              </div>
             </div>
           </header>
 

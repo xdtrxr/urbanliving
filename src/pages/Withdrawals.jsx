@@ -128,8 +128,8 @@ export default function WithdrawalsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 animate-spin text-slate-900" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-slate-900 dark:text-white" />
       </div>
     );
   }
@@ -137,11 +137,11 @@ export default function WithdrawalsPage() {
   const availableBalance = user?.referral_balance_ngn || 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">Withdrawals</h1>
-          <p className="text-slate-600 text-base sm:text-lg">Withdraw your earnings to your bank account</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-1 sm:mb-2">Withdrawals</h1>
+          <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">Withdraw your earnings to your bank account</p>
         </div>
 
         {/* Balance Card */}
@@ -151,7 +151,7 @@ export default function WithdrawalsPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-slate-300 mb-1 sm:mb-2 text-sm sm:text-base">Available Balance</p>
                 <p className="text-2xl sm:text-4xl font-bold break-words">₦{availableBalance.toLocaleString()}</p>
-                <p className="text-xs sm:text-sm text-slate-400 mt-2">From referrals and other earnings</p>
+                <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 mt-2">From referrals and other earnings</p>
               </div>
               <Wallet className="w-12 h-12 sm:w-16 sm:h-16 text-amber-400 opacity-50 flex-shrink-0" />
             </div>
@@ -160,10 +160,10 @@ export default function WithdrawalsPage() {
 
         {/* Withdrawal Form */}
         {bankAccounts.length === 0 ? (
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-12 text-center mb-8">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-12 text-center mb-8">
             <CreditCard className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-slate-900 mb-2">No Bank Account Added</h3>
-            <p className="text-slate-600 mb-6">
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Bank Account Added</h3>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
               You need to add a verified bank account before you can withdraw funds
             </p>
             <Link to={createPageUrl('BankAccounts')}>
@@ -198,7 +198,7 @@ export default function WithdrawalsPage() {
             Request Withdrawal
           </Button>
         ) : (
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
             <CardHeader>
               <CardTitle>Request Withdrawal</CardTitle>
               <CardDescription>
@@ -244,7 +244,7 @@ export default function WithdrawalsPage() {
                     onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
                     className="mt-1 rounded-xl"
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                     Minimum: ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} • Maximum: ₦{availableBalance.toLocaleString()}
                   </p>
                 </div>
@@ -292,7 +292,7 @@ export default function WithdrawalsPage() {
 
         {/* Withdrawal History */}
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-slate-900">Withdrawal History</h2>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white">Withdrawal History</h2>
           
           <AnimatePresence>
             {withdrawals.length > 0 ? (
@@ -308,7 +308,7 @@ export default function WithdrawalsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                   >
-                    <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+                    <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -318,19 +318,19 @@ export default function WithdrawalsPage() {
                                 {config.label}
                               </Badge>
                             </div>
-                            <p className="text-2xl font-bold text-slate-900 mb-1">
+                            <p className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
                               ₦{withdrawal.amount.toLocaleString()}
                             </p>
                             {account && (
-                              <p className="text-sm text-slate-600 mb-1">
+                              <p className="text-sm text-slate-600 dark:text-slate-300 mb-1">
                                 To: {account.bank_name} - {account.account_number}
                               </p>
                             )}
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
                               Requested {format(new Date(withdrawal.created_date), 'MMM d, yyyy • h:mm a')}
                             </p>
                             {withdrawal.processed_at && (
-                              <p className="text-xs text-slate-500">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
                                 Processed {format(new Date(withdrawal.processed_at), 'MMM d, yyyy • h:mm a')}
                               </p>
                             )}
@@ -347,10 +347,10 @@ export default function WithdrawalsPage() {
                 );
               })
             ) : (
-              <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-8 text-center">
+              <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-8 text-center">
                 <Send className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-slate-900 mb-2">No Withdrawal History</h3>
-                <p className="text-slate-600">Your withdrawal requests will appear here</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No Withdrawal History</h3>
+                <p className="text-slate-600 dark:text-slate-300">Your withdrawal requests will appear here</p>
               </Card>
             )}
           </AnimatePresence>

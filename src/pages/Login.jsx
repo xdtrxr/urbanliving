@@ -202,7 +202,7 @@ export default function LoginPage() {
   if (mode === 'verify') {
     return (
       <div
-        className="min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4"
+        className="min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4"
         style={{
           paddingTop: 'max(1rem, env(safe-area-inset-top, 0px))',
           paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
@@ -289,7 +289,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
         <CardContent className="p-6 sm:p-8">
           <div className="text-center mb-6">

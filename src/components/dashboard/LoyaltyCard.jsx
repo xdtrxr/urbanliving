@@ -70,14 +70,14 @@ export default function LoyaltyCard({ user }) {
   };
 
   return (
-    <Card className="group bg-white/90 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden rounded-2xl relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-gold-400/20 before:via-amber-400/20 before:to-yellow-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
+    <Card className="group bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden rounded-2xl relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-gold-400/20 before:via-amber-400/20 before:to-yellow-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
       <div className={`h-2 bg-gradient-to-r ${tierInfo.gradient} relative z-10`} />
       <div className="relative z-10">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-amber-600 group-hover:to-gold-600 group-hover:bg-clip-text transition-all duration-300">
+            <CardTitle className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-amber-600 group-hover:to-gold-600 group-hover:bg-clip-text transition-all duration-300">
               <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
-                <TierIcon className="w-5 h-5 text-slate-700 group-hover:text-amber-500 transition-colors duration-300" />
+                <TierIcon className="w-5 h-5 text-slate-700 dark:text-slate-200 group-hover:text-amber-500 transition-colors duration-300" />
               </div>
               Loyalty Status
             </CardTitle>
@@ -88,17 +88,17 @@ export default function LoyaltyCard({ user }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="text-center">
-            <div className="text-3xl font-bold text-slate-900 mb-1 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-gold-600 group-hover:to-amber-600 group-hover:bg-clip-text transition-all duration-300">
+            <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-gold-600 group-hover:to-amber-600 group-hover:bg-clip-text transition-all duration-300">
               {points.toLocaleString()}
             </div>
-            <p className="text-sm text-slate-600 group-hover:text-slate-700 transition-colors duration-300">Urban Points</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-700 dark:text-slate-200 transition-colors duration-300">Urban Points</p>
           </div>
 
           {tierInfo.nextTier && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600 group-hover:text-slate-700 transition-colors duration-300">Progress to {tierInfo.nextTier}</span>
-                <span className="font-semibold text-slate-900 group-hover:text-amber-600 transition-colors duration-300">
+                <span className="text-slate-600 dark:text-slate-300 group-hover:text-slate-700 dark:text-slate-200 transition-colors duration-300">Progress to {tierInfo.nextTier}</span>
+                <span className="font-semibold text-slate-900 dark:text-white group-hover:text-amber-600 transition-colors duration-300">
                   {getPointsToNextTier().toLocaleString()} points to go
                 </span>
               </div>
@@ -115,7 +115,7 @@ export default function LoyaltyCard({ user }) {
             </div>
           )}
 
-          <div className="text-xs text-slate-500 text-center group-hover:text-slate-600 transition-colors duration-300">
+          <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">
             Earn points through bookings, reviews, and referrals
           </div>
         </CardContent>

@@ -400,11 +400,11 @@ export default function PaymentPage() {
 
   if (isPageLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-        <Card className="p-8 text-center bg-white/90 backdrop-blur-sm max-w-md w-full">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
+        <Card className="p-8 text-center bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm max-w-md w-full">
           <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-blue-600" />
-          <p className="text-slate-600 font-medium">Loading payment details...</p>
-          <p className="text-xs text-slate-400 mt-2">Please wait, do not refresh the page</p>
+          <p className="text-slate-600 dark:text-slate-300 font-medium">Loading payment details...</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">Please wait, do not refresh the page</p>
         </Card>
       </div>
     );
@@ -412,12 +412,12 @@ export default function PaymentPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full bg-white/90 backdrop-blur-sm">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
           <CardContent className="p-8 text-center">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-slate-900 mb-2">Payment Error</h2>
-            <p className="text-slate-600 mb-6">{error}</p>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Payment Error</h2>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">{error}</p>
             <div className="space-y-3">
               <Button 
                 onClick={() => navigate(createPageUrl('Search'))}
@@ -441,10 +441,10 @@ export default function PaymentPage() {
 
   if (!bookingData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
-        <Card className="p-8 text-center bg-white/90 backdrop-blur-sm max-w-md w-full">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
+        <Card className="p-8 text-center bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm max-w-md w-full">
           <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <p className="text-slate-600 font-medium">No booking data found</p>
+          <p className="text-slate-600 dark:text-slate-300 font-medium">No booking data found</p>
           <Button 
             onClick={() => navigate(createPageUrl('Search'))}
             className="mt-4"
@@ -465,13 +465,13 @@ export default function PaymentPage() {
           transition={{ duration: 0.4 }}
           className="w-full max-w-md space-y-4"
         >
-          <Card className="bg-white/95 backdrop-blur-sm">
+          <Card className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
             <CardContent className="p-6 text-center">
               <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
                 <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
-              <h2 className="text-xl font-bold text-slate-900 mb-1">Payment Successful</h2>
-              <p className="text-sm text-slate-600">Booking ID: {bookingData.id}</p>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Payment Successful</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-300">Booking ID: {bookingData.id}</p>
             </CardContent>
           </Card>
 
@@ -488,7 +488,7 @@ export default function PaymentPage() {
   // Paystack is the only processor.
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 py-6 sm:py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 py-6 sm:py-8">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="mb-6 sm:mb-8">
@@ -498,15 +498,15 @@ export default function PaymentPage() {
               dlog('Back button clicked');
               navigate(-1);
             }}
-            className="mb-4 hover:bg-white/50"
+            className="mb-4 hover:bg-white/50 dark:bg-slate-900/50"
             disabled={isProcessing}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
           <div className="text-center">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-2">Secure Checkout</h1>
-            <p className="text-slate-600 text-sm sm:text-base">Complete your booking payment</p>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-2">Secure Checkout</h1>
+            <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">Complete your booking payment</p>
           </div>
         </div>
 
@@ -540,27 +540,27 @@ export default function PaymentPage() {
 
         {/* Booking Summary — rows stack on mobile so long property titles,
             emails, and booking IDs don't horizontal-scroll the page. */}
-        <Card className="mb-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
+        <Card className="mb-6 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 shadow-lg">
           <CardContent className="p-4 sm:p-6">
-            <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-4 sm:p-6">
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-4">Booking Summary</h3>
+            <div className="bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 rounded-2xl p-4 sm:p-6">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white mb-4">Booking Summary</h3>
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                  <span className="text-slate-600 text-sm">Property:</span>
-                  <span className="font-semibold text-slate-900 sm:text-right break-words min-w-0">{bookingData.property_title}</span>
+                  <span className="text-slate-600 dark:text-slate-300 text-sm">Property:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white sm:text-right break-words min-w-0">{bookingData.property_title}</span>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                  <span className="text-slate-600 text-sm">Guest Email:</span>
-                  <span className="font-medium text-slate-700 sm:text-right break-all min-w-0">{bookingData.guest_email}</span>
+                  <span className="text-slate-600 dark:text-slate-300 text-sm">Guest Email:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-200 sm:text-right break-all min-w-0">{bookingData.guest_email}</span>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                  <span className="text-slate-600 text-sm">Booking ID:</span>
-                  <span className="font-mono text-xs sm:text-sm text-slate-600 sm:text-right break-all min-w-0">{bookingData.id}</span>
+                  <span className="text-slate-600 dark:text-slate-300 text-sm">Booking ID:</span>
+                  <span className="font-mono text-xs sm:text-sm text-slate-600 dark:text-slate-300 sm:text-right break-all min-w-0">{bookingData.id}</span>
                 </div>
-                <hr className="border-slate-200" />
+                <hr className="border-slate-200 dark:border-slate-800" />
                 <div className="flex justify-between items-baseline gap-3 pt-2">
-                  <span className="text-base sm:text-lg font-bold text-slate-900">Total:</span>
-                  <span className="text-xl sm:text-2xl font-bold text-slate-900 text-right break-words">
+                  <span className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Total:</span>
+                  <span className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white text-right break-words">
                     ₦{bookingData.total_price.toLocaleString()}
                   </span>
                 </div>
@@ -570,7 +570,7 @@ export default function PaymentPage() {
         </Card>
 
         {/* Payment Details Form */}
-        <Card className="mb-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
+        <Card className="mb-6 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 shadow-lg">
           <CardHeader>
             <CardTitle className="text-xl flex items-center gap-2">
               <User className="w-5 h-5" />
@@ -579,11 +579,11 @@ export default function PaymentPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="email" className="text-sm font-semibold text-slate-700">
+              <Label htmlFor="email" className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Email Address *
               </Label>
               <div className="relative mt-2">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
                 <Input
                   id="email"
                   type="email"
@@ -600,7 +600,7 @@ export default function PaymentPage() {
             </div>
 
             <div>
-              <Label htmlFor="fullName" className="text-sm font-semibold text-slate-700">
+              <Label htmlFor="fullName" className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Full Name *
               </Label>
               <Input
@@ -622,7 +622,7 @@ export default function PaymentPage() {
         {/* Payment Method — Paystack only. No selector since there's only one
             processor; surface the Paystack badge so the guest still recognises
             who they're paying through, then go straight to the pay button. */}
-        <Card className="mb-6 bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
+        <Card className="mb-6 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 shadow-lg">
           <CardContent className="p-6 space-y-5">
             <div className="flex items-center justify-between gap-4 rounded-2xl border-2 border-slate-900 bg-slate-50 p-4">
               <div className="flex items-center gap-3 min-w-0">
@@ -630,8 +630,8 @@ export default function PaymentPage() {
                   <PaystackLogo />
                 </div>
                 <div className="min-w-0">
-                  <p className="font-bold text-slate-900 text-sm sm:text-base">Pay with Paystack</p>
-                  <p className="text-xs text-slate-500">Card, bank transfer, USSD or mobile money</p>
+                  <p className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">Pay with Paystack</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Card, bank transfer, USSD or mobile money</p>
                 </div>
               </div>
               <Badge className="bg-green-100 text-green-800 border-green-200 flex-shrink-0">
@@ -661,14 +661,14 @@ export default function PaymentPage() {
         </Card>
 
         {/* Security & Trust */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 shadow-lg">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 shadow-lg">
           <CardContent className="p-6">
-            <div className="flex items-center justify-center space-x-2 text-slate-600 mb-4">
+            <div className="flex items-center justify-center space-x-2 text-slate-600 dark:text-slate-300 mb-4">
               <Lock className="w-5 h-5 text-green-600" />
               <span className="font-semibold">Your payment is encrypted & secure</span>
             </div>
             
-            <div className="flex items-center justify-center space-x-8 text-xs text-slate-500">
+            <div className="flex items-center justify-center space-x-8 text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
               <div className="flex items-center space-x-2">
                 <ShieldCheck className="w-4 h-4 text-green-600" />
                 <span>256-bit SSL</span>
@@ -683,7 +683,7 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            <p className="text-center text-xs text-slate-500 mt-4">
+            <p className="text-center text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-4">
               Payments are processed securely through Paystack
             </p>
           </CardContent>

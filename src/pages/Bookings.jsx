@@ -91,7 +91,7 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+      <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
         <div className="md:flex">
           {property ? (
             <div className="md:w-1/3">
@@ -110,11 +110,11 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
             <CardHeader className="p-0 mb-4">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
+                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-2">
                     {property ? property.title : "Property details unavailable"}
                   </CardTitle>
                   {property && (
-                    <div className="flex items-center gap-2 text-slate-600 mb-3">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 mb-3">
                       <MapPin className="w-4 h-4" />
                       <span className="text-sm font-medium">
                         {property.location?.city}, {property.location?.country}
@@ -145,33 +145,33 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
             <CardContent className="p-0 space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   <div>
-                    <p className="text-slate-500">Check-in</p>
-                    <p className="font-semibold text-slate-900">{format(checkIn, "MMM d, yyyy")}</p>
-                    <p className="text-[11px] text-slate-500">from 2:00 PM</p>
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-in</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{format(checkIn, "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">from 2:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   <div>
-                    <p className="text-slate-500">Check-out</p>
-                    <p className="font-semibold text-slate-900">{format(checkOut, "MMM d, yyyy")}</p>
-                    <p className="text-[11px] text-slate-500">by 12:00 PM</p>
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-out</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{format(checkOut, "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">by 12:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-slate-500" />
+                  <Users className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   <div>
-                    <p className="text-slate-500">Guests</p>
-                    <p className="font-semibold text-slate-900">{booking.guests}</p>
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Guests</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-slate-500" />
+                  <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   <div>
-                    <p className="text-slate-500">Total</p>
-                    <p className="font-semibold text-slate-900">₦{booking.total_price.toLocaleString()}</p>
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Total</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">₦{booking.total_price.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -219,8 +219,8 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200">
-                <div className="text-xs sm:text-sm text-slate-500">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
                   Requested on {format(new Date(booking.created_date), "MMM d, yyyy 'at' h:mm a")}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -273,7 +273,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+      <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300">
         <div className="md:flex">
           {property ? (
             <div className="md:w-1/3">
@@ -292,11 +292,11 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
             <CardHeader className="p-0 mb-4">
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
+                  <CardTitle className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-2">
                     {property ? property.title : "Property details unavailable"}
                   </CardTitle>
                   {property && (
-                    <div className="flex items-center gap-2 text-slate-600 mb-3">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 mb-3">
                       <MapPin className="w-4 h-4" />
                       <span className="text-sm font-medium">
                         {property.location?.city}, {property.location?.country}
@@ -321,41 +321,41 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
             <CardContent className="p-0 space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   <div>
-                    <p className="text-slate-500">Check-in</p>
-                    <p className="font-semibold text-slate-900">{format(checkIn, "MMM d, yyyy")}</p>
-                    <p className="text-[11px] text-slate-500">from 2:00 PM</p>
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-in</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{format(checkIn, "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">from 2:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   <div>
-                    <p className="text-slate-500">Check-out</p>
-                    <p className="font-semibold text-slate-900">{format(checkOut, "MMM d, yyyy")}</p>
-                    <p className="text-[11px] text-slate-500">by 12:00 PM</p>
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-out</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{format(checkOut, "MMM d, yyyy")}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">by 12:00 PM</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-slate-500" />
+                  <Users className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   <div>
-                    <p className="text-slate-500">Guests</p>
-                    <p className="font-semibold text-slate-900">{booking.guests}</p>
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Guests</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-slate-500" />
+                  <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   <div>
-                    <p className="text-slate-500">Total</p>
-                    <p className="font-semibold text-slate-900">₦{booking.total_price.toLocaleString()}</p>
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Total</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">₦{booking.total_price.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
 
               {booking.special_requests && (
                 <div className="bg-slate-50 rounded-xl p-4">
-                  <p className="text-sm font-semibold text-slate-700 mb-1">Special Requests</p>
-                  <p className="text-sm text-slate-600">{booking.special_requests}</p>
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Special Requests</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{booking.special_requests}</p>
                 </div>
               )}
 
@@ -376,7 +376,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                       <div className="flex items-start gap-2 text-sm">
                         <MapPin className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
-                          <p className="text-slate-900">{fullAddress}</p>
+                          <p className="text-slate-900 dark:text-white">{fullAddress}</p>
                           {mapsLink && (
                             <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1 mt-1">
                               <Map className="w-3 h-3" /> Open in Google Maps
@@ -389,7 +389,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                       <div className="flex items-start gap-2 text-sm">
                         <Phone className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
-                          <p className="text-slate-900">
+                          <p className="text-slate-900 dark:text-white">
                             Call <span className="font-semibold">{property.host_name || 'your host'}</span> on arrival
                           </p>
                           <a href={`tel:${property.host_phone}`} className="text-sm font-semibold text-emerald-800 hover:text-emerald-900">
@@ -399,7 +399,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                       </div>
                     )}
                     {property.arrival_instructions && (
-                      <div className="text-sm text-slate-700 bg-white/60 rounded-lg p-3 border border-emerald-100">
+                      <div className="text-sm text-slate-700 dark:text-slate-200 bg-white/60 dark:bg-slate-900/60 rounded-lg p-3 border border-emerald-100">
                         <p className="text-xs font-semibold text-emerald-900 uppercase tracking-wide mb-1">Host notes</p>
                         <p className="whitespace-pre-wrap">{property.arrival_instructions}</p>
                       </div>
@@ -408,8 +408,8 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                 );
               })()}
 
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200">
-                <div className="text-xs sm:text-sm text-slate-500">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
                   Booked on {format(new Date(booking.created_date), "MMM d, yyyy")}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -674,7 +674,7 @@ export default function BookingsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-8">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-6">
             <div className="h-8 bg-slate-200 rounded-xl w-48" />
@@ -688,12 +688,12 @@ export default function BookingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">My Bookings</h1>
-            <p className="text-slate-600 text-base sm:text-lg">Manage your travel reservations and plan your trips</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-1 sm:mb-2">My Bookings</h1>
+            <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">Manage your travel reservations and plan your trips</p>
           </div>
           <Button
             variant="outline"
@@ -708,7 +708,7 @@ export default function BookingsPage() {
         </div>
 
         <Tabs defaultValue="pending-approval" className="space-y-6">
-          <TabsList className="bg-white/80 backdrop-blur-sm p-1 rounded-xl shadow-sm w-full overflow-x-auto flex justify-start sm:justify-center scrollbar-thin">
+          <TabsList className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-1 rounded-xl shadow-sm w-full overflow-x-auto flex justify-start sm:justify-center scrollbar-thin">
             <TabsTrigger value="pending-approval" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
               Pending Approval {pendingApproval.length > 0 && `(${pendingApproval.length})`}
             </TabsTrigger>
@@ -738,11 +738,11 @@ export default function BookingsPage() {
                   />
                 ))
               ) : (
-                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-12 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-12 text-center">
                   <div className="text-6xl mb-6">⏳</div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">No Pending Approvals</h3>
-                  <p className="text-slate-600 mb-6">You don't have any bookings awaiting approval.</p>
-                  <p className="text-sm text-slate-500 mb-6">
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Pending Approvals</h3>
+                  <p className="text-slate-600 dark:text-slate-300 mb-6">You don't have any bookings awaiting approval.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-6">
                     When you request to book a property, it will appear here while the admin reviews availability.
                   </p>
                   <Link to={createPageUrl("Search")}>
@@ -760,10 +760,10 @@ export default function BookingsPage() {
               {upcoming.length > 0 ? (
                 upcoming.map(renderUpcomingItem)
               ) : (
-                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-12 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-12 text-center">
                   <div className="text-6xl mb-6">📅</div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">No Upcoming Bookings</h3>
-                  <p className="text-slate-600 mb-6">Start planning your next adventure!</p>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Upcoming Bookings</h3>
+                  <p className="text-slate-600 dark:text-slate-300 mb-6">Start planning your next adventure!</p>
                   <Link to={createPageUrl("Search")}>
                     <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold">
                       Discover Properties
@@ -779,10 +779,10 @@ export default function BookingsPage() {
               {current.length > 0 ? (
                 current.map(renderUpcomingItem)
               ) : (
-                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-8 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-8 text-center">
                   <div className="text-6xl mb-4">🏠</div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">No Current Stays</h3>
-                  <p className="text-slate-600">You don't have any active bookings at the moment.</p>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Current Stays</h3>
+                  <p className="text-slate-600 dark:text-slate-300">You don't have any active bookings at the moment.</p>
                 </Card>
               )}
             </AnimatePresence>
@@ -802,10 +802,10 @@ export default function BookingsPage() {
                   />
                 ))
               ) : (
-                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-8 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-8 text-center">
                   <div className="text-6xl mb-4">🕰️</div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">No Past Bookings</h3>
-                  <p className="text-slate-600">Your booking history will appear here.</p>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Past Bookings</h3>
+                  <p className="text-slate-600 dark:text-slate-300">Your booking history will appear here.</p>
                 </Card>
               )}
             </AnimatePresence>
@@ -825,10 +825,10 @@ export default function BookingsPage() {
                   />
                 ))
               ) : (
-                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-8 text-center">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-8 text-center">
                   <div className="text-6xl mb-4">✅</div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">No Cancelled Bookings</h3>
-                  <p className="text-slate-600">You haven't cancelled any bookings.</p>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Cancelled Bookings</h3>
+                  <p className="text-slate-600 dark:text-slate-300">You haven't cancelled any bookings.</p>
                 </Card>
               )}
             </AnimatePresence>
@@ -845,7 +845,7 @@ export default function BookingsPage() {
               <AlertDialogDescription>
                 Are you sure you want to cancel this booking? This action cannot be undone.
                 {selectedBooking && (
-                  <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm text-slate-700">
+                  <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm text-slate-700 dark:text-slate-200">
                     <p><strong>Property:</strong> {properties[selectedBooking.property_id]?.title || 'Property'}</p>
                     <p><strong>Check-in:</strong> {format(parseISO(selectedBooking.check_in), "MMM d, yyyy")}</p>
                     <p><strong>Total:</strong> ₦{selectedBooking.total_price.toLocaleString()}</p>

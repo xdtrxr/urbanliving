@@ -17,7 +17,7 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_STYLES = {
-  qualifying: 'bg-slate-100 text-slate-700',
+  qualifying: 'bg-slate-100 text-slate-700 dark:text-slate-200',
   qualified: 'bg-blue-100 text-blue-800',
   shown_options: 'bg-indigo-100 text-indigo-800',
   booking_started: 'bg-amber-100 text-amber-800',
@@ -79,7 +79,7 @@ export default function LeadsAdmin() {
   const filtered = filter === 'all' ? leads : leads.filter((l) => l.status === filter);
 
   return (
-    <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+    <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
@@ -107,26 +107,26 @@ export default function LeadsAdmin() {
       <CardContent>
         {loading ? (
           <div className="flex justify-center py-10">
-            <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+            <Loader2 className="w-6 h-6 animate-spin text-slate-400 dark:text-slate-500" />
           </div>
         ) : filtered.length === 0 ? (
-          <p className="text-center text-slate-500 py-10">No leads yet.</p>
+          <p className="text-center text-slate-500 dark:text-slate-400 dark:text-slate-500 py-10">No leads yet.</p>
         ) : (
           <div className="space-y-3">
             {filtered.map((lead) => (
-              <div key={lead.id} className="border border-slate-200 rounded-2xl p-3 sm:p-4 hover:border-slate-300 transition-colors">
+              <div key={lead.id} className="border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 hover:border-slate-300 transition-colors">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-semibold text-slate-900 truncate">{lead.name}</h4>
-                      <Badge className={`${STATUS_STYLES[lead.status] || 'bg-slate-100 text-slate-700'} border-0`}>
+                      <h4 className="font-semibold text-slate-900 dark:text-white truncate">{lead.name}</h4>
+                      <Badge className={`${STATUS_STYLES[lead.status] || 'bg-slate-100 text-slate-700 dark:text-slate-200'} border-0`}>
                         {STATUS_OPTIONS.find((s) => s.value === lead.status)?.label || lead.status}
                       </Badge>
                       {lead.user_email && (
                         <Badge variant="outline" className="text-xs">Account linked</Badge>
                       )}
                     </div>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-sm text-slate-600">
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
                       <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {lead.phone || '—'}</span>
                       <span className="flex items-center gap-1.5 truncate"><Mail className="w-3.5 h-3.5 flex-shrink-0" /> <span className="truncate">{lead.email || '—'}</span></span>
                       <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {[lead.city, lead.area].filter(Boolean).join(', ') || '—'}</span>
@@ -136,9 +136,9 @@ export default function LeadsAdmin() {
                       <span className="flex items-center gap-1.5"><Home className="w-3.5 h-3.5" /> {lead.apartment_type || 'Any'}</span>
                     </div>
                     {lead.special_requests && (
-                      <p className="mt-2 text-xs text-slate-500 italic">"{lead.special_requests}"</p>
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 italic">"{lead.special_requests}"</p>
                     )}
-                    <p className="mt-2 text-xs text-slate-400">
+                    <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
                       Captured {fmt(lead.created_date)} · source: {lead.source || 'chat'}
                     </p>
                   </div>
@@ -159,7 +159,7 @@ export default function LeadsAdmin() {
                     </Select>
                     <a
                       href={`tel:${lead.phone}`}
-                      className="text-xs text-slate-500 hover:text-slate-700"
+                      className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200"
                     >
                       Call
                     </a>

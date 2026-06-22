@@ -139,7 +139,7 @@ export default function SearchPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         <SearchHeader
           searchQuery={searchQuery}
@@ -171,7 +171,7 @@ export default function SearchPage() {
               variant="ghost"
               size="sm"
               onClick={() => { clearCache(); handleSearch(); }}
-              className="text-slate-500 hover:text-slate-700"
+              className="text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200"
             >
               <RefreshCw className="w-4 h-4 mr-1" />
               Refresh
@@ -182,7 +182,7 @@ export default function SearchPage() {
         {isLoading && (
           <div className="text-center my-8">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-amber-500 border-t-transparent mb-4"></div>
-            <p className="text-slate-600 font-semibold">
+            <p className="text-slate-600 dark:text-slate-300 font-semibold">
               {isLoadingAI ? '✨ AI is analyzing your preferences...' : 'Loading properties...'}
             </p>
           </div>
@@ -215,7 +215,7 @@ export default function SearchPage() {
 
         <div className="min-w-0">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
               {isLoading
                 ? "Loading properties..."
                 : isAuthenticated
@@ -223,7 +223,7 @@ export default function SearchPage() {
                   : "Available Properties"}
             </h2>
             {searchQuery && (
-              <div className="text-slate-600 text-sm sm:text-base">
+              <div className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
                 {searchQuery === "AI Recommendations" ? (
                   <span className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-purple-500" />
@@ -261,8 +261,8 @@ export default function SearchPage() {
           {!isLoading && filteredProperties.length === 0 && properties.length > 0 && (
             <div className="text-center py-20">
               <div className="text-6xl mb-4">🔍</div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">No properties match your filters</h3>
-              <p className="text-slate-600 mb-4">
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">No properties match your filters</h3>
+              <p className="text-slate-600 dark:text-slate-300 mb-4">
                 Try adjusting your search criteria or clear your filters to see more properties.
               </p>
               <Button
@@ -285,8 +285,8 @@ export default function SearchPage() {
           {!isLoading && properties.length === 0 && (
             <div className="text-center py-20">
               <div className="text-6xl mb-4">🌍</div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">No properties found</h3>
-              <p className="text-slate-600 mb-4">Try searching for a different location or generate sample data from the Admin panel.</p>
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">No properties found</h3>
+              <p className="text-slate-600 dark:text-slate-300 mb-4">Try searching for a different location or generate sample data from the Admin panel.</p>
             </div>
           )}
         </div>

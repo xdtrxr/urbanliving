@@ -1122,7 +1122,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
       <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-900 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading your conversation history...</p>
+          <p className="text-slate-600 dark:text-slate-300">Loading your conversation history...</p>
         </div>
       </div>
     );
@@ -1130,7 +1130,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
 
   return (
     <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex flex-col bg-slate-50">
-      <div className="flex-shrink-0 border-b border-slate-200 bg-white/90 backdrop-blur-lg">
+      <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg">
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -1138,8 +1138,8 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                 <Sparkles className="w-4 h-4 text-amber-400" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-slate-900">Agent Nova</h1>
-                <p className="text-xs text-slate-500">Your AI Travel Concierge</p>
+                <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Agent Nova</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Your AI Travel Concierge</p>
               </div>
             </div>
             {user && (
@@ -1147,7 +1147,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                 variant="ghost"
                 size="sm"
                 onClick={startFreshConversation}
-                className="text-slate-500 hover:text-slate-700"
+                className="text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200"
               >
                 <RotateCcw className="w-4 h-4 mr-1" />
                 Start Fresh
@@ -1177,7 +1177,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                   
                   <div className={`max-w-[85%] sm:max-w-[75%] ${message.role === 'user' ? 'order-1' : ''}`}>
                     {message.showHistory ? (
-                      <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm">
                         <ReactMarkdown className="prose max-w-none prose-sm prose-slate mb-4">
                           {message.content}
                         </ReactMarkdown>
@@ -1200,8 +1200,8 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                       </div>
                     ) : message.type === 'booking_form' && message.showForm ? (
                       <div className="space-y-2">
-                        <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm">
-                          <p className="text-sm text-slate-800">{message.content}</p>
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-sm">
+                          <p className="text-sm text-slate-800 dark:text-slate-100">{message.content}</p>
                         </div>
                         <BookingAssistant 
                           initialParams={bookingParams}
@@ -1215,7 +1215,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                       </div>
                     ) : message.type === 'booking_cta' ? (
                       <div className="space-y-3">
-                        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm">
                           <ReactMarkdown>{message.content || ''}</ReactMarkdown>
                           <div className="flex flex-wrap gap-2 mt-3">
                             {message.cta === 'pay' && message.booking?.id && (
@@ -1248,7 +1248,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                               onClick={() => navigate(createPageUrl('Bookings'))}
                               size="sm"
                               variant="ghost"
-                              className="rounded-xl text-slate-600"
+                              className="rounded-xl text-slate-600 dark:text-slate-300"
                             >
                               All Bookings
                             </Button>
@@ -1258,8 +1258,8 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                     ) : message.type === 'booking_confirm' ? (
                       <div className="space-y-3">
                         {message.content && (
-                          <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm">
-                            <p className="text-sm text-slate-800">{message.content}</p>
+                          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-sm">
+                            <p className="text-sm text-slate-800 dark:text-slate-100">{message.content}</p>
                           </div>
                         )}
                         <BookingConfirmCard
@@ -1276,8 +1276,8 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                       </div>
                     ) : message.type === 'booking_details' ? (
                       <div className="space-y-4">
-                        <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm">
-                          <p className="text-sm text-slate-800">{message.content}</p>
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-sm">
+                          <p className="text-sm text-slate-800 dark:text-slate-100">{message.content}</p>
                         </div>
                         {message.bookings.map((booking) => (
                           <BookingDetailsCard 
@@ -1313,7 +1313,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                       </div>
                     ) : message.type === 'search_results' ? (
                       <div className="space-y-4">
-                        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm">
                           <ReactMarkdown className="prose max-w-none prose-sm prose-slate">
                             {message.content.message}
                           </ReactMarkdown>
@@ -1328,8 +1328,8 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                           ))}
                         </div>
                         {message.content.results.length > 3 && (
-                          <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
-                            <p className="text-sm text-slate-600 mb-2">
+                          <div className="bg-slate-50 border border-slate-200 dark:border-slate-800 p-3 rounded-xl text-center">
+                            <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
                               And {message.content.results.length - 3} more properties available
                             </p>
                             <Button 
@@ -1368,7 +1368,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                       <div className={`p-3 rounded-xl shadow-sm ${
                         message.role === 'user' 
                           ? 'bg-slate-900 text-white rounded-br-lg'
-                          : 'bg-white text-slate-800 border border-slate-200 rounded-bl-lg'
+                          : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-bl-lg'
                       }`}>
                         <ReactMarkdown 
                           className={`prose max-w-none prose-sm prose-p:my-1.5 ${
@@ -1383,7 +1383,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
 
                   {message.role === 'user' && (
                     <div className="w-7 h-7 bg-slate-300 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 order-2">
-                      <UserIcon className="w-3.5 h-3.5 text-slate-600" />
+                      <UserIcon className="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
                     </div>
                   )}
                 </motion.div>
@@ -1399,7 +1399,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                 <div className="w-7 h-7 bg-gradient-to-br from-slate-900 to-slate-800 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                   <Bot className="w-3.5 h-3.5 text-amber-400" />
                 </div>
-                <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-sm">
                   <div className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -1411,17 +1411,17 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
 
             {!showBookingAssistant && isIntroComplete && messages.length === 1 && !isLoading && (
               <div className="mt-6">
-                <p className="text-xs text-slate-500 mb-3 text-center">Or try one of these:</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mb-3 text-center">Or try one of these:</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {quickPrompts.map((prompt, index) => (
                     <Card 
                       key={index}
-                      className="p-2.5 cursor-pointer hover:bg-slate-100 transition-colors border-slate-200 rounded-lg"
+                      className="p-2.5 cursor-pointer hover:bg-slate-100 transition-colors border-slate-200 dark:border-slate-800 rounded-lg"
                       onClick={() => handleQuickPrompt(prompt)}
                     >
                       <div className="flex items-center gap-1.5">
-                        <MessageCircle className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-xs text-slate-600 line-clamp-1">{prompt}</span>
+                        <MessageCircle className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                        <span className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">{prompt}</span>
                       </div>
                     </Card>
                   ))}
@@ -1433,11 +1433,11 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
         </div>
       </div>
 
-      <div className="flex-shrink-0 border-t border-slate-200 bg-white/95 backdrop-blur-sm">
+      <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
         <div className="px-3 sm:px-4 py-2.5">
           {/* Live interim transcript shown while the user is speaking */}
           {isListening && transcript && (
-            <div className="mb-2 px-3 py-1.5 bg-slate-100 rounded-md text-xs text-slate-700 flex items-center gap-2">
+            <div className="mb-2 px-3 py-1.5 bg-slate-100 rounded-md text-xs text-slate-700 dark:text-slate-200 flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               <span className="italic">{transcript}</span>
             </div>
@@ -1474,7 +1474,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                 className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
                   isListening
                     ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-200'
                 }`}
               >
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}

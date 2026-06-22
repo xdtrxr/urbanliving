@@ -48,7 +48,7 @@ export default function ConfirmedBookingsAdmin() {
   }, []);
 
   return (
-    <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+    <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg min-w-0">
@@ -67,19 +67,19 @@ export default function ConfirmedBookingsAdmin() {
       <CardContent>
         {loading && bookings.length === 0 ? (
           <div className="flex justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+            <Loader2 className="w-5 h-5 animate-spin text-slate-400 dark:text-slate-500" />
           </div>
         ) : bookings.length === 0 ? (
-          <p className="text-center text-slate-500 text-sm py-6">No confirmed bookings yet.</p>
+          <p className="text-center text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm py-6">No confirmed bookings yet.</p>
         ) : (
           <div className="space-y-2">
             {bookings.map((b) => {
               const hasId = !!b.id_document_url;
               return (
-                <div key={b.id} className="border border-slate-200 rounded-xl p-3 flex items-start justify-between gap-3 hover:border-slate-300 transition-colors">
+                <div key={b.id} className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex items-start justify-between gap-3 hover:border-slate-300 transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-slate-900 truncate">{b.guest_name || b.guest_email}</p>
+                      <p className="font-semibold text-slate-900 dark:text-white truncate">{b.guest_name || b.guest_email}</p>
                       <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs">Paid</Badge>
                       {hasId ? (
                         <Badge className="bg-blue-100 text-blue-800 border-0 text-xs">
@@ -91,11 +91,11 @@ export default function ConfirmedBookingsAdmin() {
                         </Badge>
                       )}
                     </div>
-                    <div className="mt-1 text-xs text-slate-600 flex items-center gap-3 flex-wrap">
+                    <div className="mt-1 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-3 flex-wrap">
                       <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {fmtDate(b.check_in)} → {fmtDate(b.check_out)}</span>
                       <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {b.guests} guest{b.guests === 1 ? '' : 's'}</span>
                       <span>₦{Number(b.total_price || 0).toLocaleString()}</span>
-                      <span className="text-slate-400">Booking <code>{b.id.slice(0, 8)}…</code></span>
+                      <span className="text-slate-400 dark:text-slate-500">Booking <code>{b.id.slice(0, 8)}…</code></span>
                     </div>
                   </div>
                   {hasId && (

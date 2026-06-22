@@ -61,7 +61,7 @@ export default function SearchResultCard({ property, user: initialUser }) {
   };
 
   return (
-    <Card className="overflow-hidden border-slate-200 shadow-sm hover:shadow-md transition-all duration-300">
+    <Card className="overflow-hidden border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-300">
       <div className="flex">
         <div className="w-32 h-24 flex-shrink-0">
           <img 
@@ -73,7 +73,7 @@ export default function SearchResultCard({ property, user: initialUser }) {
         <CardContent className="flex-1 p-3">
           <div className="space-y-2">
             <div className="flex justify-between items-start">
-              <h3 className="font-semibold text-slate-900 text-sm line-clamp-1">
+              <h3 className="font-semibold text-slate-900 dark:text-white text-sm line-clamp-1">
                 {property.title}
               </h3>
               <Button
@@ -82,7 +82,7 @@ export default function SearchResultCard({ property, user: initialUser }) {
                 onClick={handleToggleWishlist}
                 disabled={isUpdatingWishlist}
                 className={`p-1 h-auto ${
-                  isWishlisted ? 'text-red-500' : 'text-slate-400 hover:text-red-500'
+                  isWishlisted ? 'text-red-500' : 'text-slate-400 dark:text-slate-500 hover:text-red-500'
                 }`}
               >
                 {isUpdatingWishlist ? (
@@ -93,13 +93,13 @@ export default function SearchResultCard({ property, user: initialUser }) {
               </Button>
             </div>
             
-            <div className="flex items-center gap-1 text-slate-500 text-xs">
+            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">
               <MapPin className="w-3 h-3" />
               <span>{property.location?.city}, {property.location?.country}</span>
             </div>
 
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 text-slate-600 text-xs">
+              <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300 text-xs">
                 <div className="flex items-center gap-1">
                   <Users className="w-3 h-3" />
                   <span>{property.max_guests}</span>
@@ -117,13 +117,13 @@ export default function SearchResultCard({ property, user: initialUser }) {
               {property.rating && property.rating > 0 && (
                 <div className="flex items-center gap-1">
                   <Star className="w-3 h-3 text-amber-400 fill-current" />
-                  <span className="text-xs font-semibold text-slate-900">{property.rating}</span>
+                  <span className="text-xs font-semibold text-slate-900 dark:text-white">{property.rating}</span>
                 </div>
               )}
             </div>
 
             <div className="flex justify-between items-center pt-1">
-              <Badge className="bg-slate-100 text-slate-700 text-xs font-semibold">
+              <Badge className="bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-semibold">
                 {currencySymbol}{property.price_per_night}/night
               </Badge>
               <Link to={createPageUrl(`Property?id=${property.id}`)}>

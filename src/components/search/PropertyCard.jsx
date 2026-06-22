@@ -53,7 +53,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
   };
 
   return (
-    <Card className="group hover:shadow-2xl transition-all duration-500 border-0 rounded-3xl overflow-hidden bg-white/90 backdrop-blur-sm">
+    <Card className="group hover:shadow-2xl transition-all duration-500 border-0 rounded-3xl overflow-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
       <div className="relative">
         <img 
           src={mainImage}
@@ -67,8 +67,8 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
           size="icon"
           onClick={handleToggleWishlist}
           disabled={isUpdating}
-          className={`absolute top-4 right-4 rounded-full bg-white/90 backdrop-blur-sm hover:bg-white transition-all duration-300 ${
-            isWishlisted ? 'text-red-500' : 'text-slate-600 hover:text-red-500'
+          className={`absolute top-4 right-4 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm hover:bg-white dark:bg-slate-900 transition-all duration-300 ${
+            isWishlisted ? 'text-red-500' : 'text-slate-600 dark:text-slate-300 hover:text-red-500'
           }`}
         >
           {isUpdating ? (
@@ -79,7 +79,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
         </Button>
 
         <div className="absolute bottom-4 left-4 flex flex-col gap-2">
-          <Badge className="bg-white/95 text-slate-900 font-semibold px-3 py-1 rounded-full">
+          <Badge className="bg-white/95 dark:bg-slate-900/95 text-slate-900 dark:text-white font-semibold px-3 py-1 rounded-full">
             {currencySymbol}{property.price_per_night.toLocaleString()}/night
           </Badge>
           {property.caution_fee > 0 && (
@@ -94,10 +94,10 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
       <CardContent className="p-6">
         <div className="space-y-4">
           <div>
-            <h3 className="font-bold text-xl text-slate-900 group-hover:text-amber-600 transition-colors duration-300 line-clamp-1">
+            <h3 className="font-bold text-xl text-slate-900 dark:text-white group-hover:text-amber-600 transition-colors duration-300 line-clamp-1">
               {property.title}
             </h3>
-            <div className="flex items-center gap-1 text-slate-500 mt-1">
+            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
               <MapPin className="w-4 h-4" />
               <span className="text-sm font-medium">
                 {property.location?.city}, {property.location?.country}
@@ -106,7 +106,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4 text-slate-600">
+            <div className="flex items-center gap-4 text-slate-600 dark:text-slate-300">
               <div className="flex items-center gap-1">
                 <Users className="w-4 h-4" />
                 <span className="text-sm font-medium">{property.max_guests}</span>
@@ -124,8 +124,8 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
             {property.rating && property.rating > 0 && (
               <div className="flex items-center gap-1">
                 <Star className="w-4 h-4 text-amber-400 fill-current" />
-                <span className="font-semibold text-slate-900">{property.rating}</span>
-                <span className="text-slate-500 text-sm">({property.reviews_count || 0})</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{property.rating}</span>
+                <span className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">({property.reviews_count || 0})</span>
               </div>
             )}
           </div>
@@ -135,7 +135,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
               const Icon = amenityIcons[amenity];
               return Icon ? (
                 <div key={amenity} className="p-2 bg-slate-100 rounded-lg">
-                  <Icon className="w-4 h-4 text-slate-600" />
+                  <Icon className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                 </div>
               ) : null;
             })}

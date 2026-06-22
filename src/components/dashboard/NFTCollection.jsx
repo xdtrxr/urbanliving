@@ -53,10 +53,10 @@ export default function NFTCollection({ user }) {
 
   if (sampleTokens.length === 0) {
     return (
-      <Card className="group bg-white/90 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-2xl transition-all duration-500 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-purple-400/20 before:via-pink-400/20 before:to-rose-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
+      <Card className="group bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 shadow-lg hover:shadow-2xl transition-all duration-500 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-purple-400/20 before:via-pink-400/20 before:to-rose-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
         <div className="relative z-10">
           <CardHeader>
-            <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 group-hover:bg-clip-text transition-all duration-300">
+            <CardTitle className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 group-hover:bg-clip-text transition-all duration-300">
               <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
                 <Sparkles className="w-5 h-5 text-amber-500 group-hover:text-purple-500 transition-colors duration-300" />
               </div>
@@ -65,10 +65,10 @@ export default function NFTCollection({ user }) {
           </CardHeader>
           <CardContent className="text-center py-8">
             <div className="transform transition-all duration-300 group-hover:scale-110">
-              <Gift className="w-16 h-16 text-slate-400 mx-auto mb-4 group-hover:text-purple-400 transition-colors duration-300" />
+              <Gift className="w-16 h-16 text-slate-400 dark:text-slate-500 mx-auto mb-4 group-hover:text-purple-400 transition-colors duration-300" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2 group-hover:text-purple-600 transition-colors duration-300">Start Your Collection</h3>
-            <p className="text-slate-600 mb-4 group-hover:text-slate-700 transition-colors duration-300">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-purple-600 transition-colors duration-300">Start Your Collection</h3>
+            <p className="text-slate-600 dark:text-slate-300 mb-4 group-hover:text-slate-700 dark:text-slate-200 transition-colors duration-300">
               Complete bookings and milestones to earn exclusive NFT travel tokens!
             </p>
             <Button variant="outline" className="transform transition-all duration-300 group-hover:scale-105">Learn More</Button>
@@ -79,11 +79,11 @@ export default function NFTCollection({ user }) {
   }
 
   return (
-    <Card className="group bg-white/90 backdrop-blur-sm border-slate-200/60 shadow-lg hover:shadow-2xl transition-all duration-500 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-purple-400/20 before:via-pink-400/20 before:to-rose-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
+    <Card className="group bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 shadow-lg hover:shadow-2xl transition-all duration-500 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-purple-400/20 before:via-pink-400/20 before:to-rose-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
       <div className="relative z-10">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-bold text-slate-900 flex items-center gap-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 group-hover:bg-clip-text transition-all duration-300">
+            <CardTitle className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 group-hover:bg-clip-text transition-all duration-300">
               <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
                 <Sparkles className="w-5 h-5 text-amber-500 group-hover:text-purple-500 transition-colors duration-300" />
               </div>
@@ -106,7 +106,7 @@ export default function NFTCollection({ user }) {
                   className={`relative group/token cursor-pointer transition-all duration-300 hover:scale-105 ${rarityStyle.glow} hover:shadow-lg`}
                   onClick={() => setSelectedToken(token)}
                 >
-                  <div className="aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-slate-200 group-hover/token:border-amber-400 transition-all duration-300">
+                  <div className="aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-slate-200 dark:border-slate-800 group-hover/token:border-amber-400 transition-all duration-300">
                     {token.image_url ? (
                       <img
                         src={token.image_url}
@@ -125,7 +125,7 @@ export default function NFTCollection({ user }) {
                       </Badge>
                     </div>
                   </div>
-                  <p className="text-xs font-medium text-slate-900 mt-2 text-center line-clamp-1 group-hover/token:text-purple-600 transition-colors duration-300">
+                  <p className="text-xs font-medium text-slate-900 dark:text-white mt-2 text-center line-clamp-1 group-hover/token:text-purple-600 transition-colors duration-300">
                     {token.name}
                   </p>
                 </div>
@@ -151,12 +151,12 @@ export default function NFTCollection({ user }) {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-slate-900">{selectedToken.name}</h4>
-                  <p className="text-sm text-slate-600 mb-2">{selectedToken.description}</p>
+                  <h4 className="font-semibold text-slate-900 dark:text-white">{selectedToken.name}</h4>
+                  <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">{selectedToken.description}</p>
                   {selectedToken.benefits && selectedToken.benefits.length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-slate-700 mb-1">Benefits:</p>
-                      <ul className="text-xs text-slate-600 space-y-1">
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">Benefits:</p>
+                      <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
                         {selectedToken.benefits.map((benefit, index) => (
                           <li key={index} className="flex items-center gap-1">
                             <div className="w-1 h-1 bg-amber-500 rounded-full" />

@@ -9,6 +9,8 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { ThemeProvider } from '@/lib/ThemeContext';
+import FloatingThemeToggle from '@/components/ui/FloatingThemeToggle';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
 const Login = lazy(() => import('./pages/Login'));
@@ -28,7 +30,17 @@ const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 const isBarePage = (name) => !!barePages && barePages.has(name);
 
 const LayoutWrapper = ({ children, currentPageName }) => {
-  if (!Layout || isBarePage(currentPageName)) return <>{children}</>;
+  if (!Layout || isBarePage(currentPageName)) {
+    // Bare pages skip the Layout shell, so they don't get the in-header
+    // ThemeToggle. Float it in so users can still flip themes from
+    // Landing / Install / any other shell-less route.
+    return (
+      <>
+        <FloatingThemeToggle />
+        {children}
+      </>
+    );
+  }
   return <Layout currentPageName={currentPageName}>{children}</Layout>;
 };
 
@@ -41,6 +53,7 @@ const AuthenticatedApp = () => {
   if (onLoginRoute) {
     return (
       <Suspense fallback={<PageFallback />}>
+        <FloatingThemeToggle />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/Login" element={<Login />} />
@@ -91,16 +104,18 @@ const AuthenticatedApp = () => {
 function App() {
 
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <NavigationTracker />
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
-        <VisualEditAgent />
-      </QueryClientProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <NavigationTracker />
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+          <VisualEditAgent />
+        </QueryClientProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 

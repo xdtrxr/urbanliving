@@ -315,7 +315,7 @@ export default function CheckoutPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent"></div>
       </div>
     );
@@ -323,9 +323,9 @@ export default function CheckoutPage() {
 
   if (!property) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
         <Card className="p-12 text-center">
-          <p className="text-lg text-slate-600">Property not found.</p>
+          <p className="text-lg text-slate-600 dark:text-slate-300">Property not found.</p>
           <Button className="mt-4" onClick={() => navigate(-1)}>Go Back</Button>
         </Card>
       </div>
@@ -333,7 +333,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <Dialog open={showPhoneNumberModal} onOpenChange={setShowPhoneNumberModal}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -417,7 +417,7 @@ export default function CheckoutPage() {
               exit={{ scale: 0.95, opacity: 0, y: 10 }}
               transition={{ type: 'spring', stiffness: 320, damping: 26 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+              className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden"
               role="dialog"
               aria-modal="true"
               aria-labelledby="booking-submitted-title"
@@ -440,15 +440,15 @@ export default function CheckoutPage() {
                 <ol className="space-y-3 mb-6">
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                    <p className="text-sm text-slate-700">Admin reviews your request — usually within minutes.</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200">Admin reviews your request — usually within minutes.</p>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                    <p className="text-sm text-slate-700">Once approved, complete payment to confirm.</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200">Once approved, complete payment to confirm.</p>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                    <p className="text-sm text-slate-700">Track everything from <strong>My Bookings</strong>.</p>
+                    <p className="text-sm text-slate-700 dark:text-slate-200">Track everything from <strong>My Bookings</strong>.</p>
                   </li>
                 </ol>
 
@@ -520,32 +520,32 @@ export default function CheckoutPage() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 break-words">Complete Your Booking</h1>
-            <p className="text-slate-600 text-sm sm:text-base">You're just steps away from your perfect stay.</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white break-words">Complete Your Booking</h1>
+            <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">You're just steps away from your perfect stay.</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           <div className="space-y-6">
-            <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden">
+            <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg overflow-hidden">
               <img
                 src={property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800'}
                 alt={property.title}
                 className="w-full h-64 object-cover"
               />
               <CardContent className="p-6">
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">{property.title}</h2>
-                <div className="flex items-center gap-2 text-slate-600 mb-4">
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{property.title}</h2>
+                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 mb-4">
                   <MapPin className="w-4 h-4" />
                   <span>{property.location?.city}, {property.location?.country}</span>
                 </div>
-                <p className="text-slate-700">{property.description}</p>
+                <p className="text-slate-700 dark:text-slate-200">{property.description}</p>
               </CardContent>
             </Card>
           </div>
 
           <div className="space-y-6">
-            <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+            <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
               <CardHeader>
                 <CardTitle>Booking Details</CardTitle>
               </CardHeader>
@@ -563,7 +563,7 @@ export default function CheckoutPage() {
                       className="mt-1"
                       disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                     />
-                    <p className="text-[11px] text-slate-500 mt-1">Check-in from 2:00 PM</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Check-in from 2:00 PM</p>
                   </div>
                   <div>
                     <Label>Check-out Date</Label>
@@ -577,7 +577,7 @@ export default function CheckoutPage() {
                       className="mt-1"
                       disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
                     />
-                    <p className="text-[11px] text-slate-500 mt-1">Check-out by 12:00 PM</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Check-out by 12:00 PM</p>
                   </div>
                 </div>
 
@@ -595,7 +595,7 @@ export default function CheckoutPage() {
                 </div>
 
                 {!existingBooking && (
-                  <div className="pt-4 border-t border-slate-200">
+                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
                     {availabilityStatus !== 'available' && (() => {
                       const requirementsMet = !!bookingDetails.checkIn && !!bookingDetails.checkOut && Number(bookingDetails.guests) > 0;
                       const isBusy = isCheckingAvailability || availabilityStatus === 'pending';
@@ -676,7 +676,7 @@ export default function CheckoutPage() {
                         <span className="font-semibold text-amber-900">₦{property.caution_fee.toLocaleString()}</span>
                       </div>
                     )}
-                    <hr className="border-slate-200" />
+                    <hr className="border-slate-200 dark:border-slate-800" />
                     <div className="flex justify-between font-bold text-lg">
                       <span>Total</span>
                       <span>₦{totalPrice.toLocaleString()}</span>
@@ -704,7 +704,7 @@ export default function CheckoutPage() {
                   className={`w-full py-3 rounded-xl font-semibold transition-all ${
                     availabilityStatus === 'available' && nights > 0
                       ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl'
-                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-300 text-slate-500 dark:text-slate-400 dark:text-slate-500 cursor-not-allowed'
                   }`}
                 >
                   {availabilityStatus !== 'available'

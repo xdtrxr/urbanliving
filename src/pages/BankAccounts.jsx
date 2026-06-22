@@ -204,18 +204,18 @@ export default function BankAccountsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 animate-spin text-slate-900" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-slate-900 dark:text-white" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">Bank Accounts</h1>
-          <p className="text-slate-600 text-base sm:text-lg">Manage your withdrawal accounts</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-1 sm:mb-2">Bank Accounts</h1>
+          <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">Manage your withdrawal accounts</p>
         </div>
 
         {/* Saved Accounts */}
@@ -228,7 +228,7 @@ export default function BankAccountsPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4 flex-1">
@@ -237,7 +237,7 @@ export default function BankAccountsPage() {
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-lg font-bold text-slate-900">{account.bank_name}</h3>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{account.bank_name}</h3>
                             {account.is_primary && (
                               <Badge className="bg-amber-100 text-amber-800 border-amber-200">
                                 <Star className="w-3 h-3 mr-1" />
@@ -251,8 +251,8 @@ export default function BankAccountsPage() {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-slate-600 mb-1">{account.account_name}</p>
-                          <p className="text-sm text-slate-500 font-mono">{account.account_number}</p>
+                          <p className="text-slate-600 dark:text-slate-300 mb-1">{account.account_name}</p>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 font-mono">{account.account_number}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -288,10 +288,10 @@ export default function BankAccountsPage() {
           </AnimatePresence>
           
           {bankAccounts.length === 0 && (
-            <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-12 text-center">
+            <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-12 text-center">
               <CreditCard className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-xl font-bold text-slate-900 mb-2">No Bank Accounts</h3>
-              <p className="text-slate-600 mb-6">Add a bank account to withdraw your earnings</p>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Bank Accounts</h3>
+              <p className="text-slate-600 dark:text-slate-300 mb-6">Add a bank account to withdraw your earnings</p>
             </Card>
           )}
         </div>
@@ -309,7 +309,7 @@ export default function BankAccountsPage() {
             Add New Bank Account
           </Button>
         ) : (
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
             <CardHeader>
               <CardTitle>Add New Bank Account</CardTitle>
               <CardDescription>
@@ -450,9 +450,9 @@ export default function BankAccountsPage() {
                 Are you sure you want to delete this bank account?
                 {accountToDelete && (
                   <div className="mt-3 p-3 bg-slate-50 rounded-lg">
-                    <p className="font-semibold text-slate-900">{accountToDelete.bank_name}</p>
-                    <p className="text-sm text-slate-600">{accountToDelete.account_name}</p>
-                    <p className="text-sm text-slate-500 font-mono">{accountToDelete.account_number}</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{accountToDelete.bank_name}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">{accountToDelete.account_name}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 font-mono">{accountToDelete.account_number}</p>
                   </div>
                 )}
                 <p className="mt-3 text-red-600 font-semibold">

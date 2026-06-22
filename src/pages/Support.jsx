@@ -205,7 +205,7 @@ export default function SupportPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-6">
             <div className="h-8 bg-slate-200 rounded-xl w-48" />
@@ -222,13 +222,13 @@ export default function SupportPage() {
   // Show login prompt if user is not authenticated
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
             <CardContent className="p-12 text-center">
-              <HelpCircle className="w-16 h-16 text-slate-400 mx-auto mb-6" />
-              <h2 className="text-2xl font-bold text-slate-900 mb-4">Login Required</h2>
-              <p className="text-slate-600 mb-6">
+              <HelpCircle className="w-16 h-16 text-slate-400 dark:text-slate-500 mx-auto mb-6" />
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Login Required</h2>
+              <p className="text-slate-600 dark:text-slate-300 mb-6">
                 Please log in to access the support center and manage your tickets.
               </p>
               <Button onClick={() => window.location.reload()}>
@@ -242,7 +242,7 @@ export default function SupportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6 sm:mb-8">
@@ -250,8 +250,8 @@ export default function SupportPage() {
             <div className="flex items-center gap-3 min-w-0">
               <HelpCircle className="w-7 h-7 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
               <div className="min-w-0">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Support Center</h1>
-                <p className="text-slate-600 text-sm sm:text-base">Get help with your bookings, payments, and account</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">Support Center</h1>
+                <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">Get help with your bookings, payments, and account</p>
               </div>
             </div>
 
@@ -268,7 +268,7 @@ export default function SupportPage() {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-semibold text-slate-700">Subject</label>
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Subject</label>
                     <Input
                       value={newTicket.subject}
                       onChange={(e) => setNewTicket({ ...newTicket, subject: e.target.value })}
@@ -278,7 +278,7 @@ export default function SupportPage() {
                   </div>
                   
                   <div>
-                    <label className="text-sm font-semibold text-slate-700">Category</label>
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Category</label>
                     <Select
                       value={newTicket.category}
                       onValueChange={(value) => setNewTicket({ ...newTicket, category: value })}
@@ -297,7 +297,7 @@ export default function SupportPage() {
                   </div>
                   
                   <div>
-                    <label className="text-sm font-semibold text-slate-700">Message</label>
+                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Message</label>
                     <Textarea
                       value={newTicket.message}
                       onChange={(e) => setNewTicket({ ...newTicket, message: e.target.value })}
@@ -329,7 +329,7 @@ export default function SupportPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Tickets List */}
           <div>
-            <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+            <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <MessageCircle className="w-5 h-5" />
@@ -340,8 +340,8 @@ export default function SupportPage() {
                 {tickets.length === 0 ? (
                   <div className="text-center py-8">
                     <HelpCircle className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No Support Tickets</h3>
-                    <p className="text-slate-600 mb-4">You haven't created any support tickets yet.</p>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No Support Tickets</h3>
+                    <p className="text-slate-600 dark:text-slate-300 mb-4">You haven't created any support tickets yet.</p>
                     <Button
                       onClick={() => setShowNewTicketDialog(true)}
                       variant="outline"
@@ -360,12 +360,12 @@ export default function SupportPage() {
                           className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 hover:shadow-md ${
                             selectedTicket?.id === ticket.id 
                               ? 'border-blue-400 bg-blue-50' 
-                              : 'border-slate-200 hover:border-slate-300'
+                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
                           }`}
                         >
                           <div className="flex items-start justify-between mb-2">
-                            <h4 className="font-semibold text-slate-900 truncate">{ticket.subject}</h4>
-                            <StatusIcon className="w-4 h-4 text-slate-500 flex-shrink-0 ml-2" />
+                            <h4 className="font-semibold text-slate-900 dark:text-white truncate">{ticket.subject}</h4>
+                            <StatusIcon className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 flex-shrink-0 ml-2" />
                           </div>
                           <div className="flex items-center gap-2 mb-2">
                             <Badge className={categoryColors[ticket.category]}>
@@ -375,8 +375,8 @@ export default function SupportPage() {
                               {ticket.status.replace('_', ' ')}
                             </Badge>
                           </div>
-                          <p className="text-sm text-slate-600 truncate">{ticket.description}</p>
-                          <p className="text-xs text-slate-400 mt-2">
+                          <p className="text-sm text-slate-600 dark:text-slate-300 truncate">{ticket.description}</p>
+                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
                             {new Date(ticket.created_date).toLocaleDateString()}
                           </p>
                         </div>
@@ -390,7 +390,7 @@ export default function SupportPage() {
 
           {/* Chat Interface */}
           <div>
-            <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg h-full">
+            <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg h-full">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Bot className="w-5 h-5" />
@@ -412,18 +412,18 @@ export default function SupportPage() {
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                             message.sender_type === 'user' 
                               ? 'bg-blue-100 text-blue-600' 
-                              : 'bg-slate-100 text-slate-600'
+                              : 'bg-slate-100 text-slate-600 dark:text-slate-300'
                           }`}>
                             {message.sender_type === 'user' ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                           </div>
                           <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-xl ${
                             message.sender_type === 'user'
                               ? 'bg-blue-600 text-white'
-                              : 'bg-slate-100 text-slate-900'
+                              : 'bg-slate-100 text-slate-900 dark:text-white'
                           }`}>
                             <p className="text-sm">{message.message}</p>
                             <p className={`text-xs mt-1 ${
-                              message.sender_type === 'user' ? 'text-blue-200' : 'text-slate-500'
+                              message.sender_type === 'user' ? 'text-blue-200' : 'text-slate-500 dark:text-slate-400 dark:text-slate-500'
                             }`}>
                               {new Date(message.created_date).toLocaleTimeString()}
                             </p>
@@ -458,8 +458,8 @@ export default function SupportPage() {
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
                       <MessageCircle className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-slate-900 mb-2">Select a Support Ticket</h3>
-                      <p className="text-slate-600">Choose a ticket from the list to start chatting</p>
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Select a Support Ticket</h3>
+                      <p className="text-slate-600 dark:text-slate-300">Choose a ticket from the list to start chatting</p>
                     </div>
                   </div>
                 )}

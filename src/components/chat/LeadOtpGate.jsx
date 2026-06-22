@@ -118,14 +118,14 @@ export default function LeadOtpGate({ lead, onVerified, onCancel }) {
   };
 
   return (
-    <div className="bg-white border-2 border-slate-200 rounded-2xl shadow-xl p-5 mt-2 mb-4">
+    <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-5 mt-2 mb-4">
       {step === 'confirm-email' && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <Mail className="w-5 h-5 text-slate-700" />
-            <h3 className="font-semibold text-slate-900">Confirm your email</h3>
+            <Mail className="w-5 h-5 text-slate-700 dark:text-slate-200" />
+            <h3 className="font-semibold text-slate-900 dark:text-white">Confirm your email</h3>
           </div>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
             We'll send a 6-digit verification code so we can create your account and secure this booking. Double-check the email — typos waste codes.
           </p>
           <div>
@@ -162,10 +162,10 @@ export default function LeadOtpGate({ lead, onVerified, onCancel }) {
       {step === 'enter-code' && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-slate-700" />
-            <h3 className="font-semibold text-slate-900">Enter verification code</h3>
+            <ShieldCheck className="w-5 h-5 text-slate-700 dark:text-slate-200" />
+            <h3 className="font-semibold text-slate-900 dark:text-white">Enter verification code</h3>
           </div>
-          {info && <p className="text-sm text-slate-600">{info}</p>}
+          {info && <p className="text-sm text-slate-600 dark:text-slate-300">{info}</p>}
           <div>
             <Label htmlFor="lead-otp" className="text-sm">6-digit code</Label>
             <Input
@@ -186,7 +186,7 @@ export default function LeadOtpGate({ lead, onVerified, onCancel }) {
             <button
               type="button"
               onClick={() => { setStep('confirm-email'); setOtpCode(''); setError(null); setInfo(null); }}
-              className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1"
+              className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200 flex items-center gap-1"
               disabled={working}
             >
               <ArrowLeft className="w-3 h-3" /> Change email

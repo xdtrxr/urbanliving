@@ -24,7 +24,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
     const pendingReferrals = referrals.filter(ref => ref.status === 'signed_up');
 
     return (
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg overflow-hidden relative">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg overflow-hidden relative">
             <div className="h-2 bg-gradient-to-r from-amber-400 via-orange-400 to-red-400" />
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -37,7 +37,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
             </CardHeader>
             <CardContent className="space-y-6">
                 <div>
-                    <Label className="text-sm font-semibold text-slate-700">Your Unique Referral Link</Label>
+                    <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Your Unique Referral Link</Label>
                     <div className="flex gap-2 mt-2">
                         <Input value={referralLink} readOnly className="bg-slate-100 font-mono text-sm" />
                         <Button onClick={handleCopy} variant="outline" size="icon">
@@ -99,33 +99,33 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                         </div>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-3 gap-4 py-4 border-y border-slate-200">
+                    <div className="grid grid-cols-3 gap-4 py-4 border-y border-slate-200 dark:border-slate-800">
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-slate-900">{referrals.length}</div>
-                            <div className="text-xs text-slate-500">Total Referrals</div>
+                            <div className="text-2xl font-bold text-slate-900 dark:text-white">{referrals.length}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Total Referrals</div>
                         </div>
                         <div className="text-center">
                             <div className="text-2xl font-bold text-green-600">{completedReferrals.length}</div>
-                            <div className="text-xs text-slate-500">Completed</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Completed</div>
                         </div>
                         <div className="text-center">
                             <div className="text-2xl font-bold text-amber-600">
                                 ₦{referrals.reduce((sum, ref) => sum + (ref.amount_earned_ngn || 0), 0).toLocaleString()}
                             </div>
-                            <div className="text-xs text-slate-500">Earned (NGN)</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Earned (NGN)</div>
                         </div>
                     </div>
                 )}
 
                 <div className="space-y-4">
-                    <h4 className="font-semibold text-slate-800 flex items-center gap-2">
-                        <Target className="w-4 h-4 text-slate-600" />
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                        <Target className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                         Your Referrals
                     </h4>
                     <div className="border rounded-xl p-4 space-y-3 max-h-60 overflow-y-auto bg-slate-50">
                         {referrals.length > 0 ? (
                             referrals.map(ref => (
-                                <div key={ref.id} className="flex justify-between items-center text-sm bg-white p-3 rounded-lg border border-slate-200">
+                                <div key={ref.id} className="flex justify-between items-center text-sm bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
                                     <div className="flex items-center gap-3">
                                         {ref.status === 'booking_completed' ? (
                                             <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
@@ -133,8 +133,8 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                                             <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
                                         )}
                                         <div>
-                                            <div className="font-medium text-slate-700">{ref.referred_email}</div>
-                                            <div className="text-xs text-slate-500">
+                                            <div className="font-medium text-slate-700 dark:text-slate-200">{ref.referred_email}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
                                                 {ref.status === 'booking_completed' ? 'Booked' : 'Signed up'}
                                             </div>
                                         </div>
@@ -144,12 +144,12 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                                             <span>+₦{ref.amount_earned_ngn.toLocaleString()}</span>
                                         </div>
                                     ) : (
-                                        <span className="text-xs text-slate-500 italic">Pending</span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 italic">Pending</span>
                                     )}
                                 </div>
                             ))
                         ) : (
-                            <p className="text-sm text-slate-500 text-center py-4">You haven't referred anyone yet.</p>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center py-4">You haven't referred anyone yet.</p>
                         )}
                     </div>
                     {pendingReferrals.length > 0 && (

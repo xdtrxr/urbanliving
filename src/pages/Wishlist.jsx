@@ -68,13 +68,13 @@ export default function WishlistPage() {
   
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
            <div className="animate-pulse space-y-6">
             <div className="h-8 bg-slate-200 rounded-xl w-48" />
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {Array(3).fill(0).map((_, i) => (
-                  <div key={i} className="bg-white/50 rounded-3xl h-96" />
+                  <div key={i} className="bg-white/50 dark:bg-slate-900/50 rounded-3xl h-96" />
                 ))}
             </div>
           </div>
@@ -84,12 +84,12 @@ export default function WishlistPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">My Wishlist</h1>
-            <p className="text-slate-600 text-base sm:text-lg">Your saved properties for later</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-1 sm:mb-2">My Wishlist</h1>
+            <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">Your saved properties for later</p>
           </div>
           <Button
             variant="outline"
@@ -114,11 +114,11 @@ export default function WishlistPage() {
             ))}
           </div>
         ) : (
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
             <CardContent className="p-12 text-center">
               <div className="text-6xl mb-6">💝</div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-4">Your wishlist is empty</h2>
-              <p className="text-slate-600 mb-6">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Your wishlist is empty</h2>
+              <p className="text-slate-600 dark:text-slate-300 mb-6">
                 Start browsing and save properties you love by clicking the heart icon.
               </p>
               <Link to={createPageUrl("Search")}>

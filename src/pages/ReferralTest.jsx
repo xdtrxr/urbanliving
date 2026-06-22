@@ -172,22 +172,22 @@ export default function ReferralTestPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">🧪 Referral System Test Dashboard</h1>
-          <p className="text-slate-600 text-lg">Debug and verify your referral tracking</p>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">🧪 Referral System Test Dashboard</h1>
+          <p className="text-slate-600 dark:text-slate-300 text-lg">Debug and verify your referral tracking</p>
         </div>
 
         {/* Current User Info */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
           <CardHeader>
             <CardTitle>Current User Information</CardTitle>
             <CardDescription>Your account details and referral status</CardDescription>
@@ -195,15 +195,15 @@ export default function ReferralTestPage() {
           <CardContent className="space-y-3">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-slate-500">Email</p>
-                <p className="font-semibold text-slate-900">{user?.email}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Email</p>
+                <p className="font-semibold text-slate-900 dark:text-white">{user?.email}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Name</p>
-                <p className="font-semibold text-slate-900">{user?.full_name}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Name</p>
+                <p className="font-semibold text-slate-900 dark:text-white">{user?.full_name}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Your Referral Code</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Your Referral Code</p>
                 <div className="flex items-center gap-2">
                   <p className="font-mono font-bold text-amber-600">{user?.referral_code || 'Not set'}</p>
                   {user?.referral_code && (
@@ -214,17 +214,17 @@ export default function ReferralTestPage() {
                 </div>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Referred By</p>
-                <p className="font-mono text-slate-900">{user?.referred_by_code || 'None'}</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Referred By</p>
+                <p className="font-mono text-slate-900 dark:text-white">{user?.referred_by_code || 'None'}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Prompt Seen</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Prompt Seen</p>
                 <Badge variant={user?.referral_prompt_seen ? 'default' : 'secondary'}>
                   {user?.referral_prompt_seen ? 'Yes' : 'No'}
                 </Badge>
               </div>
               <div>
-                <p className="text-sm text-slate-500">Referral Balance</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">Referral Balance</p>
                 <p className="font-semibold text-green-600">₦{user?.referral_balance_ngn?.toLocaleString() || 0}</p>
               </div>
             </div>
@@ -259,7 +259,7 @@ export default function ReferralTestPage() {
         </div>
 
         {/* Test Results */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
           <CardHeader>
             <CardTitle>Test Results & Logs</CardTitle>
             <CardDescription>Real-time feedback from system checks</CardDescription>
@@ -267,7 +267,7 @@ export default function ReferralTestPage() {
           <CardContent>
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {testResults.length === 0 ? (
-                <p className="text-slate-500 text-center py-8">No test results yet. Run a check to see results.</p>
+                <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center py-8">No test results yet. Run a check to see results.</p>
               ) : (
                 testResults.map((result, idx) => (
                   <div 
@@ -287,12 +287,12 @@ export default function ReferralTestPage() {
                     <div className="flex-1">
                       <p className="font-semibold text-sm">{result.message}</p>
                       {result.data && (
-                        <pre className="text-xs mt-1 text-slate-600 overflow-x-auto">
+                        <pre className="text-xs mt-1 text-slate-600 dark:text-slate-300 overflow-x-auto">
                           {typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2)}
                         </pre>
                       )}
                     </div>
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
                       {result.timestamp.toLocaleTimeString()}
                     </span>
                   </div>
@@ -303,7 +303,7 @@ export default function ReferralTestPage() {
         </Card>
 
         {/* Your Referrals */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" />
@@ -313,14 +313,14 @@ export default function ReferralTestPage() {
           </CardHeader>
           <CardContent>
             {referrals.length === 0 ? (
-              <p className="text-slate-500 text-center py-8">No referrals yet. Share your link to get started!</p>
+              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center py-8">No referrals yet. Share your link to get started!</p>
             ) : (
               <div className="space-y-3">
                 {referrals.map(ref => (
-                  <div key={ref.id} className="p-4 border border-slate-200 rounded-xl flex justify-between items-center">
+                  <div key={ref.id} className="p-4 border border-slate-200 dark:border-slate-800 rounded-xl flex justify-between items-center">
                     <div>
-                      <p className="font-semibold text-slate-900">{ref.referred_email}</p>
-                      <p className="text-sm text-slate-500">
+                      <p className="font-semibold text-slate-900 dark:text-white">{ref.referred_email}</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
                         Joined: {new Date(ref.created_date).toLocaleDateString()}
                       </p>
                     </div>
@@ -343,7 +343,7 @@ export default function ReferralTestPage() {
 
         {/* Admin: All Users */}
         {user?.role === 'admin' && allUsers.length > 0 && (
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Database className="w-5 h-5" />
@@ -354,17 +354,17 @@ export default function ReferralTestPage() {
             <CardContent>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {allUsers.map(u => (
-                  <div key={u.id} className="p-3 border border-slate-200 rounded-lg">
+                  <div key={u.id} className="p-3 border border-slate-200 dark:border-slate-800 rounded-lg">
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-semibold text-slate-900">{u.email}</p>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="font-semibold text-slate-900 dark:text-white">{u.email}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                           Code: <span className="font-mono text-amber-600">{u.referral_code || 'None'}</span>
                         </p>
                       </div>
                       <div className="text-right text-xs">
                         {u.referred_by_code && (
-                          <p className="text-slate-600">
+                          <p className="text-slate-600 dark:text-slate-300">
                             Referred by: <span className="font-mono">{u.referred_by_code}</span>
                           </p>
                         )}

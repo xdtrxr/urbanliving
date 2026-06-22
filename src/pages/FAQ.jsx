@@ -33,17 +33,17 @@ const faqItems = [
 
 export default function FAQPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
-          <CardHeader className="p-4 sm:p-8 border-b border-slate-100">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
+          <CardHeader className="p-4 sm:p-8 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-gradient-to-br from-slate-900 to-slate-800 rounded-full flex items-center justify-center">
                 <HelpCircle className="w-8 h-8 text-white" />
               </div>
               <div>
-                <CardTitle className="text-3xl font-bold text-slate-900">Frequently Asked Questions</CardTitle>
-                <p className="text-slate-600 mt-1">Find answers to common questions about Urban Stays.</p>
+                <CardTitle className="text-3xl font-bold text-slate-900 dark:text-white">Frequently Asked Questions</CardTitle>
+                <p className="text-slate-600 dark:text-slate-300 mt-1">Find answers to common questions about Urban Stays.</p>
               </div>
             </div>
           </CardHeader>
@@ -52,7 +52,7 @@ export default function FAQPage() {
               {faqItems.map((item, index) => (
                 <AccordionItem key={index} value={`item-${index}`}>
                   <AccordionTrigger className="text-lg font-semibold text-left">{item.question}</AccordionTrigger>
-                  <AccordionContent className="text-base text-slate-700">
+                  <AccordionContent className="text-base text-slate-700 dark:text-slate-200">
                     {item.answer}
                   </AccordionContent>
                 </AccordionItem>

@@ -88,19 +88,19 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
   ];
 
   return (
-    <div className="bg-white border-2 border-slate-200 rounded-2xl shadow-xl p-4 mt-2 mb-4">
+    <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-4 mt-2 mb-4">
       <div className="flex flex-col gap-4">
         {/* Search Fields Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {/* Location */}
           <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none z-10" />
+            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4 pointer-events-none z-10" />
             <Input
               ref={locationInputRef}
               placeholder="Where to?"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              className="pl-10 h-12 rounded-xl border-slate-200 focus:border-slate-400"
+              className="pl-10 h-12 rounded-xl border-slate-200 dark:border-slate-800 focus:border-slate-400"
             />
           </div>
 
@@ -112,11 +112,11 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
                 variant="outline"
                 className={`h-12 rounded-xl justify-start pl-3 transition-colors ${
                   checkIn
-                    ? 'border-amber-400 bg-amber-50 text-slate-900'
-                    : 'border-slate-200 hover:border-slate-400 text-slate-500'
+                    ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-400 text-slate-500 dark:text-slate-400 dark:text-slate-500'
                 }`}
               >
-                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                 <span>{checkIn ? format(checkIn, "MMM d") : "Check-in"}</span>
               </Button>
             </PopoverTrigger>
@@ -139,11 +139,11 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
                 variant="outline"
                 className={`h-12 rounded-xl justify-start pl-3 transition-colors ${
                   checkOut
-                    ? 'border-amber-400 bg-amber-50 text-slate-900'
-                    : 'border-slate-200 hover:border-slate-400 text-slate-500'
+                    ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-400 text-slate-500 dark:text-slate-400 dark:text-slate-500'
                 }`}
               >
-                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500" />
+                <CalendarIcon className="mr-2 h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                 <span>{checkOut ? format(checkOut, "MMM d") : "Check-out"}</span>
               </Button>
             </PopoverTrigger>
@@ -161,9 +161,9 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
 
           {/* Guests */}
           <Select value={guests} onValueChange={setGuests}>
-            <SelectTrigger className="h-12 rounded-xl border-slate-200">
+            <SelectTrigger className="h-12 rounded-xl border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-slate-400" />
+                <Users className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                 <span>{guests} {parseInt(guests) === 1 ? 'Guest' : 'Guests'}</span>
               </div>
             </SelectTrigger>
@@ -178,9 +178,9 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
 
           {/* Bedrooms */}
           <Select value={bedrooms} onValueChange={setBedrooms}>
-            <SelectTrigger className="h-12 rounded-xl border-slate-200">
+            <SelectTrigger className="h-12 rounded-xl border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <Bed className="h-4 w-4 text-slate-400" />
+                <Bed className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                 <span>{bedroomOptions.find(b => b.value === bedrooms)?.label}</span>
               </div>
             </SelectTrigger>
@@ -195,9 +195,9 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
 
           {/* Budget */}
           <Select value={budget} onValueChange={setBudget}>
-            <SelectTrigger className="h-12 rounded-xl border-slate-200">
+            <SelectTrigger className="h-12 rounded-xl border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-slate-400" />
+                <Wallet className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                 <span>{budgetOptions.find(b => b.value === budget)?.label}</span>
               </div>
             </SelectTrigger>
@@ -212,9 +212,9 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
 
           {/* Apartment Type */}
           <Select value={apartmentType} onValueChange={setApartmentType}>
-            <SelectTrigger className="h-12 rounded-xl border-slate-200">
+            <SelectTrigger className="h-12 rounded-xl border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <Home className="h-4 w-4 text-slate-400" />
+                <Home className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                 <span>{apartmentTypeOptions.find(t => t.value === apartmentType)?.label}</span>
               </div>
             </SelectTrigger>

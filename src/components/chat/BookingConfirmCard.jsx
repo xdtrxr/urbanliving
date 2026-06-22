@@ -140,13 +140,13 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
   }
 
   return (
-    <Card className="bg-white border-slate-200 rounded-2xl shadow-sm">
+    <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
       <CardContent className="p-5">
         <div className="mb-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Confirm your booking</p>
-          <h4 className="text-lg font-bold text-slate-900">{booking.property_title}</h4>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-1">Confirm your booking</p>
+          <h4 className="text-lg font-bold text-slate-900 dark:text-white">{booking.property_title}</h4>
           {booking.property_location && (
-            <p className="text-sm text-slate-600 flex items-center gap-1 mt-1">
+            <p className="text-sm text-slate-600 dark:text-slate-300 flex items-center gap-1 mt-1">
               <MapPin className="w-3.5 h-3.5" />
               {[booking.property_location.city, booking.property_location.country].filter(Boolean).join(', ')}
             </p>
@@ -155,37 +155,37 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
 
         <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-slate-500 text-xs mb-1 flex items-center gap-1">
+            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> Check-in
             </p>
-            <p className="font-semibold text-slate-900">{safeDate(booking.check_in)}</p>
-            <p className="text-[10px] text-slate-500">from 2:00 PM</p>
+            <p className="font-semibold text-slate-900 dark:text-white">{safeDate(booking.check_in)}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500">from 2:00 PM</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-slate-500 text-xs mb-1 flex items-center gap-1">
+            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> Check-out
             </p>
-            <p className="font-semibold text-slate-900">{safeDate(booking.check_out)}</p>
-            <p className="text-[10px] text-slate-500">by 12:00 PM</p>
+            <p className="font-semibold text-slate-900 dark:text-white">{safeDate(booking.check_out)}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500">by 12:00 PM</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-slate-500 text-xs mb-1 flex items-center gap-1">
+            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs mb-1 flex items-center gap-1">
               <Users className="w-3.5 h-3.5" /> Guests
             </p>
-            <p className="font-semibold text-slate-900">{booking.guests}</p>
+            <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
           </div>
           <div className="bg-slate-50 rounded-xl p-3">
-            <p className="text-slate-500 text-xs mb-1">Nights</p>
-            <p className="font-semibold text-slate-900">{breakdown.nights || ''}</p>
+            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs mb-1">Nights</p>
+            <p className="font-semibold text-slate-900 dark:text-white">{breakdown.nights || ''}</p>
           </div>
         </div>
 
         <div className="bg-slate-50 rounded-xl p-4 mb-4 space-y-2 text-sm">
-          <div className="flex justify-between text-slate-700">
+          <div className="flex justify-between text-slate-700 dark:text-slate-200">
             <span>₦{breakdown.nightly.toLocaleString()} × {breakdown.nights} {breakdown.nights === 1 ? 'night' : 'nights'}</span>
             <span className="font-medium">₦{breakdown.subtotal.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between text-slate-700">
+          <div className="flex justify-between text-slate-700 dark:text-slate-200">
             <span>Service fee (2.5%)</span>
             <span className="font-medium">₦{breakdown.serviceFee.toLocaleString()}</span>
           </div>
@@ -198,9 +198,9 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
               <span className="font-semibold text-amber-900">₦{breakdown.caution.toLocaleString()}</span>
             </div>
           )}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-            <span className="text-slate-600 font-medium">Total</span>
-            <span className="text-2xl font-bold text-slate-900">
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+            <span className="text-slate-600 dark:text-slate-300 font-medium">Total</span>
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">
               ₦{breakdown.total.toLocaleString()}
             </span>
           </div>
@@ -236,7 +236,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
             'Submit Booking Request'
           )}
         </Button>
-        <p className="text-xs text-slate-500 text-center mt-2">
+        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center mt-2">
           Admin reviews availability via Telegram. Payment happens after approval.
         </p>
       </CardContent>

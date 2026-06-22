@@ -42,13 +42,13 @@ export default function SearchHeader({
   ];
 
   return (
-    <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-200/50 p-5 sm:p-8 mb-6 sm:mb-8">
+    <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800/50 p-5 sm:p-8 mb-6 sm:mb-8">
       <div className="flex flex-col gap-5 sm:gap-6">
         <div className="text-center">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-2 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">
             Find Your Perfect Stay
           </h1>
-          <p className="text-slate-600 text-sm sm:text-lg font-medium">
+          <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-lg font-medium">
             AI-powered recommendations for extraordinary experiences
           </p>
         </div>
@@ -56,12 +56,12 @@ export default function SearchHeader({
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 sm:gap-4">
           <div className="md:col-span-1">
             <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-5 h-5" />
               <Input
                 placeholder="Where to?"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-12 h-14 rounded-xl border-slate-200 focus:border-amber-400 focus:ring-amber-400/20 text-slate-900 font-medium"
+                className="pl-12 h-14 rounded-xl border-slate-200 dark:border-slate-800 focus:border-amber-400 focus:ring-amber-400/20 text-slate-900 dark:text-white font-medium"
               />
             </div>
           </div>
@@ -73,15 +73,15 @@ export default function SearchHeader({
                   variant="outline"
                   className={`h-14 rounded-xl justify-start pl-4 font-medium transition-colors ${
                     checkIn
-                      ? 'border-amber-400 bg-amber-50 text-slate-900'
-                      : 'border-slate-200 hover:border-amber-400 text-slate-500'
+                      ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 text-slate-500 dark:text-slate-400 dark:text-slate-500'
                   }`}
                 >
-                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500" />
+                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   {checkIn ? format(checkIn, "MMM d") : "Check-in"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0 bg-white/95 backdrop-blur-xl">
+              <PopoverContent className="w-auto p-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl">
                 <Calendar
                   mode="single"
                   selected={checkIn}
@@ -99,15 +99,15 @@ export default function SearchHeader({
                   variant="outline"
                   className={`h-14 rounded-xl justify-start pl-4 font-medium transition-colors ${
                     checkOut
-                      ? 'border-amber-400 bg-amber-50 text-slate-900'
-                      : 'border-slate-200 hover:border-amber-400 text-slate-500'
+                      ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 text-slate-500 dark:text-slate-400 dark:text-slate-500'
                   }`}
                 >
-                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500" />
+                  <CalendarIcon className="mr-3 h-5 w-5 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
                   {checkOut ? format(checkOut, "MMM d") : "Check-out"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0 bg-white/95 backdrop-blur-xl">
+              <PopoverContent className="w-auto p-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl">
                 <Calendar
                   mode="single"
                   selected={checkOut}
@@ -122,13 +122,13 @@ export default function SearchHeader({
 
           <div className="md:col-span-1">
             <Select value={guests.toString()} onValueChange={(value) => setGuests(parseInt(value))}>
-              <SelectTrigger className="h-14 rounded-xl border-slate-200 focus:border-amber-400">
+              <SelectTrigger className="h-14 rounded-xl border-slate-200 dark:border-slate-800 focus:border-amber-400">
                 <div className="flex items-center">
-                  <Users className="mr-3 h-5 w-5 text-slate-400" />
+                  <Users className="mr-3 h-5 w-5 text-slate-400 dark:text-slate-500" />
                   <SelectValue placeholder="Guests" />
                 </div>
               </SelectTrigger>
-              <SelectContent className="bg-white/95 backdrop-blur-xl max-h-60">
+              <SelectContent className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl max-h-60">
                 {guestOptions.map((num) => (
                   <SelectItem key={num} value={num.toString()}>
                     {num > 50 ? '50+ Guests' : `${num} ${num === 1 ? 'Guest' : 'Guests'}`}
@@ -140,13 +140,13 @@ export default function SearchHeader({
 
           <div className="md:col-span-1">
             <Select value={bedrooms} onValueChange={setBedrooms}>
-              <SelectTrigger className="h-14 rounded-xl border-slate-200 focus:border-amber-400">
+              <SelectTrigger className="h-14 rounded-xl border-slate-200 dark:border-slate-800 focus:border-amber-400">
                 <div className="flex items-center">
-                  <Bed className="mr-3 h-5 w-5 text-slate-400" />
+                  <Bed className="mr-3 h-5 w-5 text-slate-400 dark:text-slate-500" />
                   <SelectValue placeholder="Bedrooms" />
                 </div>
               </SelectTrigger>
-              <SelectContent className="bg-white/95 backdrop-blur-xl">
+              <SelectContent className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl">
                 {bedroomOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}

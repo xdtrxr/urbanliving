@@ -710,10 +710,10 @@ export default function QuestsPage() {
   // ============================================================================
 
   const getQuestStatusIcon = (quest) => {
-    if (!quest) return <Target className="w-5 h-5 text-slate-400" />;
+    if (!quest) return <Target className="w-5 h-5 text-slate-400 dark:text-slate-500" />;
     if (quest.status === 'claimed') return <CheckCircle className="w-5 h-5 text-green-500" />;
     if (quest.status === 'processing') return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
-    return <Target className="w-5 h-5 text-slate-400" />;
+    return <Target className="w-5 h-5 text-slate-400 dark:text-slate-500" />;
   };
 
   const renderQuestCard = (questId, config) => {
@@ -723,7 +723,7 @@ export default function QuestsPage() {
     const isCompleted = quest && isQuestCompletedToday(quest);
 
     return (
-      <Card key={questId} className="hover:shadow-2xl transition-all duration-500 border-0 rounded-3xl overflow-hidden bg-white/90 backdrop-blur-sm h-full flex flex-col">
+      <Card key={questId} className="hover:shadow-2xl transition-all duration-500 border-0 rounded-3xl overflow-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm h-full flex flex-col">
         <div className={`h-2 ${config.color}`} />
         <CardHeader className="p-6 flex-grow">
           <div className="flex items-start justify-between mb-4">
@@ -732,7 +732,7 @@ export default function QuestsPage() {
                 <IconComponent className="w-6 h-6" />
               </div>
               <div className="flex-1 min-w-0">
-                <CardTitle className="text-base font-bold text-slate-900 mb-2 break-words">
+                <CardTitle className="text-base font-bold text-slate-900 dark:text-white mb-2 break-words">
                   {config.name}
                 </CardTitle>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -748,7 +748,7 @@ export default function QuestsPage() {
               {quest && getQuestStatusIcon(quest)}
             </div>
           </div>
-          <p className="text-slate-600 text-sm leading-relaxed">{config.description}</p>
+          <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">{config.description}</p>
         </CardHeader>
         <CardContent className="px-6 pb-6 mt-auto">
           {isCompleted ? (
@@ -760,7 +760,7 @@ export default function QuestsPage() {
                 </span>
               </div>
               {config.isDaily && (
-                <p className="text-xs text-center text-slate-500">Come back tomorrow!</p>
+                <p className="text-xs text-center text-slate-500 dark:text-slate-400 dark:text-slate-500">Come back tomorrow!</p>
               )}
             </div>
           ) : (
@@ -793,7 +793,7 @@ export default function QuestsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-8">
             <div className="h-12 bg-slate-200 rounded-xl w-64 mx-auto" />
@@ -811,7 +811,7 @@ export default function QuestsPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8 flex items-center justify-center">
         <Card className="max-w-md bg-red-50 border-red-200 rounded-3xl">
           <CardContent className="p-8 text-center">
             <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -828,7 +828,7 @@ export default function QuestsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <motion.div
@@ -838,31 +838,31 @@ export default function QuestsPage() {
         >
           <div className="flex flex-wrap items-center justify-center gap-3 mb-3 sm:mb-4">
             <Trophy className="w-9 h-9 sm:w-12 sm:h-12 text-amber-500" />
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900">Quest Center</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">Quest Center</h1>
           </div>
-          <p className="text-base sm:text-xl text-slate-600 px-2">
+          <p className="text-base sm:text-xl text-slate-600 dark:text-slate-300 px-2">
             Complete quests to earn Urban Points and unlock exclusive rewards!
           </p>
         </motion.div>
 
         {/* Metrics */}
         <div className="grid grid-cols-3 gap-3 sm:gap-6 max-w-2xl mx-auto mb-8">
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-2xl hover:shadow-lg transition-shadow">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-2xl hover:shadow-lg transition-shadow">
             <CardContent className="p-4 sm:p-6 text-center">
               <div className="text-2xl sm:text-4xl font-bold text-amber-600 mb-1 sm:mb-2 break-words">{metrics.totalPoints}</div>
-              <div className="text-[11px] sm:text-sm text-slate-600 font-medium">Total Points</div>
+              <div className="text-[11px] sm:text-sm text-slate-600 dark:text-slate-300 font-medium">Total Points</div>
             </CardContent>
           </Card>
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-2xl hover:shadow-lg transition-shadow">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-2xl hover:shadow-lg transition-shadow">
             <CardContent className="p-4 sm:p-6 text-center">
               <div className="text-2xl sm:text-4xl font-bold text-green-600 mb-1 sm:mb-2 break-words">{metrics.completedCount}</div>
-              <div className="text-[11px] sm:text-sm text-slate-600 font-medium">Completed</div>
+              <div className="text-[11px] sm:text-sm text-slate-600 dark:text-slate-300 font-medium">Completed</div>
             </CardContent>
           </Card>
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-2xl hover:shadow-lg transition-shadow">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-2xl hover:shadow-lg transition-shadow">
             <CardContent className="p-4 sm:p-6 text-center">
               <div className="text-2xl sm:text-4xl font-bold text-blue-600 mb-1 sm:mb-2 break-words">{metrics.progressPercent}%</div>
-              <div className="text-[11px] sm:text-sm text-slate-600 font-medium">Progress</div>
+              <div className="text-[11px] sm:text-sm text-slate-600 dark:text-slate-300 font-medium">Progress</div>
             </CardContent>
           </Card>
         </div>
@@ -870,14 +870,14 @@ export default function QuestsPage() {
         {/* Progress Bar */}
         <div className="max-w-xl mx-auto mb-12">
           <Progress value={metrics.progressPercent} className="h-3" />
-          <p className="text-xs text-slate-500 mt-2 text-center">
+          <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2 text-center">
             {metrics.completedCount} of {metrics.totalCount} quests completed
           </p>
         </div>
 
         {/* Quest Grid */}
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-6 text-center">Available Quests</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6 text-center">Available Quests</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
             {Object.entries(QUEST_REGISTRY).map(([questId, config]) =>
               renderQuestCard(questId, config)
@@ -888,14 +888,14 @@ export default function QuestsPage() {
         {/* Auto-awarded rewards — earned passively, no button needed */}
         <div className="mt-16">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Earn With Every Booking</h2>
-            <p className="text-slate-600">These rewards are credited automatically — no action required.</p>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Earn With Every Booking</h2>
+            <p className="text-slate-600 dark:text-slate-300">These rewards are credited automatically — no action required.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
             {AUTO_REWARDS.map((reward) => {
               const IconComponent = reward.icon;
               return (
-                <Card key={reward.id} className="border-0 rounded-3xl overflow-hidden bg-white/90 backdrop-blur-sm h-full flex flex-col hover:shadow-2xl transition-all duration-500">
+                <Card key={reward.id} className="border-0 rounded-3xl overflow-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm h-full flex flex-col hover:shadow-2xl transition-all duration-500">
                   <div className={`h-2 ${reward.color}`} />
                   <CardHeader className="p-6 flex-grow">
                     <div className="flex items-start gap-3 mb-4">
@@ -903,7 +903,7 @@ export default function QuestsPage() {
                         <IconComponent className="w-6 h-6" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base font-bold text-slate-900 mb-2 break-words">
+                        <CardTitle className="text-base font-bold text-slate-900 dark:text-white mb-2 break-words">
                           {reward.name}
                         </CardTitle>
                         <div className="flex items-center gap-2 flex-wrap">
@@ -917,12 +917,12 @@ export default function QuestsPage() {
                         </div>
                       </div>
                     </div>
-                    <p className="text-slate-600 text-sm leading-relaxed">{reward.description}</p>
+                    <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">{reward.description}</p>
                   </CardHeader>
                   <CardContent className="px-6 pb-6 mt-auto">
-                    <div className="flex items-center justify-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                      <Gift className="w-4 h-4 text-slate-500" />
-                      <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Auto-credited</span>
+                    <div className="flex items-center justify-center gap-2 p-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl">
+                      <Gift className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500" />
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Auto-credited</span>
                     </div>
                   </CardContent>
                 </Card>

@@ -15,17 +15,17 @@ import PropertyCard from '../components/search/PropertyCard';
 // Reusable Stat Card Component with Hover Animation
 function StatCard({ icon, title, value, description }) {
   return (
-    <Card className="group bg-white/80 backdrop-blur-sm border-slate-200/60 shadow-sm hover:shadow-2xl transition-all duration-500 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-blue-400/20 before:via-purple-400/20 before:to-pink-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
+    <Card className="group bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 shadow-sm hover:shadow-2xl transition-all duration-500 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-blue-400/20 before:via-purple-400/20 before:to-pink-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
       <div className="relative z-10">
         <CardHeader className="flex flex-row items-start sm:items-center justify-between space-y-0 pb-2 gap-2">
-          <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 group-hover:text-slate-800 transition-colors duration-300 leading-tight">{title}</CardTitle>
+          <CardTitle className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:text-slate-100 transition-colors duration-300 leading-tight">{title}</CardTitle>
           <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 flex-shrink-0">
             {icon}
           </div>
         </CardHeader>
         <CardContent>
-          <div className="text-xl sm:text-2xl font-bold text-slate-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text transition-all duration-300 break-words leading-tight">{value}</div>
-          <p className="text-[11px] sm:text-xs text-slate-500 group-hover:text-slate-600 transition-colors duration-300 mt-1">{description}</p>
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 group-hover:bg-clip-text transition-all duration-300 break-words leading-tight">{value}</div>
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300 mt-1">{description}</p>
         </CardContent>
       </div>
     </Card>
@@ -241,13 +241,13 @@ export default function DashboardPage() {
         <ReferralCodePrompt user={user} onSubmitted={loadDashboardData} />
       )}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 break-words">Welcome back, {user?.full_name?.split(' ')[0]}!</h1>
-        <p className="text-slate-600">Here's your travel snapshot.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white break-words">Welcome back, {user?.full_name?.split(' ')[0]}!</h1>
+        <p className="text-slate-600 dark:text-slate-300">Here's your travel snapshot.</p>
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
             {dashStatsAt ? `Updated ${dashStatsAt.toLocaleTimeString()}` : 'Loading stats...'}
           </p>
           <Button
@@ -266,28 +266,28 @@ export default function DashboardPage() {
             title="Total Bookings"
             value={dashStats?.bookings.total ?? '—'}
             description="All your trips"
-            icon={<Briefcase className="h-4 w-4 text-slate-500 group-hover:text-blue-500 transition-colors duration-300" />}
+            icon={<Briefcase className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-blue-500 transition-colors duration-300" />}
           />
           <StatCard
             title="Pending"
             value={dashStats?.bookings.pending ?? '—'}
             description="Awaiting approval or payment"
-            icon={<Clock className="h-4 w-4 text-slate-500 group-hover:text-amber-500 transition-colors duration-300" />}
+            icon={<Clock className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-amber-500 transition-colors duration-300" />}
           />
           <StatCard
             title="Total Spend"
             value={dashStats ? `₦${dashStats.revenue.paidNGN.toLocaleString()}` : '—'}
             description="Paid bookings"
-            icon={<Wallet className="h-4 w-4 text-slate-500 group-hover:text-green-500 transition-colors duration-300" />}
+            icon={<Wallet className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-green-500 transition-colors duration-300" />}
           />
           <StatCard
             title="Referral Earnings"
             value={dashStats ? `₦${dashStats.referrals.earningsNGN.toLocaleString()}` : '—'}
             description={dashStats ? `${dashStats.referrals.successful}/${dashStats.referrals.count} successful` : ''}
-            icon={<Gift className="h-4 w-4 text-slate-500 group-hover:text-purple-500 transition-colors duration-300" />}
+            icon={<Gift className="h-4 w-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-purple-500 transition-colors duration-300" />}
           />
         </div>
-        <div className="mt-4 flex items-center gap-3 text-sm text-slate-500">
+        <div className="mt-4 flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
           <Heart className="w-4 h-4 text-pink-500" />
           <span>{stats.wishlist} wishlisted properties</span>
         </div>
@@ -297,7 +297,7 @@ export default function DashboardPage() {
       {wishlistItems.length > 0 && (
         <div className="mt-8">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">From Your Wishlist</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">From Your Wishlist</h2>
             <Link to={createPageUrl("Wishlist")} className="self-start sm:self-auto">
               <Button variant="outline" size="sm" className="rounded-xl">
                 View All ({stats.wishlist}) <ArrowRight className="w-4 h-4 ml-2" />
@@ -332,43 +332,43 @@ export default function DashboardPage() {
       </div>
 
       <div>
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4">Quick Links</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-4">Quick Links</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <Link to={createPageUrl("Search")}>
-            <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 backdrop-blur-sm border-slate-200/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-amber-400/20 before:via-orange-400/20 before:to-red-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
+            <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-amber-400/20 before:via-orange-400/20 before:to-red-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
               <div className="relative z-10 flex items-center gap-4 w-full">
                 <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
                   <Search className="w-8 h-8 text-amber-500 group-hover:text-orange-500 transition-colors duration-300" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-800 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-amber-600 group-hover:to-orange-600 group-hover:bg-clip-text transition-all duration-300">New Search</h3>
-                  <p className="text-sm text-slate-500 group-hover:text-slate-600 transition-colors duration-300">Find your next destination</p>
+                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-amber-600 group-hover:to-orange-600 group-hover:bg-clip-text transition-all duration-300">New Search</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">Find your next destination</p>
                 </div>
               </div>
             </Card>
           </Link>
           <Link to={createPageUrl("Profile")}>
-            <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 backdrop-blur-sm border-slate-200/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-purple-400/20 before:via-indigo-400/20 before:to-blue-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
+            <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-purple-400/20 before:via-indigo-400/20 before:to-blue-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
               <div className="relative z-10 flex items-center gap-4 w-full">
                 <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
                   <Settings className="w-8 h-8 text-amber-500 group-hover:text-purple-500 transition-colors duration-300" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-800 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-indigo-600 group-hover:bg-clip-text transition-all duration-300">Manage Profile</h3>
-                  <p className="text-sm text-slate-500 group-hover:text-slate-600 transition-colors duration-300">Update your preferences</p>
+                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-indigo-600 group-hover:bg-clip-text transition-all duration-300">Manage Profile</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">Update your preferences</p>
                 </div>
               </div>
             </Card>
           </Link>
           <Link to={createPageUrl("Bookings")}>
-            <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 backdrop-blur-sm border-slate-200/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-green-400/20 before:via-emerald-400/20 before:to-teal-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
+            <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-green-400/20 before:via-emerald-400/20 before:to-teal-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
               <div className="relative z-10 flex items-center gap-4 w-full">
                 <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
                   <Briefcase className="w-8 h-8 text-amber-500 group-hover:text-green-500 transition-colors duration-300" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-800 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-green-600 group-hover:to-emerald-600 group-hover:bg-clip-text transition-all duration-300">All Bookings</h3>
-                  <p className="text-sm text-slate-500 group-hover:text-slate-600 transition-colors duration-300">View your trip history</p>
+                  <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-green-600 group-hover:to-emerald-600 group-hover:bg-clip-text transition-all duration-300">All Bookings</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">View your trip history</p>
                 </div>
               </div>
             </Card>

@@ -144,25 +144,25 @@ export default function IdUploadGate({ bookingId, onComplete }) {
   // Skipped quickly when there's none — the user sees the upload form normally.
   if (reusing) {
     return (
-      <Card className="bg-white border-slate-200 rounded-2xl shadow-md">
+      <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-md">
         <CardContent className="p-6 text-center">
-          <Loader2 className="w-6 h-6 text-slate-500 mx-auto mb-2 animate-spin" />
-          <p className="text-sm text-slate-600">Checking your account for an ID on file…</p>
+          <Loader2 className="w-6 h-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 mx-auto mb-2 animate-spin" />
+          <p className="text-sm text-slate-600 dark:text-slate-300">Checking your account for an ID on file…</p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="bg-white border-slate-200 rounded-2xl shadow-md">
+    <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-md">
       <CardContent className="p-6 space-y-4">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
             <ShieldCheck className="w-5 h-5 text-amber-700" />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-900">One last step — verify your ID</h3>
-            <p className="text-sm text-slate-600 mt-1">
+            <h3 className="font-semibold text-slate-900 dark:text-white">One last step — verify your ID</h3>
+            <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
               For your safety and the host's, we need a clear photo or scan of a government-issued ID
               before you can check in. Takes ~30 seconds.
             </p>
@@ -192,14 +192,14 @@ export default function IdUploadGate({ bookingId, onComplete }) {
             accept="image/*,application/pdf"
             onChange={handleFileChange}
             disabled={uploading}
-            className="block w-full mt-1 text-sm text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-900 file:text-white file:text-sm file:font-medium hover:file:bg-slate-800 file:cursor-pointer"
+            className="block w-full mt-1 text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-900 file:text-white file:text-sm file:font-medium hover:file:bg-slate-800 file:cursor-pointer"
           />
           {file && (
-            <p className="text-xs text-slate-500 mt-1">
-              Selected: <span className="font-medium text-slate-700">{file.name}</span> ({(file.size / 1024).toFixed(0)} KB)
+            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
+              Selected: <span className="font-medium text-slate-700 dark:text-slate-200">{file.name}</span> ({(file.size / 1024).toFixed(0)} KB)
             </p>
           )}
-          <p className="text-xs text-slate-500 mt-1">JPG, PNG, or PDF — max 10 MB.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">JPG, PNG, or PDF — max 10 MB.</p>
         </div>
 
         {error && (
@@ -221,7 +221,7 @@ export default function IdUploadGate({ bookingId, onComplete }) {
           )}
         </Button>
 
-        <p className="text-xs text-slate-500 text-center">
+        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 text-center">
           Your ID is encrypted and visible only to UrbanStays staff. Required by HOMESHARES policy.
         </p>
       </CardContent>

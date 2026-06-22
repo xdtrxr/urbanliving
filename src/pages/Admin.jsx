@@ -98,21 +98,21 @@ function InFlightBookingRow({ booking, onExpire }) {
 
   return (
     <div className={`rounded-2xl border p-4 ${
-      isUrgent ? 'border-red-200 bg-red-50/40' : 'border-slate-200 bg-white'
+      isUrgent ? 'border-red-200 bg-red-50/40' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
     }`}>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-[260px]">
-          <p className="font-semibold text-slate-900">
+          <p className="font-semibold text-slate-900 dark:text-white">
             {booking.guest_name || booking.guest_email}
-            <span className="text-slate-500 font-normal"> · {booking.guest_email}</span>
+            <span className="text-slate-500 dark:text-slate-400 dark:text-slate-500 font-normal"> · {booking.guest_email}</span>
           </p>
-          <p className="text-sm text-slate-700 mt-1">
-            <code className="text-xs font-mono text-slate-500">{booking.property_id}</code>
+          <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">
+            <code className="text-xs font-mono text-slate-500 dark:text-slate-400 dark:text-slate-500">{booking.property_id}</code>
             {' · '}{booking.check_in} → {booking.check_out}
             {' · '}{booking.guests} guest{booking.guests === 1 ? '' : 's'}
             {' · '}₦{(booking.total_price || 0).toLocaleString()}
           </p>
-          <p className="text-xs text-slate-400 mt-2">
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
             Approved {booking.approved_at ? new Date(booking.approved_at).toLocaleString() : '—'}
             {startedMs && !Number.isNaN(startedMs) && ` · Opened payment ${new Date(startedMs).toLocaleString()}`}
           </p>
@@ -121,25 +121,25 @@ function InFlightBookingRow({ booking, onExpire }) {
           {approvalLeft !== null && (
             <div>
               <div className={`font-mono text-base font-bold tabular-nums ${
-                approvalLeft < 10 * 60 * 1000 ? 'text-red-700' : 'text-slate-900'
+                approvalLeft < 10 * 60 * 1000 ? 'text-red-700' : 'text-slate-900 dark:text-white'
               }`}>
                 {formatLeft(approvalLeft)}
               </div>
-              <p className="text-xs text-slate-500">time left after approval</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">time left after approval</p>
             </div>
           )}
           {paymentLeft !== null ? (
             <div>
               <div className={`font-mono text-base font-bold tabular-nums ${
-                paymentLeft < 5 * 60 * 1000 ? 'text-red-700' : 'text-slate-900'
+                paymentLeft < 5 * 60 * 1000 ? 'text-red-700' : 'text-slate-900 dark:text-white'
               }`}>
                 {formatLeft(paymentLeft)}
               </div>
-              <p className="text-xs text-slate-500">time left after page opened</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">time left after page opened</p>
             </div>
           ) : (
             <div>
-              <div className="text-xs text-slate-400 italic">Guest hasn&apos;t opened payment yet</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500 italic">Guest hasn&apos;t opened payment yet</div>
             </div>
           )}
         </div>
@@ -710,7 +710,7 @@ export default function AdminPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent"></div>
       </div>
     );
@@ -719,12 +719,12 @@ export default function AdminPage() {
   // New check for unauthenticated users
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-8">
-        <Card className="max-w-md w-full bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-8">
+        <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl">
           <CardContent className="p-12 text-center">
             <Shield className="w-16 h-16 text-red-500 mx-auto mb-6" />
-            <h2 className="text-2xl font-bold text-slate-900 mb-4">Authentication Required</h2>
-            <p className="text-slate-600 mb-6">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Authentication Required</h2>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
               Please log in to access the admin panel.
             </p>
             <Button onClick={() => window.location.reload()} className="bg-slate-900 hover:bg-slate-800">
@@ -739,15 +739,15 @@ export default function AdminPage() {
   // Existing check for unauthorized users (not admin)
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-8">
-        <Card className="max-w-md w-full bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-8">
+        <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl">
           <CardContent className="p-12 text-center">
             <Shield className="w-16 h-16 text-red-500 mx-auto mb-6" />
-            <h2 className="text-2xl font-bold text-slate-900 mb-4">Access Denied</h2>
-            <p className="text-slate-600 mb-6">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Access Denied</h2>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">
               You need administrator privileges to access this page.
             </p>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500">
               Current role: {user.role || 'user'}
             </p>
           </CardContent>
@@ -757,19 +757,19 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
-            <Database className="w-7 h-7 sm:w-8 sm:h-8 text-slate-900 flex-shrink-0" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 break-words min-w-0">Property Data Admin</h1>
+            <Database className="w-7 h-7 sm:w-8 sm:h-8 text-slate-900 dark:text-white flex-shrink-0" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white break-words min-w-0">Property Data Admin</h1>
             <Badge className="bg-red-100 text-red-800 border-red-200 text-[10px] sm:text-xs">Admin Only</Badge>
           </div>
-          <p className="text-slate-600 text-sm sm:text-lg">Manage property data via manual entry or live data fetch</p>
+          <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-lg">Manage property data via manual entry or live data fetch</p>
         </div>
 
         {/* Platform Overview */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-6 sm:mb-8">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-6 sm:mb-8">
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
@@ -777,7 +777,7 @@ export default function AdminPage() {
                 Platform Overview
               </CardTitle>
               <div className="flex items-center justify-between sm:justify-end gap-3">
-                <span className="text-[11px] sm:text-xs text-slate-500">
+                <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
                   {platformStatsAt ? `Updated ${platformStatsAt.toLocaleTimeString()}` : 'Loading...'}
                 </span>
                 <Button
@@ -795,45 +795,45 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-slate-600">Total Bookings</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Total Bookings</p>
                   <Briefcase className="w-4 h-4 text-blue-500" />
                 </div>
-                <p className="text-2xl font-bold text-slate-900">{platformStats?.bookings.total ?? '—'}</p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.bookings.total ?? '—'}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                   {platformStats ? `${platformStats.bookings.upcoming} upcoming, ${platformStats.bookings.current} current` : ''}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-slate-600">Pending</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Pending</p>
                   <Clock className="w-4 h-4 text-amber-500" />
                 </div>
-                <p className="text-2xl font-bold text-slate-900">{platformStats?.bookings.pending ?? '—'}</p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.bookings.pending ?? '—'}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                   {platformStats ? `${platformStats.bookings.cancelled} cancelled total` : ''}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-slate-600">Revenue (Paid)</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Revenue (Paid)</p>
                   <Wallet className="w-4 h-4 text-green-500" />
                 </div>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {platformStats ? `₦${platformStats.revenue.paidNGN.toLocaleString()}` : '—'}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                   {platformStats ? `₦${platformStats.revenue.pendingNGN.toLocaleString()} pending` : ''}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-slate-600">Referrals</p>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">Referrals</p>
                   <Users className="w-4 h-4 text-purple-500" />
                 </div>
-                <p className="text-2xl font-bold text-slate-900">{platformStats?.referrals.count ?? '—'}</p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.referrals.count ?? '—'}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                   {platformStats ? `${platformStats.referrals.successful} successful · ₦${platformStats.referrals.earningsNGN.toLocaleString()} paid out` : ''}
                 </p>
               </div>
@@ -842,7 +842,7 @@ export default function AdminPage() {
         </Card>
 
         {/* Pending Availability Requests */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
@@ -868,30 +868,30 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {isLoadingRequests && pendingRequests.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 text-sm">Loading requests...</div>
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">Loading requests...</div>
             ) : pendingRequests.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 text-sm">No pending requests right now.</div>
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">No pending requests right now.</div>
             ) : (
               <div className="space-y-3">
                 {pendingRequests.map((req) => (
                   <div
                     key={req.id}
                     className={`rounded-2xl border p-4 ${
-                      req.has_conflict ? 'border-red-200 bg-red-50/50' : 'border-slate-200 bg-white'
+                      req.has_conflict ? 'border-red-200 bg-red-50/50' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                       <div className="flex-1 min-w-[260px]">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="font-semibold text-slate-900">{req.property_title || 'Untitled property'}</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">{req.property_title || 'Untitled property'}</p>
                           {req.has_conflict && (
                             <Badge className="bg-red-100 text-red-800 border-red-200 text-xs">⚠ Conflict</Badge>
                           )}
                         </div>
-                        <p className="text-sm text-slate-600">
+                        <p className="text-sm text-slate-600 dark:text-slate-300">
                           <span className="font-medium">{req.user_name || req.user_email}</span> · {req.user_email}
                         </p>
-                        <p className="text-sm text-slate-700 mt-1">
+                        <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">
                           {req.check_in} → {req.check_out} · {req.guests} guest{req.guests === 1 ? '' : 's'}
                         </p>
                         {req.has_conflict && req.conflict_details && (
@@ -900,7 +900,7 @@ export default function AdminPage() {
                             {' '}({req.conflict_details.check_in} → {req.conflict_details.check_out})
                           </p>
                         )}
-                        <p className="text-xs text-slate-400 mt-2">
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
                           Requested {req.created_date ? new Date(req.created_date).toLocaleString() : 'recently'}
                           {' · '}ID <code className="font-mono">{req.id}</code>
                         </p>
@@ -933,7 +933,7 @@ export default function AdminPage() {
         </Card>
 
         {/* In-Flight Bookings — approved by admin, awaiting payment */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
@@ -962,9 +962,9 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             {isLoadingInFlight && inFlightBookings.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 text-sm">Loading…</div>
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">Loading…</div>
             ) : inFlightBookings.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 text-sm">No bookings awaiting payment right now.</div>
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm">No bookings awaiting payment right now.</div>
             ) : (
               <div className="space-y-3">
                 {inFlightBookings.map((booking) => (
@@ -983,7 +983,7 @@ export default function AdminPage() {
         <ConfirmedBookingsAdmin />
 
         {/* MCP Data Fetch Tool */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Database className="w-5 h-5" />
@@ -1039,7 +1039,7 @@ export default function AdminPage() {
                   )}
                 </Button>
               </div>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-2">
                 Fetches live property listings from Airbnb and saves them to your database
               </p>
             </div>
@@ -1118,7 +1118,7 @@ export default function AdminPage() {
           </TabsContent>
 
           <TabsContent value="add-manual">
-            <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+            <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Plus className="w-6 h-6 text-amber-500" />
@@ -1147,7 +1147,7 @@ export default function AdminPage() {
                 <form onSubmit={handlePropertyFormSubmit} className="space-y-6">
                   {/* Basic Information */}
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-lg text-slate-900 flex items-center gap-2">
+                    <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
                       <FileText className="w-5 h-5 text-blue-600" />
                       Basic Information
                     </h3>
@@ -1191,7 +1191,7 @@ export default function AdminPage() {
                         onChange={(e) => setPropertyFormData(prev => ({ ...prev, description: e.target.value }))}
                         placeholder="Detailed description of the property"
                         rows={3}
-                        className="mt-1 w-full rounded-md border border-slate-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="mt-1 w-full rounded-md border border-slate-200 dark:border-slate-800 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1232,7 +1232,7 @@ export default function AdminPage() {
 
                   {/* Pricing */}
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-lg text-slate-900 flex items-center gap-2">
+                    <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
                       <Wallet className="w-5 h-5 text-green-600" />
                       Pricing
                     </h3>
@@ -1259,14 +1259,14 @@ export default function AdminPage() {
                           placeholder="e.g., 20000"
                           className="mt-1"
                         />
-                        <p className="text-xs text-slate-500 mt-1">Optional refundable deposit for property security</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Optional refundable deposit for property security</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Property Details */}
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-lg text-slate-900 flex items-center gap-2">
+                    <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
                       <List className="w-5 h-5 text-purple-600" />
                       Property Details
                     </h3>
@@ -1315,7 +1315,7 @@ export default function AdminPage() {
                         placeholder="e.g., wifi, kitchen, parking"
                         className="mt-1"
                       />
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                         Common: wifi, kitchen, parking, pool, gym, balcony, air_conditioning, heating, washer, dryer, pets_allowed, smoking_allowed, workspace
                       </p>
                     </div>
@@ -1323,7 +1323,7 @@ export default function AdminPage() {
 
                   {/* Media */}
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-lg text-slate-900 flex items-center gap-2">
+                    <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
                       <ImageIcon className="w-5 h-5 text-red-600" />
                       Media
                     </h3>
@@ -1337,7 +1337,7 @@ export default function AdminPage() {
                           accept="image/*"
                           onChange={handleImageUpload}
                           disabled={isUploadingImages}
-                          className="flex-1 rounded-xl border-slate-200 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+                          className="flex-1 rounded-xl border-slate-200 dark:border-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 dark:text-slate-200 hover:file:bg-slate-200"
                         />
                         {isUploadingImages && (
                           <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
@@ -1370,13 +1370,13 @@ export default function AdminPage() {
                           accept="video/*"
                           onChange={handleVideoUpload}
                           disabled={isUploadingVideos}
-                          className="flex-1 rounded-xl border-slate-200 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+                          className="flex-1 rounded-xl border-slate-200 dark:border-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 dark:text-slate-200 hover:file:bg-slate-200"
                         />
                         {isUploadingVideos && (
                           <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                         Supported formats: MP4, WebM, AVI, MOV (Max size: 100MB per video)
                       </p>
                       {propertyFormData.videos.length > 0 && (
@@ -1408,7 +1408,7 @@ export default function AdminPage() {
 
                   {/* Host Information */}
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-lg text-slate-900 flex items-center gap-2">
+                    <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
                       <Shield className="w-5 h-5 text-blue-400" />
                       Host Information
                     </h3>
@@ -1431,7 +1431,7 @@ export default function AdminPage() {
                         placeholder="e.g., +234 801 234 5678"
                         className="mt-1"
                       />
-                      <p className="text-xs text-slate-500 mt-1">Shown to guests after payment so they can call on arrival.</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Shown to guests after payment so they can call on arrival.</p>
                     </div>
                     <div>
                       <Label htmlFor="arrival_instructions">Arrival Instructions</Label>
@@ -1442,7 +1442,7 @@ export default function AdminPage() {
                         placeholder="Gate code, parking notes, key handover process, landmark directions, etc."
                         className="mt-1 min-h-[80px]"
                       />
-                      <p className="text-xs text-slate-500 mt-1">Revealed to the guest only after payment confirms.</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Revealed to the guest only after payment confirms.</p>
                     </div>
                     <div className="flex items-center space-x-2">
                       <input
@@ -1452,7 +1452,7 @@ export default function AdminPage() {
                         onChange={(e) => setPropertyFormData(prev => ({ ...prev, instant_book: e.target.checked }))}
                         className="rounded border-slate-300 text-blue-600 shadow-sm focus:ring-blue-500"
                       />
-                      <Label htmlFor="instant_book" className="text-sm font-semibold text-slate-700">
+                      <Label htmlFor="instant_book" className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                         Instant Book Available
                       </Label>
                     </div>
@@ -1495,7 +1495,7 @@ export default function AdminPage() {
           </TabsContent>
 
           <TabsContent value="manage-properties">
-            <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
+            <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <CardTitle className="flex items-center gap-2 text-base sm:text-lg min-w-0">
@@ -1520,11 +1520,11 @@ export default function AdminPage() {
               <CardContent>
                 {isLoadingProperties ? (
                   <div className="text-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-slate-400" />
-                    <p className="text-slate-500">Loading properties...</p>
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-slate-400 dark:text-slate-500" />
+                    <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Loading properties...</p>
                   </div>
                 ) : properties.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500">
+                  <div className="text-center py-12 text-slate-500 dark:text-slate-400 dark:text-slate-500">
                     <Database className="w-12 h-12 mx-auto mb-4 text-slate-300" />
                     <p>No properties found.</p>
                     <p className="text-sm mt-2">Add properties using the form or fetch live data.</p>
@@ -1535,20 +1535,20 @@ export default function AdminPage() {
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50 border-b-2 border-slate-200">
+                      <thead className="bg-slate-50 border-b-2 border-slate-200 dark:border-slate-800">
                         <tr>
-                          <th className="text-left p-3 font-semibold text-slate-700">Property</th>
-                          <th className="text-left p-3 font-semibold text-slate-700">Location</th>
-                          <th className="text-left p-3 font-semibold text-slate-700">Price/Night</th>
-                          <th className="text-left p-3 font-semibold text-slate-700">Caution Fee</th>
-                          <th className="text-left p-3 font-semibold text-slate-700">Type</th>
-                          <th className="text-left p-3 font-semibold text-slate-700">Source</th>
-                          <th className="text-right p-3 font-semibold text-slate-700">Actions</th>
+                          <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-200">Property</th>
+                          <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-200">Location</th>
+                          <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-200">Price/Night</th>
+                          <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-200">Caution Fee</th>
+                          <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-200">Type</th>
+                          <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-200">Source</th>
+                          <th className="text-right p-3 font-semibold text-slate-700 dark:text-slate-200">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {properties.map((property) => (
-                          <tr key={property.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                          <tr key={property.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 transition-colors">
                             <td className="p-3">
                               <div className="flex items-center gap-3">
                                 <img 
@@ -1557,22 +1557,22 @@ export default function AdminPage() {
                                   className="w-12 h-12 rounded-lg object-cover"
                                 />
                                 <div>
-                                  <p className="font-medium text-slate-900">{property.title}</p>
-                                  <p className="text-xs text-slate-500">ID: {property.id.substring(0, 8)}...</p>
+                                  <p className="font-medium text-slate-900 dark:text-white">{property.title}</p>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">ID: {property.id.substring(0, 8)}...</p>
                                 </div>
                               </div>
                             </td>
-                            <td className="p-3 text-sm text-slate-600">
+                            <td className="p-3 text-sm text-slate-600 dark:text-slate-300">
                               {property.location?.city}, {property.location?.country}
                             </td>
-                            <td className="p-3 font-semibold text-slate-900">
+                            <td className="p-3 font-semibold text-slate-900 dark:text-white">
                               ₦{property.price_per_night?.toLocaleString()}
                             </td>
-                            <td className="p-3 text-slate-600">
+                            <td className="p-3 text-slate-600 dark:text-slate-300">
                               {property.caution_fee > 0 ? (
                                 <span className="text-sm">₦{property.caution_fee?.toLocaleString()}</span>
                               ) : (
-                                <span className="text-xs text-slate-400">None</span>
+                                <span className="text-xs text-slate-400 dark:text-slate-500">None</span>
                               )}
                             </td>
                             <td className="p-3">
@@ -1635,8 +1635,8 @@ export default function AdminPage() {
                 Are you sure you want to delete this property?
                 {propertyToDelete && (
                   <div className="mt-3 p-3 bg-slate-50 rounded-lg">
-                    <p className="font-semibold text-slate-900">{propertyToDelete.title}</p>
-                    <p className="text-sm text-slate-600 mt-1">
+                    <p className="font-semibold text-slate-900 dark:text-white">{propertyToDelete.title}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
                       {propertyToDelete.location?.city}, {propertyToDelete.location?.country}
                     </p>
                   </div>
@@ -1664,7 +1664,7 @@ export default function AdminPage() {
         </AlertDialog>
 
         {/* Support Inbox Section */}
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg mb-8">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MessageSquare className="w-5 h-5" />
@@ -1674,8 +1674,8 @@ export default function AdminPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6" style={{ minHeight: '500px' }}>
               {/* Ticket List */}
-              <div className="md:col-span-1 border-r border-slate-200 pr-4 max-h-[500px] overflow-y-auto">
-                <h3 className="font-semibold text-slate-800 mb-3">Open Tickets ({supportTickets.filter(t => t.status !== 'closed' && t.status !== 'resolved').length})</h3>
+              <div className="md:col-span-1 border-r border-slate-200 dark:border-slate-800 pr-4 max-h-[500px] overflow-y-auto">
+                <h3 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">Open Tickets ({supportTickets.filter(t => t.status !== 'closed' && t.status !== 'resolved').length})</h3>
                 {isLoadingTickets ? (
                   <p>Loading tickets...</p>
                 ) : (
@@ -1687,7 +1687,7 @@ export default function AdminPage() {
                         className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedTicket?.id === ticket.id ? 'bg-blue-50 border-blue-200 border' : 'hover:bg-slate-50 border border-transparent'}`}
                       >
                         <p className="font-semibold text-sm truncate">{ticket.subject}</p>
-                        <p className="text-xs text-slate-500 truncate">{ticket.user_email}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 truncate">{ticket.user_email}</p>
                         <Badge variant="outline" className="mt-1 text-xs capitalize">{ticket.status.replace('_', ' ')}</Badge>
                       </div>
                     ))}
@@ -1699,10 +1699,10 @@ export default function AdminPage() {
               <div className="md:col-span-2 flex flex-col">
                 {selectedTicket ? (
                   <>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 pb-4 border-b border-slate-200">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 pb-4 border-b border-slate-200 dark:border-slate-800">
                       <div className="min-w-0">
-                        <h3 className="font-bold text-slate-900 truncate">{selectedTicket.subject}</h3>
-                        <p className="text-sm text-slate-600 truncate">From: {selectedTicket.user_email}</p>
+                        <h3 className="font-bold text-slate-900 dark:text-white truncate">{selectedTicket.subject}</h3>
+                        <p className="text-sm text-slate-600 dark:text-slate-300 truncate">From: {selectedTicket.user_email}</p>
                       </div>
                       <div className="flex-shrink-0">
                         <Select value={selectedTicket.status} onValueChange={handleUpdateTicketStatus}>
@@ -1721,15 +1721,15 @@ export default function AdminPage() {
                     <div className="flex-1 bg-slate-50 rounded-xl p-4 overflow-y-auto space-y-4 mb-4" style={{ minHeight: '300px' }}>
                       {ticketMessages.map((message, index) => (
                         <div key={index} className={`flex w-full ${message.sender_type === 'user' ? 'justify-start' : 'justify-end'}`}>
-                            <div className={`p-3 rounded-xl max-w-md ${message.sender_type === 'user' ? 'bg-white border' : 'bg-blue-600 text-white'}`}>
+                            <div className={`p-3 rounded-xl max-w-md ${message.sender_type === 'user' ? 'bg-white dark:bg-slate-900 border' : 'bg-blue-600 text-white'}`}>
                                 <p className="text-sm whitespace-pre-wrap">{message.message}</p>
-                                <p className={`text-xs mt-1 text-right ${message.sender_type === 'user' ? 'text-slate-400' : 'text-blue-200'}`}>
+                                <p className={`text-xs mt-1 text-right ${message.sender_type === 'user' ? 'text-slate-400 dark:text-slate-500' : 'text-blue-200'}`}>
                                   {new Date(message.created_date).toLocaleTimeString()}
                                 </p>
                             </div>
                         </div>
                       ))}
-                      {ticketMessages.length === 0 && <p className="text-center text-slate-500">No messages yet.</p>}
+                      {ticketMessages.length === 0 && <p className="text-center text-slate-500 dark:text-slate-400 dark:text-slate-500">No messages yet.</p>}
                     </div>
                     <div className="flex items-center gap-2">
                       <Input
@@ -1746,7 +1746,7 @@ export default function AdminPage() {
                     </div>
                   </>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-center text-slate-500">
+                  <div className="flex items-center justify-center h-full text-center text-slate-500 dark:text-slate-400 dark:text-slate-500">
                     <div>
                       <MessageSquare className="w-12 h-12 mx-auto mb-2" />
                       <p>Select a ticket to view the conversation.</p>

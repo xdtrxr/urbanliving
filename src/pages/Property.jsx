@@ -101,7 +101,7 @@ export default function PropertyPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
                 <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent"></div>
             </div>
         );
@@ -109,10 +109,10 @@ export default function PropertyPage() {
 
     if (!property) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-8 text-center">
-                <Card className="max-w-md w-full bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl p-12">
-                    <h2 className="text-2xl font-bold text-slate-900 mb-4">Property Not Found</h2>
-                    <p className="text-slate-600 mb-6">The property you're looking for doesn't exist or has been removed.</p>
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-8 text-center">
+                <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl p-12">
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Property Not Found</h2>
+                    <p className="text-slate-600 dark:text-slate-300 mb-6">The property you're looking for doesn't exist or has been removed.</p>
                     <Link to={createPageUrl('Search')}>
                         <Button>Back to Search</Button>
                     </Link>
@@ -124,16 +124,16 @@ export default function PropertyPage() {
     const currencySymbol = currencySymbols[property.currency] || '₦';
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
             <div className="max-w-6xl mx-auto">
                 <Link to={createPageUrl('Search')}>
-                    <Button variant="ghost" className="mb-6 flex items-center gap-2 text-slate-600 hover:text-slate-900">
+                    <Button variant="ghost" className="mb-6 flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:text-white">
                         <ArrowLeft className="w-4 h-4" />
                         Back to Search
                     </Button>
                 </Link>
 
-                <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-4 sm:p-6 md:p-8">
+                <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-4 sm:p-6 md:p-8">
                     {/* Media Gallery — hero is tap-to-open-lightbox; thumbnails jump
                         to that media inside the lightbox. No more in-place swap. */}
                     <div className="mb-6 sm:mb-8">
@@ -225,8 +225,8 @@ export default function PropertyPage() {
                     <CardHeader className="p-0 mb-6">
                         <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                             <div>
-                                <CardTitle className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2 break-words">{property.title}</CardTitle>
-                                <div className="flex items-center gap-2 text-slate-600">
+                                <CardTitle className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 break-words">{property.title}</CardTitle>
+                                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
                                     <MapPin className="w-5 h-5" />
                                     <span className="font-medium">{property.location?.city}, {property.location?.country}</span>
                                 </div>
@@ -242,7 +242,7 @@ export default function PropertyPage() {
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                             <div className="lg:col-span-2">
                                 <div className="border-b pb-6 mb-6">
-                                    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-slate-700">
+                                    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-slate-700 dark:text-slate-200">
                                         <div className="flex items-center gap-2"><Users className="w-5 h-5 text-amber-500" /> <span>{property.max_guests} guests</span></div>
                                         <div className="flex items-center gap-2"><Bed className="w-5 h-5 text-amber-500" /> <span>{property.bedrooms || 1} bedroom(s)</span></div>
                                         <div className="flex items-center gap-2"><Bath className="w-5 h-5 text-amber-500" /> <span>{property.bathrooms || 1} bathroom(s)</span></div>
@@ -250,37 +250,37 @@ export default function PropertyPage() {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <h3 className="font-bold text-xl text-slate-800">About this place</h3>
-                                    <p className="text-slate-600 leading-relaxed">{property.description}</p>
+                                    <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100">About this place</h3>
+                                    <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{property.description}</p>
                                 </div>
 
                                 <div className="mt-8">
-                                    <h3 className="font-bold text-xl text-slate-800 mb-4">What this place offers</h3>
+                                    <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">What this place offers</h3>
                                     <div className="grid grid-cols-2 gap-4">
                                         {property.amenities?.map((amenity) => (
                                             <div key={amenity} className="flex items-center gap-3">
-                                                {React.createElement(amenityIcons[amenity] || Star, { className: "w-5 h-5 text-slate-600" })}
-                                                <span className="text-slate-700 capitalize">{amenity.replace(/_/g, ' ')}</span>
+                                                {React.createElement(amenityIcons[amenity] || Star, { className: "w-5 h-5 text-slate-600 dark:text-slate-300" })}
+                                                <span className="text-slate-700 dark:text-slate-200 capitalize">{amenity.replace(/_/g, ' ')}</span>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
                                 <div className="mt-8">
-                                    <h3 className="font-bold text-xl text-slate-800 mb-4">Check-in & Check-out</h3>
+                                    <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">Check-in & Check-out</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
                                             <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
                                             <div>
-                                                <p className="text-xs text-slate-500">Check-in</p>
-                                                <p className="font-semibold text-slate-900">from 2:00 PM</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-in</p>
+                                                <p className="font-semibold text-slate-900 dark:text-white">from 2:00 PM</p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
                                             <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
                                             <div>
-                                                <p className="text-xs text-slate-500">Check-out</p>
-                                                <p className="font-semibold text-slate-900">by 12:00 PM</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">Check-out</p>
+                                                <p className="font-semibold text-slate-900 dark:text-white">by 12:00 PM</p>
                                             </div>
                                         </div>
                                     </div>
@@ -288,12 +288,12 @@ export default function PropertyPage() {
                             </div>
 
                             <div className="lg:col-span-1">
-                                <Card className="bg-slate-50/80 border-slate-200 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
+                                <Card className="bg-slate-50/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
                                     <div className="mb-6">
-                                        <div className="text-3xl font-bold text-slate-900">
+                                        <div className="text-3xl font-bold text-slate-900 dark:text-white">
                                             {currencySymbol}{property.price_per_night.toLocaleString()}
                                         </div>
-                                        <div className="text-base text-slate-600 mt-1">per night</div>
+                                        <div className="text-base text-slate-600 dark:text-slate-300 mt-1">per night</div>
                                         
                                         {property.caution_fee > 0 && (
                                             <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
@@ -312,10 +312,10 @@ export default function PropertyPage() {
                                     </div>
 
                                     {property.rating > 0 && (
-                                        <div className="flex items-center gap-2 mb-6 pb-6 border-b border-slate-200">
+                                        <div className="flex items-center gap-2 mb-6 pb-6 border-b border-slate-200 dark:border-slate-800">
                                             <Star className="w-5 h-5 text-amber-400 fill-current" />
-                                            <span className="font-semibold text-slate-900 text-lg">{property.rating}</span>
-                                            <span className="text-slate-500">({property.reviews_count})</span>
+                                            <span className="font-semibold text-slate-900 dark:text-white text-lg">{property.rating}</span>
+                                            <span className="text-slate-500 dark:text-slate-400 dark:text-slate-500">({property.reviews_count})</span>
                                         </div>
                                     )}
 
@@ -350,7 +350,7 @@ export default function PropertyPage() {
                                         </Link>
                                     )}
 
-                                    <p className="text-xs text-center text-slate-500 mt-4">
+                                    <p className="text-xs text-center text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-4">
                                         {!isAuthenticated
                                             ? 'Create an account or sign in to book.'
                                             : pendingPaymentBooking

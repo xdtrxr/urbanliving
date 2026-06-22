@@ -51,7 +51,7 @@ function FilterChip({ icon: Icon, label, isActive, children }) {
           className={`h-10 rounded-full px-4 gap-2 font-medium transition-colors whitespace-nowrap ${
             isActive
               ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800'
-              : 'bg-white/80 backdrop-blur-sm border-slate-200 text-slate-700 hover:border-amber-400'
+              : 'bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-amber-400'
           }`}
         >
           {Icon && <Icon className="w-4 h-4" />}
@@ -59,7 +59,7 @@ function FilterChip({ icon: Icon, label, isActive, children }) {
           <ChevronDown className="w-3.5 h-3.5 opacity-70" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 p-4 bg-white/95 backdrop-blur-xl">
+      <PopoverContent align="start" className="w-72 p-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl">
         {children}
       </PopoverContent>
     </Popover>
@@ -113,7 +113,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
     <div className="mb-6 flex flex-wrap items-center gap-2 sm:gap-3">
       <FilterChip icon={Wallet} label={priceLabel} isActive={priceActive}>
         <div>
-          <Label className="text-sm font-semibold text-slate-700 mb-3 block">
+          <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 block">
             Price range (per night)
           </Label>
           <Slider
@@ -124,14 +124,14 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
             step={5000}
             className="w-full mt-2"
           />
-          <div className="flex justify-between text-sm text-slate-600 mt-3 font-medium">
+          <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mt-3 font-medium">
             <span>₦{filters.minPrice.toLocaleString()}</span>
             <span>₦{filters.maxPrice.toLocaleString()}</span>
           </div>
           {priceActive && (
             <button
               onClick={() => handlePriceChange([PRICE_MIN, PRICE_MAX])}
-              className="text-xs text-slate-500 hover:text-slate-700 underline mt-3"
+              className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200 underline mt-3"
             >
               Reset price
             </button>
@@ -141,7 +141,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
 
       <FilterChip icon={Home} label={typeLabel} isActive={typeActive}>
         <div>
-          <Label className="text-sm font-semibold text-slate-700 mb-3 block">
+          <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 block">
             Property type
           </Label>
           <div className="grid grid-cols-2 gap-2">
@@ -154,7 +154,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
                   className={`text-sm rounded-lg px-3 py-2 border transition-colors text-left ${
                     selected
                       ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-amber-400'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-amber-400'
                   }`}
                 >
                   {t.label}
@@ -167,7 +167,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
 
       <FilterChip icon={Sparkles} label={amenityLabel} isActive={amenitiesActive}>
         <div>
-          <Label className="text-sm font-semibold text-slate-700 mb-3 block">
+          <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 block">
             Amenities
           </Label>
           <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
@@ -182,14 +182,14 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
                   checked={filters.amenities?.includes(amenity.id) || false}
                   onCheckedChange={toggleAmenity(amenity.id)}
                 />
-                <span className="text-sm text-slate-700">{amenity.label}</span>
+                <span className="text-sm text-slate-700 dark:text-slate-200">{amenity.label}</span>
               </label>
             ))}
           </div>
           {amenitiesActive && (
             <button
               onClick={() => onFiltersChange({ ...filters, amenities: [] })}
-              className="text-xs text-slate-500 hover:text-slate-700 underline mt-3"
+              className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:text-slate-200 underline mt-3"
             >
               Clear amenities
             </button>
@@ -203,7 +203,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
           <Button
             variant="outline"
             size="sm"
-            className="h-10 rounded-full px-4 gap-2 font-medium bg-white/80 backdrop-blur-sm border-slate-200 text-slate-700 hover:border-amber-400 whitespace-nowrap"
+            className="h-10 rounded-full px-4 gap-2 font-medium bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-amber-400 whitespace-nowrap"
           >
             <SlidersHorizontal className="w-4 h-4" />
             All filters
@@ -221,7 +221,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
 
           <div className="mt-6 space-y-6">
             <div>
-              <Label className="text-sm font-semibold text-slate-700 mb-3 block">
+              <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 block">
                 Price range (per night, NGN)
               </Label>
               <Slider
@@ -231,14 +231,14 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
                 min={PRICE_MIN}
                 step={5000}
               />
-              <div className="flex justify-between text-sm text-slate-600 mt-3 font-medium">
+              <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mt-3 font-medium">
                 <span>₦{filters.minPrice.toLocaleString()}</span>
                 <span>₦{filters.maxPrice.toLocaleString()}</span>
               </div>
             </div>
 
             <div>
-              <Label className="text-sm font-semibold text-slate-700 mb-3 block">
+              <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 block">
                 Property type
               </Label>
               <div className="grid grid-cols-2 gap-2">
@@ -251,7 +251,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
                       className={`text-sm rounded-lg px-3 py-2 border transition-colors text-left ${
                         selected
                           ? 'bg-slate-900 text-white border-slate-900'
-                          : 'bg-white border-slate-200 text-slate-700 hover:border-amber-400'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-amber-400'
                       }`}
                     >
                       {t.label}
@@ -262,7 +262,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
             </div>
 
             <div>
-              <Label className="text-sm font-semibold text-slate-700 mb-3 block">
+              <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 block">
                 Amenities
               </Label>
               <div className="grid grid-cols-2 gap-3">
@@ -277,13 +277,13 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
                       checked={filters.amenities?.includes(amenity.id) || false}
                       onCheckedChange={toggleAmenity(amenity.id)}
                     />
-                    <span className="text-sm text-slate-700">{amenity.label}</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-200">{amenity.label}</span>
                   </label>
                 ))}
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2 sticky bottom-0 bg-white/90 backdrop-blur-sm -mx-1 px-1 pb-1">
+            <div className="flex gap-2 pt-2 sticky bottom-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm -mx-1 px-1 pb-1">
               <Button
                 variant="outline"
                 className="flex-1 rounded-xl"
@@ -307,7 +307,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
           variant="ghost"
           size="sm"
           onClick={clearAll}
-          className="h-10 rounded-full text-slate-500 hover:text-slate-800 px-3"
+          className="h-10 rounded-full text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-slate-800 dark:text-slate-100 px-3"
         >
           <X className="w-4 h-4 mr-1" />
           Clear

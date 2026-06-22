@@ -123,16 +123,16 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
           </>
         )}
 
-        {/* Media slide — fills the entire viewport area minus reserved control
-            zones (top for close button + counter, bottom for dot indicator /
-            thumbnails). Image uses object-contain so it scales up to use ALL
-            available space while preserving aspect ratio — minimal black
-            margin around the photo on every screen. */}
+        {/* Media slide — fills the ENTIRE viewport. Controls (close, counter,
+            arrows, dots, thumbs) float OVER the image as overlays so we don't
+            waste space reserving bands for them; their backdrop-blur pills
+            stay legible regardless of the photo behind them. The only padding
+            is the safe-area insets so iPhone notches don't clip the image. */}
         <div
-          className="absolute inset-0 flex items-center justify-center pointer-events-none px-3 sm:px-6"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
           style={{
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4rem)',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 4rem)',
+            paddingTop: 'env(safe-area-inset-top, 0px)',
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           }}
         >
           <AnimatePresence mode="wait">
@@ -154,7 +154,7 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
                   src={current.url}
                   alt=""
                   draggable={false}
-                  className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-2xl select-none pointer-events-none"
+                  className="max-w-full max-h-full w-auto h-auto object-contain select-none pointer-events-none"
                 />
               ) : (
                 <video
@@ -162,7 +162,7 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
                   controls
                   autoPlay
                   playsInline
-                  className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg shadow-2xl"
+                  className="max-w-full max-h-full w-auto h-auto object-contain"
                 >
                   Your browser does not support video.
                 </video>

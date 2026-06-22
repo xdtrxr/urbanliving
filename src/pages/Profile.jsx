@@ -109,7 +109,7 @@ export default function ProfilePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-8">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-8">
         <div className="max-w-2xl mx-auto">
           <div className="animate-pulse space-y-6">
             <div className="h-8 bg-slate-200 rounded-xl w-48" />
@@ -121,17 +121,17 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         <div className="lg:col-span-2">
           {/* Profile Details Card */}
           <div className="mb-6 sm:mb-8">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">My Profile</h1>
-            <p className="text-slate-600 text-base sm:text-lg">Manage your account and preferences</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-1 sm:mb-2">My Profile</h1>
+            <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">Manage your account and preferences</p>
           </div>
 
-          <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg">
-            <CardHeader className="p-5 sm:p-8 border-b border-slate-100">
+          <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
+            <CardHeader className="p-5 sm:p-8 border-b border-slate-100 dark:border-slate-800">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
                 {/* Profile Picture Section */}
                 <div className="relative">
@@ -173,10 +173,10 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <CardTitle className="text-xl sm:text-2xl font-bold text-slate-900 break-words">
+                  <CardTitle className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white break-words">
                     {user?.full_name || "User"}
                   </CardTitle>
-                  <div className="flex items-center gap-2 text-slate-600 mt-1 min-w-0">
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 mt-1 min-w-0">
                     <Mail className="w-4 h-4 flex-shrink-0" />
                     <span className="truncate text-sm sm:text-base">{user?.email}</span>
                   </div>
@@ -189,27 +189,27 @@ export default function ProfilePage() {
 
             <CardContent className="p-5 sm:p-8 space-y-6">
               <div>
-                <Label htmlFor="phone_number" className="text-sm font-semibold text-slate-700">
+                <Label htmlFor="phone_number" className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                   Phone Number *
                 </Label>
                 <div className="relative mt-2">
-                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-500 w-4 h-4" />
                   <Input
                     id="phone_number"
                     type="tel"
                     value={profileData.phone_number}
                     onChange={(e) => setProfileData({ ...profileData, phone_number: e.target.value })}
                     placeholder="+234 800 000 0000"
-                    className="pl-10 rounded-xl border-slate-200"
+                    className="pl-10 rounded-xl border-slate-200 dark:border-slate-800"
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">
                   Required for booking confirmations and property communication
                 </p>
               </div>
 
               <div>
-                <Label htmlFor="bio" className="text-sm font-semibold text-slate-700">
+                <Label htmlFor="bio" className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                   About Me
                 </Label>
                 <Textarea
@@ -217,20 +217,20 @@ export default function ProfilePage() {
                   value={profileData.bio}
                   onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
                   placeholder="Tell us about yourself..."
-                  className="mt-2 rounded-xl border-slate-200 min-h-[100px]"
+                  className="mt-2 rounded-xl border-slate-200 dark:border-slate-800 min-h-[100px]"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <Label className="text-sm font-semibold text-slate-700">
+                  <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                     Travel Style
                   </Label>
                   <Select
                     value={profileData.travel_style}
                     onValueChange={(value) => setProfileData({ ...profileData, travel_style: value })}
                   >
-                    <SelectTrigger className="mt-2 rounded-xl border-slate-200">
+                    <SelectTrigger className="mt-2 rounded-xl border-slate-200 dark:border-slate-800">
                       <SelectValue placeholder="Select your style" />
                     </SelectTrigger>
                     <SelectContent>
@@ -245,7 +245,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="interests" className="text-sm font-semibold text-slate-700">
+                  <Label htmlFor="interests" className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                     Travel Interests
                   </Label>
                   <Input
@@ -253,7 +253,7 @@ export default function ProfilePage() {
                     value={profileData.interests}
                     onChange={(e) => setProfileData({ ...profileData, interests: e.target.value })}
                     placeholder="e.g., food, culture, nature"
-                    className="mt-2 rounded-xl border-slate-200"
+                    className="mt-2 rounded-xl border-slate-200 dark:border-slate-800"
                   />
                 </div>
               </div>

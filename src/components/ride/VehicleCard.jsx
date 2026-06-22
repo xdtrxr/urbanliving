@@ -8,7 +8,7 @@ import { Users, Car, Snowflake, MapPin } from 'lucide-react';
 // Small chip used inside the card body — keeps amenity / feature pills tight
 function Chip({ icon: Icon, children }) {
   return (
-    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-medium">
+    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 dark:text-slate-200 text-[11px] font-medium">
       {Icon && <Icon className="w-3 h-3" />}
       {children}
     </div>
@@ -24,7 +24,7 @@ export default function VehicleCard({ vehicle }) {
 
   return (
     <Link to={createPageUrl(`Vehicle?id=${vehicle.id}`)} className="block group">
-      <Card className="bg-white border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group-hover:-translate-y-0.5">
+      <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group-hover:-translate-y-0.5">
         {/* Hero image */}
         <div className="aspect-[4/3] bg-slate-100 overflow-hidden relative">
           <img
@@ -34,7 +34,7 @@ export default function VehicleCard({ vehicle }) {
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
           {vehicle.vehicle_type && (
-            <Badge className="absolute top-3 left-3 bg-white/90 text-slate-800 border-0 capitalize text-[11px] font-semibold backdrop-blur-sm">
+            <Badge className="absolute top-3 left-3 bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-100 border-0 capitalize text-[11px] font-semibold backdrop-blur-sm">
               {vehicle.vehicle_type.replace(/_/g, ' ')}
             </Badge>
           )}
@@ -48,10 +48,10 @@ export default function VehicleCard({ vehicle }) {
 
         <CardContent className="p-4">
           <div className="mb-3">
-            <h3 className="font-bold text-slate-900 text-base sm:text-lg leading-tight line-clamp-1">
+            <h3 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg leading-tight line-clamp-1">
               {vehicle.name}
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">
               {vehicle.brand}{vehicle.model_year ? ` · ${vehicle.model_year}` : ''}
             </p>
           </div>
@@ -67,20 +67,20 @@ export default function VehicleCard({ vehicle }) {
           </div>
 
           {/* Pricing row — both 12h and 24h so the guest sees the upgrade math */}
-          <div className="flex items-end justify-between pt-3 border-t border-slate-100">
+          <div className="flex items-end justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
             <div>
-              <div className="text-[11px] text-slate-500 font-medium">From</div>
-              <div className="text-lg sm:text-xl font-bold text-slate-900 leading-none">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium">From</div>
+              <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-none">
                 ₦{(price12 || 0).toLocaleString()}
               </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">/ 12 hours</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">/ 12 hours</div>
             </div>
             {price24 ? (
               <div className="text-right">
                 <div className="text-sm font-semibold text-amber-700">
                   ₦{price24.toLocaleString()}
                 </div>
-                <div className="text-[11px] text-slate-500">/ 24 hours</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 dark:text-slate-500">/ 24 hours</div>
               </div>
             ) : null}
           </div>

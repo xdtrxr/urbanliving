@@ -16,7 +16,7 @@ const statusColors = {
 
 export default function BookingDetailsCard({ booking, property }) {
   return (
-    <Card className="bg-white border-slate-200 rounded-2xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 max-w-md">
+    <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 max-w-md">
       {property && property.images?.[0] && (
         <img 
           src={property.images[0]} 
@@ -26,7 +26,7 @@ export default function BookingDetailsCard({ booking, property }) {
       )}
       <CardContent className="p-4 space-y-3">
         <div className="flex justify-between items-start">
-          <h3 className="font-bold text-slate-900 text-lg line-clamp-1">
+          <h3 className="font-bold text-slate-900 dark:text-white text-lg line-clamp-1">
             {property?.title || 'Booking Details'}
           </h3>
           <Badge className={`${statusColors[booking.status]} border font-medium text-xs`}>
@@ -35,7 +35,7 @@ export default function BookingDetailsCard({ booking, property }) {
         </div>
 
         {property && (
-          <div className="flex items-center gap-2 text-slate-600 text-sm">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 text-sm">
             <MapPin className="w-4 h-4" />
             <span>{property.location?.city}, {property.location?.country}</span>
           </div>
@@ -43,43 +43,43 @@ export default function BookingDetailsCard({ booking, property }) {
 
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-start gap-2">
-            <Calendar className="w-4 h-4 text-slate-500 mt-0.5" />
+            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5" />
             <div>
-              <p className="text-slate-500 text-xs">Check-in</p>
-              <p className="font-semibold text-slate-900">
+              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">Check-in</p>
+              <p className="font-semibold text-slate-900 dark:text-white">
                 {format(parseISO(booking.check_in), "MMM d, yyyy")}
               </p>
             </div>
           </div>
           <div className="flex items-start gap-2">
-            <Calendar className="w-4 h-4 text-slate-500 mt-0.5" />
+            <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5" />
             <div>
-              <p className="text-slate-500 text-xs">Check-out</p>
-              <p className="font-semibold text-slate-900">
+              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">Check-out</p>
+              <p className="font-semibold text-slate-900 dark:text-white">
                 {format(parseISO(booking.check_out), "MMM d, yyyy")}
               </p>
             </div>
           </div>
           <div className="flex items-start gap-2">
-            <Users className="w-4 h-4 text-slate-500 mt-0.5" />
+            <Users className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5" />
             <div>
-              <p className="text-slate-500 text-xs">Guests</p>
-              <p className="font-semibold text-slate-900">{booking.guests}</p>
+              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">Guests</p>
+              <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
             </div>
           </div>
           <div className="flex items-start gap-2">
-            <Wallet className="w-4 h-4 text-slate-500 mt-0.5" />
+            <Wallet className="w-4 h-4 text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5" />
             <div>
-              <p className="text-slate-500 text-xs">Total</p>
-              <p className="font-semibold text-slate-900">₦{Number(booking.total_price || 0).toLocaleString()}</p>
+              <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-xs">Total</p>
+              <p className="font-semibold text-slate-900 dark:text-white">₦{Number(booking.total_price || 0).toLocaleString()}</p>
             </div>
           </div>
         </div>
 
         {booking.special_requests && (
           <div className="bg-slate-50 rounded-lg p-2 text-xs">
-            <p className="text-slate-500">Special Requests:</p>
-            <p className="text-slate-700">{booking.special_requests}</p>
+            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Special Requests:</p>
+            <p className="text-slate-700 dark:text-slate-200">{booking.special_requests}</p>
           </div>
         )}
 

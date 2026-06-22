@@ -31,6 +31,22 @@
     <link rel="canonical" href="https://urbanstays.io" />
 
     <title>UrbanStays — Short-stay apartments in Abuja & Lagos</title>
+
+    <!-- Apply the user's saved theme BEFORE React paints so the page never
+         flashes light-then-dark on load. Same localStorage key the
+         ThemeProvider uses; falls back to OS preference. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('urbanstays_theme');
+          var pref = (stored === 'dark' || stored === 'light') ? stored : null;
+          var resolved = pref || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          if (resolved === 'dark') document.documentElement.classList.add('dark');
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0a0a0a' : '#0f172a');
+        } catch (e) { /* default light is fine */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

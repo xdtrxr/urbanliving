@@ -76,7 +76,7 @@ export default function VehiclePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent"></div>
       </div>
     );
@@ -84,10 +84,10 @@ export default function VehiclePage() {
 
   if (!vehicle) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-8 text-center">
-        <Card className="max-w-md w-full bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl p-12">
-          <h2 className="text-2xl font-bold text-slate-900 mb-4">Vehicle Not Found</h2>
-          <p className="text-slate-600 mb-6">The vehicle you&apos;re looking for doesn&apos;t exist or has been removed.</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-8 text-center">
+        <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl p-12">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Vehicle Not Found</h2>
+          <p className="text-slate-600 dark:text-slate-300 mb-6">The vehicle you&apos;re looking for doesn&apos;t exist or has been removed.</p>
           <Link to={createPageUrl('PlanTrip')}>
             <Button>Back to all vehicles</Button>
           </Link>
@@ -115,16 +115,16 @@ export default function VehiclePage() {
   }`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <Link to={createPageUrl('PlanTrip')}>
-          <Button variant="ghost" className="mb-6 flex items-center gap-2 text-slate-600 hover:text-slate-900">
+          <Button variant="ghost" className="mb-6 flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:text-white">
             <ArrowLeft className="w-4 h-4" />
             Back to all vehicles
           </Button>
         </Link>
 
-        <Card className="bg-white/90 backdrop-blur-sm border-slate-200 rounded-3xl shadow-lg p-4 sm:p-6 md:p-8">
+        <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg p-4 sm:p-6 md:p-8">
           {/* Media gallery — hero opens the full-screen lightbox; thumbnails
               jump to a specific item inside it. No more click-to-swap. */}
           <div className="mb-6 sm:mb-8">
@@ -220,22 +220,22 @@ export default function VehiclePage() {
           <CardHeader className="p-0 mb-6">
             <div className="flex flex-col md:flex-row justify-between items-start gap-4">
               <div className="min-w-0">
-                <CardTitle className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2 break-words">
+                <CardTitle className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2 break-words">
                   {vehicle.name}
                 </CardTitle>
-                <p className="text-slate-600 mb-3">
+                <p className="text-slate-600 dark:text-slate-300 mb-3">
                   {vehicle.brand}{vehicle.model_year ? ` · ${vehicle.model_year}` : ''}
                   {vehicle.vehicle_type ? ` · ${vehicle.vehicle_type.replace(/_/g, ' ')}` : ''}
                 </p>
-                <div className="flex flex-wrap items-center gap-2 text-slate-600 text-sm">
+                <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300 text-sm">
                   {vehicle.city && (
-                    <Badge variant="outline" className="border-slate-200 text-slate-700">
+                    <Badge variant="outline" className="border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200">
                       <MapPin className="w-3 h-3 mr-1" />
                       {vehicle.city}
                     </Badge>
                   )}
                   {vehicle.max_passengers > 0 && (
-                    <Badge variant="outline" className="border-slate-200 text-slate-700">
+                    <Badge variant="outline" className="border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200">
                       <Users className="w-3 h-3 mr-1" />
                       {vehicle.max_passengers} seats
                     </Badge>
@@ -257,15 +257,15 @@ export default function VehiclePage() {
               <div className="lg:col-span-2 space-y-8">
                 {vehicle.description && (
                   <div>
-                    <h3 className="font-bold text-xl text-slate-800 mb-3">About this vehicle</h3>
-                    <p className="text-slate-600 leading-relaxed whitespace-pre-line">{vehicle.description}</p>
+                    <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-3">About this vehicle</h3>
+                    <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">{vehicle.description}</p>
                   </div>
                 )}
 
                 {/* Amenities */}
                 {(vehicle.amenities?.length || 0) > 0 && (
                   <div>
-                    <h3 className="font-bold text-xl text-slate-800 mb-4">What&apos;s included</h3>
+                    <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">What&apos;s included</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {vehicle.amenities.map((id) => {
                         const meta = AMENITY_LABELS[id];
@@ -273,7 +273,7 @@ export default function VehiclePage() {
                         return (
                           <div key={id} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
                             <Icon className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                            <span className="text-sm text-slate-700">
+                            <span className="text-sm text-slate-700 dark:text-slate-200">
                               {meta?.label || id.replace(/_/g, ' ')}
                             </span>
                           </div>
@@ -286,15 +286,15 @@ export default function VehiclePage() {
                 {/* Fuel + service area */}
                 {(vehicle.fuel_policy || vehicle.service_area) && (
                   <div>
-                    <h3 className="font-bold text-xl text-slate-800 mb-4">Good to know</h3>
-                    <div className="space-y-3 text-sm text-slate-700">
+                    <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">Good to know</h3>
+                    <div className="space-y-3 text-sm text-slate-700 dark:text-slate-200">
                       {vehicle.fuel_policy && (
                         <div className="flex items-start gap-3">
-                          <Fuel className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
+                          <Fuel className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="font-semibold text-slate-900">{FUEL_POLICY_LABELS[vehicle.fuel_policy] || vehicle.fuel_policy}</p>
+                            <p className="font-semibold text-slate-900 dark:text-white">{FUEL_POLICY_LABELS[vehicle.fuel_policy] || vehicle.fuel_policy}</p>
                             {vehicle.fuel_policy === 'fuel_capped' && vehicle.fuel_cap_daily_ngn ? (
-                              <p className="text-xs text-slate-500 mt-0.5">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-0.5">
                                 Fuel covered up to ₦{vehicle.fuel_cap_daily_ngn.toLocaleString()}/day. Anything over is on you.
                               </p>
                             ) : null}
@@ -303,19 +303,19 @@ export default function VehiclePage() {
                       )}
                       {vehicle.service_area && (
                         <div className="flex items-start gap-3">
-                          <MapPin className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
+                          <MapPin className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="font-semibold text-slate-900">Service area</p>
-                            <p className="text-xs text-slate-600 mt-0.5">{vehicle.service_area}</p>
+                            <p className="font-semibold text-slate-900 dark:text-white">Service area</p>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{vehicle.service_area}</p>
                           </div>
                         </div>
                       )}
                       {(vehicle.pickup_locations?.length || 0) > 0 && (
                         <div className="flex items-start gap-3">
-                          <MapPin className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
+                          <MapPin className="w-5 h-5 text-slate-500 dark:text-slate-400 dark:text-slate-500 flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="font-semibold text-slate-900">Pickup areas</p>
-                            <p className="text-xs text-slate-600 mt-0.5">{vehicle.pickup_locations.join(', ')}</p>
+                            <p className="font-semibold text-slate-900 dark:text-white">Pickup areas</p>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{vehicle.pickup_locations.join(', ')}</p>
                           </div>
                         </div>
                       )}
@@ -329,14 +329,14 @@ export default function VehiclePage() {
                     the vehicle detail page. Name, photo, and phone surface on
                     the Bookings page once status is confirmed + paid. */}
                 <div>
-                  <h3 className="font-bold text-xl text-slate-800 mb-4">Your driver</h3>
+                  <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">Your driver</h3>
                   <div className="bg-slate-50 rounded-2xl p-4 sm:p-5 flex items-start gap-4">
                     <div className="w-14 h-14 rounded-full bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center flex-shrink-0">
                       <Car className="w-7 h-7 text-amber-400" />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-slate-900 mb-1">UrbanStays-vetted chauffeur</p>
-                      <p className="text-sm text-slate-600">
+                      <p className="font-semibold text-slate-900 dark:text-white mb-1">UrbanStays-vetted chauffeur</p>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
                         Every driver in our pool is admin-vetted. We&apos;ll match you with one and share their name, photo, and phone number as soon as your booking is confirmed and paid.
                       </p>
                     </div>
@@ -346,9 +346,9 @@ export default function VehiclePage() {
 
               {/* Right: pricing + CTA */}
               <div className="lg:col-span-1">
-                <Card className="bg-slate-50/80 border-slate-200 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
+                <Card className="bg-slate-50/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
                   <div className="mb-5">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">
                       Choose a duration
                     </p>
                     <div className="space-y-2">
@@ -362,15 +362,15 @@ export default function VehiclePage() {
                             onClick={() => setSelectedTier(tier.id)}
                             className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${
                               isActive
-                                ? 'border-slate-900 bg-white shadow-sm'
-                                : 'border-slate-200 hover:border-slate-300 bg-white'
+                                ? 'border-slate-900 bg-white dark:bg-slate-900 shadow-sm'
+                                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900'
                             }`}
                           >
                             <div>
-                              <p className="font-semibold text-slate-900">{tier.label}</p>
-                              <p className="text-xs text-slate-500">{tier.suffix}</p>
+                              <p className="font-semibold text-slate-900 dark:text-white">{tier.label}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">{tier.suffix}</p>
                             </div>
-                            <p className="font-bold text-slate-900">₦{price.toLocaleString()}</p>
+                            <p className="font-bold text-slate-900 dark:text-white">₦{price.toLocaleString()}</p>
                           </button>
                         );
                       })}
@@ -380,22 +380,22 @@ export default function VehiclePage() {
                           onClick={() => setSelectedTier('multi_day')}
                           className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${
                             selectedTier === 'multi_day'
-                              ? 'border-slate-900 bg-white shadow-sm'
-                              : 'border-slate-200 hover:border-slate-300 bg-white'
+                              ? 'border-slate-900 bg-white dark:bg-slate-900 shadow-sm'
+                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-white dark:bg-slate-900'
                           }`}
                         >
                           <div>
-                            <p className="font-semibold text-slate-900">Multiple days</p>
-                            <p className="text-xs text-slate-500">+ ₦{(vehicle.price_per_extra_day_ngn || 0).toLocaleString()} / extra day</p>
+                            <p className="font-semibold text-slate-900 dark:text-white">Multiple days</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">+ ₦{(vehicle.price_per_extra_day_ngn || 0).toLocaleString()} / extra day</p>
                           </div>
-                          <p className="font-bold text-slate-900">From ₦{tier24.toLocaleString()}</p>
+                          <p className="font-bold text-slate-900 dark:text-white">From ₦{tier24.toLocaleString()}</p>
                         </button>
                       ) : null}
                     </div>
 
                     {selectedTier === 'multi_day' && (
                       <div className="mt-4">
-                        <label className="text-xs font-semibold text-slate-700 block mb-2">
+                        <label className="text-xs font-semibold text-slate-700 dark:text-slate-200 block mb-2">
                           How many days?
                         </label>
                         <div className="flex items-center gap-2">
@@ -408,7 +408,7 @@ export default function VehiclePage() {
                           >
                             −
                           </Button>
-                          <div className="flex-1 text-center font-bold text-lg text-slate-900">
+                          <div className="flex-1 text-center font-bold text-lg text-slate-900 dark:text-white">
                             {multiDayCount}
                           </div>
                           <Button
@@ -425,14 +425,14 @@ export default function VehiclePage() {
                     )}
                   </div>
 
-                  <div className="border-t border-slate-200 pt-4 mb-5">
+                  <div className="border-t border-slate-200 dark:border-slate-800 pt-4 mb-5">
                     <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-sm text-slate-600">Total</span>
-                      <span className="text-2xl sm:text-3xl font-bold text-slate-900">
+                      <span className="text-sm text-slate-600 dark:text-slate-300">Total</span>
+                      <span className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
                         ₦{computedTotal.toLocaleString()}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
                       You won&apos;t be charged until admin confirms availability.
                     </p>
                   </div>
