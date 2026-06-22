@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
+import { UploadFile } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,10 @@ import {
 import {
   Plus, List, Car, Image as ImageIcon, Video as VideoIcon, Trash2,
   Edit3, Save, X, AlertCircle, Loader2, CheckCircle2, Eye, EyeOff,
+  Upload, PlayCircle,
 } from 'lucide-react';
+
+const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 
 const VEHICLE_TYPES = [
   { value: 'sedan', label: 'Sedan' },
@@ -57,8 +61,8 @@ const EMPTY_FORM = {
   vehicle_type: 'sedan',
   model_year: new Date().getFullYear(),
   description: '',
-  images: '',         // textarea — one URL per line, split on submit
-  videos: '',
+  images: [],          // array of base44 file_urls, populated by UploadFile
+  videos: [],
   city: 'Abuja',
   price_12hr_ngn: '',
   price_24hr_ngn: '',
@@ -73,15 +77,6 @@ const EMPTY_FORM = {
   admin_approved: true,    // admin adding a vehicle = trust that vehicle
   min_hours_per_booking: 12,
 };
-
-// Splits a multi-line textarea into a clean array of URLs.
-const linesToArray = (raw) =>
-  (raw || '')
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-const arrayToLines = (arr) => (Array.isArray(arr) ? arr.join('\n') : '');
 
 const csvToArray = (raw) =>
   (raw || '')
@@ -101,6 +96,10 @@ export default function VehiclesAdmin() {
   const [deletingId, setDeletingId] = useState(null);
   const [vehicleToDelete, setVehicleToDelete] = useState(null);
   const [error, setError] = useState(null);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [isUploadingVideos, setIsUploadingVideos] = useState(false);
+  const imageInputRef = useRef(null);
+  const videoInputRef = useRef(null);
 
   const loadVehicles = useCallback(async () => {
     setIsLoading(true);
@@ -133,8 +132,8 @@ export default function VehiclesAdmin() {
       vehicle_type: vehicle.vehicle_type || 'sedan',
       model_year: vehicle.model_year || new Date().getFullYear(),
       description: vehicle.description || '',
-      images: arrayToLines(vehicle.images),
-      videos: arrayToLines(vehicle.videos),
+      images: Array.isArray(vehicle.images) ? vehicle.images : [],
+      videos: Array.isArray(vehicle.videos) ? vehicle.videos : [],
       city: vehicle.city || 'Abuja',
       price_12hr_ngn: vehicle.price_12hr_ngn ?? '',
       price_24hr_ngn: vehicle.price_24hr_ngn ?? '',
@@ -159,9 +158,9 @@ export default function VehiclesAdmin() {
     setIsSaving(true);
 
     try {
-      const images = linesToArray(form.images);
+      const images = Array.isArray(form.images) ? form.images : [];
       if (images.length === 0) {
-        throw new Error('Add at least one image URL.');
+        throw new Error('Add at least one image.');
       }
       if (!form.price_12hr_ngn || !form.price_24hr_ngn) {
         throw new Error('Both 12-hour and 24-hour prices are required.');
@@ -175,7 +174,7 @@ export default function VehiclesAdmin() {
         model_year: Number(form.model_year) || null,
         description: form.description.trim() || undefined,
         images,
-        videos: linesToArray(form.videos),
+        videos: Array.isArray(form.videos) ? form.videos : [],
         city: form.city,
         price_12hr_ngn: Number(form.price_12hr_ngn),
         price_24hr_ngn: Number(form.price_24hr_ngn),
@@ -239,6 +238,75 @@ export default function VehiclesAdmin() {
           : [...prev.amenities, id],
       };
     });
+  };
+
+  // Push each chosen file through base44's UploadFile and append the returned
+  // file_urls to the form. We never block on a single failure — bad files are
+  // skipped with a console warning so the rest of the batch still uploads.
+  const handleImagePick = async (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploadingImages(true);
+    setError(null);
+    const uploaded = [];
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) {
+        console.warn('Skipping non-image file:', file.name);
+        continue;
+      }
+      try {
+        const { file_url } = await UploadFile({ file });
+        if (file_url) uploaded.push(file_url);
+      } catch (err) {
+        console.error('Image upload failed for', file.name, err);
+        setError(`Failed to upload ${file.name}.`);
+      }
+    }
+    setForm((prev) => ({ ...prev, images: [...prev.images, ...uploaded] }));
+    setIsUploadingImages(false);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
+
+  const handleVideoPick = async (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploadingVideos(true);
+    setError(null);
+    const uploaded = [];
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('video/')) {
+        console.warn('Skipping non-video file:', file.name);
+        continue;
+      }
+      if (file.size > MAX_VIDEO_SIZE_BYTES) {
+        setError(`${file.name} is larger than 100 MB — please trim it first.`);
+        continue;
+      }
+      try {
+        const { file_url } = await UploadFile({ file });
+        if (file_url) uploaded.push(file_url);
+      } catch (err) {
+        console.error('Video upload failed for', file.name, err);
+        setError(`Failed to upload ${file.name}.`);
+      }
+    }
+    setForm((prev) => ({ ...prev, videos: [...prev.videos, ...uploaded] }));
+    setIsUploadingVideos(false);
+    if (videoInputRef.current) videoInputRef.current.value = '';
+  };
+
+  const removeImage = (idx) => {
+    setForm((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== idx),
+    }));
+  };
+
+  const removeVideo = (idx) => {
+    setForm((prev) => ({
+      ...prev,
+      videos: prev.videos.filter((_, i) => i !== idx),
+    }));
   };
 
   return (
@@ -348,40 +416,135 @@ export default function VehiclesAdmin() {
                 {/* MEDIA */}
                 <section>
                   <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Media (one URL per line)
+                    Media
                   </h3>
-                  <div className="grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-1 gap-5">
+                    {/* IMAGES */}
                     <div>
-                      <Label htmlFor="v-images" className="flex items-center gap-2">
+                      <Label className="flex items-center gap-2">
                         <ImageIcon className="w-4 h-4" />
-                        Image URLs * (min 5 recommended)
+                        Photos * (min 5 recommended)
                       </Label>
-                      <Textarea
-                        id="v-images"
-                        rows={5}
-                        value={form.images}
-                        onChange={(e) => setForm({ ...form, images: e.target.value })}
-                        placeholder={`https://example.com/photo1.jpg\nhttps://example.com/photo2.jpg\n...`}
-                        className="font-mono text-xs"
-                        required
-                      />
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        {linesToArray(form.images).length} image{linesToArray(form.images).length === 1 ? '' : 's'} added
-                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <input
+                          ref={imageInputRef}
+                          id="v-images-file"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleImagePick}
+                          className="hidden"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => imageInputRef.current?.click()}
+                          disabled={isUploadingImages}
+                          className="rounded-xl"
+                        >
+                          {isUploadingImages ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Uploading…
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-2" />
+                              {form.images.length ? 'Add more photos' : 'Choose photos'}
+                            </>
+                          )}
+                        </Button>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {form.images.length} photo{form.images.length === 1 ? '' : 's'} uploaded
+                        </p>
+                      </div>
+                      {form.images.length > 0 && (
+                        <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                          {form.images.map((url, idx) => (
+                            <div
+                              key={`${url}-${idx}`}
+                              className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800"
+                            >
+                              <img src={url} alt="" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(idx)}
+                                aria-label="Remove photo"
+                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                              {idx === 0 && (
+                                <span className="absolute bottom-1 left-1 text-[10px] font-semibold bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded">
+                                  Cover
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
+
+                    {/* VIDEOS */}
                     <div>
-                      <Label htmlFor="v-videos" className="flex items-center gap-2">
+                      <Label className="flex items-center gap-2">
                         <VideoIcon className="w-4 h-4" />
-                        Video URLs (optional walkthrough)
+                        Walkthrough video (optional, max 100 MB)
                       </Label>
-                      <Textarea
-                        id="v-videos"
-                        rows={2}
-                        value={form.videos}
-                        onChange={(e) => setForm({ ...form, videos: e.target.value })}
-                        placeholder={`https://example.com/walkthrough.mp4`}
-                        className="font-mono text-xs"
-                      />
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <input
+                          ref={videoInputRef}
+                          id="v-videos-file"
+                          type="file"
+                          accept="video/*"
+                          multiple
+                          onChange={handleVideoPick}
+                          className="hidden"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => videoInputRef.current?.click()}
+                          disabled={isUploadingVideos}
+                          className="rounded-xl"
+                        >
+                          {isUploadingVideos ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Uploading…
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-2" />
+                              {form.videos.length ? 'Add another video' : 'Choose a video'}
+                            </>
+                          )}
+                        </Button>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {form.videos.length} video{form.videos.length === 1 ? '' : 's'} uploaded
+                        </p>
+                      </div>
+                      {form.videos.length > 0 && (
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {form.videos.map((url, idx) => (
+                            <div
+                              key={`${url}-${idx}`}
+                              className="relative group aspect-video rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-900 flex items-center justify-center"
+                            >
+                              <video src={url} className="w-full h-full object-cover" muted />
+                              <PlayCircle className="absolute w-8 h-8 text-white/80 pointer-events-none" />
+                              <button
+                                type="button"
+                                onClick={() => removeVideo(idx)}
+                                aria-label="Remove video"
+                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </section>
