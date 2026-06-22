@@ -1091,8 +1091,12 @@ export default function AdminPage() {
         </Card>
 
         {/* NEW: Tabs for Manual Entry, Property Management, Vehicles, and Leads */}
-        <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 mb-8">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1">
+        {/* The mobile grid wraps the tab strip onto two rows; default
+            space-y-6 is then too tight against the panel underneath, so
+            mobile gets an explicit pt on each TabsContent for breathing
+            room. */}
+        <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 sm:space-y-8 mb-8">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-1 h-auto p-1">
             <TabsTrigger value="add-manual">
               <Plus className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">{editingPropertyId ? 'Edit Property' : 'Add Property'}</span>
@@ -1113,11 +1117,11 @@ export default function AdminPage() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="vehicles">
+          <TabsContent value="vehicles" className="mt-6 sm:mt-4">
             <VehiclesAdmin />
           </TabsContent>
 
-          <TabsContent value="add-manual">
+          <TabsContent value="add-manual" className="mt-6 sm:mt-4">
             <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1494,7 +1498,7 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="manage-properties">
+          <TabsContent value="manage-properties" className="mt-6 sm:mt-4">
             <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1621,7 +1625,7 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="leads">
+          <TabsContent value="leads" className="mt-6 sm:mt-4">
             <LeadsAdmin />
           </TabsContent>
         </Tabs>
