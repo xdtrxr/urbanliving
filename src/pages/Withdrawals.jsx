@@ -8,12 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  Wallet, Send, Clock, CheckCircle, XCircle, AlertCircle, 
-  Loader2, CreditCard, ArrowRight, Plus 
+import {
+  Wallet, Send, Clock, CheckCircle, XCircle, AlertCircle,
+  Loader2, CreditCard, ArrowRight, Plus
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/components/ui/use-toast';
 
 const WITHDRAWAL_THRESHOLD_NGN = 10000;
 
@@ -46,13 +47,14 @@ const statusConfig = {
 };
 
 export default function WithdrawalsPage() {
+  const { toast } = useToast();
   const [user, setUser] = useState(null);
   const [bankAccounts, setBankAccounts] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     amount: '',
     bank_account_id: ''
@@ -80,7 +82,11 @@ export default function WithdrawalsPage() {
       setWithdrawals(withdrawalRequests);
     } catch (error) {
       console.error('Error loading data:', error);
-      alert('Failed to load withdrawal data');
+      toast({
+        title: 'Could not load withdrawal data',
+        description: error?.message || 'Please refresh and try again.',
+        variant: 'destructive',
+      });
     }
     setIsLoading(false);
   };
@@ -89,18 +95,30 @@ export default function WithdrawalsPage() {
     e.preventDefault();
 
     if (!formData.amount || !formData.bank_account_id) {
-      alert('Please fill in all fields');
+      toast({
+        title: 'Missing details',
+        description: 'Pick a bank account and enter an amount before requesting.',
+        variant: 'destructive',
+      });
       return;
     }
 
     const amount = parseFloat(formData.amount);
     if (amount < WITHDRAWAL_THRESHOLD_NGN) {
-      alert(`Minimum withdrawal amount is ₦${WITHDRAWAL_THRESHOLD_NGN.toLocaleString()}`);
+      toast({
+        title: 'Below minimum',
+        description: `The minimum withdrawal is ₦${WITHDRAWAL_THRESHOLD_NGN.toLocaleString()}.`,
+        variant: 'destructive',
+      });
       return;
     }
 
     if (amount > (user?.referral_balance_ngn || 0)) {
-      alert('Insufficient balance');
+      toast({
+        title: 'Insufficient balance',
+        description: `You have ₦${(user?.referral_balance_ngn || 0).toLocaleString()} available.`,
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -112,16 +130,27 @@ export default function WithdrawalsPage() {
       });
 
       if (response.data.success) {
-        alert(response.data.message);
+        toast({
+          title: 'Withdrawal requested',
+          description: response.data.message || 'We will process it within 24–48 hours.',
+        });
         setFormData({ amount: '', bank_account_id: '' });
         setShowRequestForm(false);
         await loadData();
       } else {
-        alert(response.data.error || 'Failed to create withdrawal request');
+        toast({
+          title: 'Withdrawal could not be created',
+          description: response.data.error || 'Please try again in a moment.',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Error creating withdrawal:', error);
-      alert(error.message || 'Failed to create withdrawal request');
+      toast({
+        title: 'Something went wrong',
+        description: error?.message || 'Please try again in a moment.',
+        variant: 'destructive',
+      });
     }
     setIsSubmitting(false);
   };

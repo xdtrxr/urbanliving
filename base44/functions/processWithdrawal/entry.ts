@@ -143,17 +143,22 @@ Deno.serve(async (req) => {
             }, { status: 400 });
         }
 
-        // Update withdrawal request with transfer details
+        // Paystack accepted the transfer for processing. DO NOT mark
+        // `completed` here — the transfer is asynchronous and Paystack
+        // may still fail to settle (insufficient float, bank rejects the
+        // NUBAN, account closed). The paystackTransferWebhook listens
+        // for transfer.success / transfer.failed / transfer.reversed and
+        // flips the row to its final state, refunding the user's balance
+        // on failure or reversal.
         await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawal_request_id, {
             transfer_code: transferData.data.transfer_code,
             transfer_id: transferData.data.id.toString(),
-            status: 'completed',
-            processed_at: new Date().toISOString()
+            // status stays 'processing' until the webhook confirms outcome
         });
 
         return Response.json({
             success: true,
-            message: 'Withdrawal processed successfully',
+            message: 'Transfer initiated — Paystack will confirm settlement asynchronously.',
             transfer_data: transferData.data
         });
 
