@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({
                 source: 'balance',
-                reason: `LuxeLiving withdrawal - ${withdrawalRequest.id.substring(0, 8)}`,
+                reason: `UrbanStays withdrawal - ${withdrawalRequest.id.substring(0, 8)}`,
                 amount: withdrawalRequest.amount * 100, // Convert to kobo
                 recipient: recipientCode,
                 reference: `WD-${withdrawalRequest.id.substring(0, 8)}-${Date.now()}`
