@@ -1444,12 +1444,12 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
           )}
           {/* Voice input error — surfaced so permission/network failures don't fail silently */}
           {speechError && !isListening && (
-            <div className="mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-800 flex items-start gap-2">
+            <div className="mb-2 px-3 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-md text-xs text-red-800 dark:text-red-200 flex items-start gap-2">
               <span className="font-semibold flex-shrink-0">Mic:</span>
               <span className="flex-1">{speechError}</span>
               <button
                 onClick={resetSpeech}
-                className="text-red-700 hover:text-red-900 underline flex-shrink-0"
+                className="text-red-700 dark:text-red-300 hover:text-red-900 dark:text-red-200 underline flex-shrink-0"
               >
                 Dismiss
               </button>

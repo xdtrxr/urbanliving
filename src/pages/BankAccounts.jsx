@@ -239,13 +239,13 @@ export default function BankAccountsPage() {
                           <div className="flex items-center gap-2 mb-1">
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white">{account.bank_name}</h3>
                             {account.is_primary && (
-                              <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                              <Badge className="bg-amber-100 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900">
                                 <Star className="w-3 h-3 mr-1" />
                                 Primary
                               </Badge>
                             )}
                             {account.is_verified && (
-                              <Badge className="bg-green-100 text-green-800 border-green-200">
+                              <Badge className="bg-green-100 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900">
                                 <CheckCircle className="w-3 h-3 mr-1" />
                                 Verified
                               </Badge>
@@ -271,7 +271,7 @@ export default function BankAccountsPage() {
                           size="icon"
                           onClick={() => handleDeleteClick(account)}
                           disabled={isDeleting === account.id}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="text-red-600 dark:text-red-400 hover:text-red-700 dark:text-red-300 hover:bg-red-50 dark:bg-red-950/40"
                         >
                           {isDeleting === account.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -364,23 +364,23 @@ export default function BankAccountsPage() {
               {verificationResult && (
                 <div className={`rounded-xl p-4 ${
                   verificationResult.success 
-                    ? 'bg-green-50 border border-green-200' 
-                    : 'bg-red-50 border border-red-200'
+                    ? 'bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-900' 
+                    : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900'
                 }`}>
                   {verificationResult.success ? (
                     <div className="flex items-center gap-2">
                       <CheckCircle className="w-5 h-5 text-green-600" />
                       <div>
-                        <p className="font-semibold text-green-900">Account Verified!</p>
-                        <p className="text-sm text-green-700">{verificationResult.account_name}</p>
+                        <p className="font-semibold text-green-900 dark:text-green-200">Account Verified!</p>
+                        <p className="text-sm text-green-700 dark:text-green-300">{verificationResult.account_name}</p>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5 text-red-600" />
+                      <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
                       <div>
-                        <p className="font-semibold text-red-900">Verification Failed</p>
-                        <p className="text-sm text-red-700">{verificationResult.error}</p>
+                        <p className="font-semibold text-red-900 dark:text-red-200">Verification Failed</p>
+                        <p className="text-sm text-red-700 dark:text-red-300">{verificationResult.error}</p>
                       </div>
                     </div>
                   )}
@@ -455,7 +455,7 @@ export default function BankAccountsPage() {
                     <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{accountToDelete.account_number}</p>
                   </div>
                 )}
-                <p className="mt-3 text-red-600 font-semibold">
+                <p className="mt-3 text-red-600 dark:text-red-400 font-semibold">
                   This action cannot be undone.
                 </p>
               </AlertDialogDescription>

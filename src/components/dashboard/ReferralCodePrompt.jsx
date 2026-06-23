@@ -103,13 +103,13 @@ export default function ReferralCodePrompt({ user, onSubmitted }) {
                         disabled={isLoading}
                     />
                     {error && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                            <p className="text-sm text-red-700">{error}</p>
+                        <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-3">
+                            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
                         </div>
                     )}
                     {code && !error && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <p className="text-sm text-blue-700">
+                        <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg p-3">
+                            <p className="text-sm text-blue-700 dark:text-blue-300">
                                 ℹ️ You'll be connected to the user with code: <strong>{code}</strong>
                             </p>
                         </div>

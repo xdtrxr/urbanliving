@@ -329,7 +329,7 @@ export default function VehiclesAdmin() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between flex-wrap gap-3">
                 <span className="flex items-center gap-2">
-                  <Car className="w-5 h-5 text-amber-600" />
+                  <Car className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                   {editingId ? 'Edit vehicle' : 'Add a new vehicle'}
                 </span>
                 {editingId && (
@@ -342,9 +342,9 @@ export default function VehiclesAdmin() {
             </CardHeader>
             <CardContent>
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-800">{error}</p>
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
                 </div>
               )}
 
@@ -754,7 +754,7 @@ export default function VehiclesAdmin() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between flex-wrap gap-3">
                 <span className="flex items-center gap-2">
-                  <List className="w-5 h-5 text-amber-600" />
+                  <List className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                   Vehicles ({vehicles.length})
                 </span>
                 <Button type="button" variant="outline" size="sm" onClick={loadVehicles} disabled={isLoading}>
@@ -807,13 +807,13 @@ export default function VehiclesAdmin() {
                               </Badge>
                             )}
                             {v.admin_approved === false && (
-                              <Badge variant="outline" className="border-amber-300 text-amber-700">
+                              <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-300">
                                 <AlertCircle className="w-3 h-3 mr-1" />
                                 Not approved
                               </Badge>
                             )}
                             {v.active && v.admin_approved && (
-                              <Badge variant="outline" className="border-green-300 text-green-700">
+                              <Badge variant="outline" className="border-green-300 text-green-700 dark:text-green-300">
                                 <CheckCircle2 className="w-3 h-3 mr-1" />
                                 Live
                               </Badge>
@@ -857,7 +857,7 @@ export default function VehiclesAdmin() {
                             size="sm"
                             onClick={() => setVehicleToDelete(v)}
                             disabled={deletingId === v.id}
-                            className="flex-1 sm:w-24 border-red-200 text-red-600 hover:bg-red-50"
+                            className="flex-1 sm:w-24 border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40"
                           >
                             <Trash2 className="w-3.5 h-3.5 mr-1" />
                             Delete

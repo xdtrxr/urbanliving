@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserCircle, Mail, MapPin, Languages, Save, Camera, Upload, Phone } from "lucide-react";
 import ReferralCard from "../components/profile/ReferralCard";
+import PushNotificationsCard from "../components/profile/PushNotificationsCard";
 import { awardProfileCompletion } from "@/components/utils/loyaltyService";
 
 export default function ProfilePage() {
@@ -258,8 +259,8 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <p className="text-sm text-amber-900">
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-4">
+                <p className="text-sm text-amber-900 dark:text-amber-200">
                   <strong>📞 Important:</strong> Your phone number will be included in booking records sent to property owners and logged in our booking sheet for communication purposes.
                 </p>
               </div>
@@ -290,6 +291,7 @@ export default function ProfilePage() {
           {user && user.referral_code && (
             <ReferralCard user={user} referrals={referrals} />
           )}
+          <PushNotificationsCard />
         </div>
       </div>
     </div>

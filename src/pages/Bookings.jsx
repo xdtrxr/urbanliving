@@ -23,17 +23,17 @@ import {
 
 const statusColors = {
   pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  confirmed: "bg-green-100 text-green-800 border-green-200",
-  cancelled: "bg-red-100 text-red-800 border-red-200",
-  completed: "bg-blue-100 text-blue-800 border-blue-200",
+  confirmed: "bg-green-100 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900",
+  cancelled: "bg-red-100 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900",
+  completed: "bg-blue-100 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900",
   // Paid + still future/current → emphasize the cleared payment with a strong
   // green badge so the guest immediately sees the booking is locked in.
-  paid: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  paid: "bg-emerald-100 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900",
   // payment_expired is a sub-status of cancelled — the guest can re-book the
   // same property + dates because checkAvailabilityWebhook only blocks against
   // pending/confirmed bookings. Distinct amber styling so it doesn't look like
   // an admin rejection or a user cancellation.
-  payment_expired: "bg-amber-100 text-amber-800 border-amber-200",
+  payment_expired: "bg-amber-100 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900",
 };
 
 // Returns the right label + key for the status badge, factoring in payment_status
@@ -49,9 +49,9 @@ const labelForStatus = (booking) => {
 };
 
 const approvalStatusColors = {
-  pending: "bg-amber-100 text-amber-800 border-amber-200",
-  approved: "bg-green-100 text-green-800 border-green-200",
-  rejected: "bg-red-100 text-red-800 border-red-200"
+  pending: "bg-amber-100 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900",
+  approved: "bg-green-100 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900",
+  rejected: "bg-red-100 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900"
 };
 
 const isValidSystemId = (id) => id && typeof id === 'string' && id.length > 10 && !id.startsWith("prop_");
@@ -131,8 +131,8 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                   {approvalStatus === 'approved' && msLeft != null && msLeft > 0 && (
                     <Badge className={`border font-medium ${
                       msLeft < 5 * 60 * 1000
-                        ? 'bg-red-100 text-red-800 border-red-200'
-                        : 'bg-amber-100 text-amber-800 border-amber-200'
+                        ? 'bg-red-100 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900'
+                        : 'bg-amber-100 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900'
                     }`}>
                       <Clock className="w-3 h-3 mr-1 inline" />
                       Pay in {formatRemaining(msLeft)}
@@ -178,9 +178,9 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
 
               {availabilityRequest?.admin_response && (
                 <div className={`rounded-xl p-4 ${
-                  approvalStatus === 'approved' ? 'bg-green-50 border border-green-200' :
-                  approvalStatus === 'rejected' ? 'bg-red-50 border border-red-200' :
-                  'bg-amber-50 border border-amber-200'
+                  approvalStatus === 'approved' ? 'bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-900' :
+                  approvalStatus === 'rejected' ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900' :
+                  'bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900'
                 }`}>
                   <p className="text-sm font-semibold mb-1">
                     {approvalStatus === 'approved' ? '✅ Admin Response' :
@@ -192,12 +192,12 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
               )}
 
               {approvalStatus === 'pending' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-4">
                   <div className="flex items-start gap-3">
-                    <Loader2 className="w-5 h-5 text-amber-600 animate-spin flex-shrink-0 mt-0.5" />
+                    <Loader2 className="w-5 h-5 text-amber-600 dark:text-amber-400 animate-spin flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-semibold text-amber-900 mb-1">Availability Check in Progress</p>
-                      <p className="text-xs text-amber-700">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-1">Availability Check in Progress</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
                         Your booking request is being reviewed by our team. You'll be notified once approved, and you can proceed to payment.
                       </p>
                     </div>
@@ -206,12 +206,12 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
               )}
 
               {approvalStatus === 'rejected' && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-4">
                   <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-semibold text-red-900 mb-1">Booking Request Declined</p>
-                      <p className="text-xs text-red-700">
+                      <p className="text-sm font-semibold text-red-900 dark:text-red-200 mb-1">Booking Request Declined</p>
+                      <p className="text-xs text-red-700 dark:text-red-300">
                         Unfortunately, this property is not available for your selected dates. Please try different dates or explore other properties.
                       </p>
                     </div>
@@ -368,17 +368,17 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                 const hasAnything = fullAddress || property.host_phone || property.arrival_instructions;
                 if (!hasAnything) return null;
                 return (
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
-                    <p className="text-sm font-bold text-emerald-900 flex items-center gap-2">
+                  <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-xl p-4 space-y-3">
+                    <p className="text-sm font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4" /> Arrival Details
                     </p>
                     {fullAddress && (
                       <div className="flex items-start gap-2 text-sm">
-                        <MapPin className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
+                        <MapPin className="w-4 h-4 text-emerald-700 dark:text-emerald-300 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
                           <p className="text-slate-900 dark:text-white">{fullAddress}</p>
                           {mapsLink && (
-                            <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 hover:text-emerald-900 inline-flex items-center gap-1 mt-1">
+                            <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:text-emerald-200 inline-flex items-center gap-1 mt-1">
                               <Map className="w-3 h-3" /> Open in Google Maps
                             </a>
                           )}
@@ -387,12 +387,12 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                     )}
                     {property.host_phone && (
                       <div className="flex items-start gap-2 text-sm">
-                        <Phone className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
+                        <Phone className="w-4 h-4 text-emerald-700 dark:text-emerald-300 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
                           <p className="text-slate-900 dark:text-white">
                             Call <span className="font-semibold">{property.host_name || 'your host'}</span> on arrival
                           </p>
-                          <a href={`tel:${property.host_phone}`} className="text-sm font-semibold text-emerald-800 hover:text-emerald-900">
+                          <a href={`tel:${property.host_phone}`} className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hover:text-emerald-900 dark:text-emerald-200">
                             {property.host_phone}
                           </a>
                         </div>
@@ -400,7 +400,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                     )}
                     {property.arrival_instructions && (
                       <div className="text-sm text-slate-700 dark:text-slate-200 bg-white/60 dark:bg-slate-900/60 rounded-lg p-3 border border-emerald-100">
-                        <p className="text-xs font-semibold text-emerald-900 uppercase tracking-wide mb-1">Host notes</p>
+                        <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide mb-1">Host notes</p>
                         <p className="whitespace-pre-wrap">{property.arrival_instructions}</p>
                       </div>
                     )}
@@ -435,7 +435,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                       size="sm"
                       onClick={() => onCancelClick(booking)}
                       disabled={cancellingBookingId === booking.id}
-                      className="rounded-xl border-red-200 text-red-600 hover:bg-red-50"
+                      className="rounded-xl border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40"
                     >
                       <X className="w-4 h-4 mr-2" />
                       {cancellingBookingId === booking.id ? 'Cancelling...' : 'Cancel'}
@@ -851,7 +851,7 @@ export default function BookingsPage() {
                     <p><strong>Total:</strong> ₦{selectedBooking.total_price.toLocaleString()}</p>
                   </div>
                 )}
-                <p className="mt-3 text-amber-600">
+                <p className="mt-3 text-amber-600 dark:text-amber-400">
                   Only unpaid pending or unpaid confirmed bookings can be cancelled here. To cancel a paid booking, contact support.
                 </p>
               </AlertDialogDescription>

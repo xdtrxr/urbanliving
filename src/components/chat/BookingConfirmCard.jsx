@@ -118,13 +118,13 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
 
   if (status === 'submitted') {
     return (
-      <Card className="bg-green-50 border-green-200 rounded-2xl shadow-sm">
+      <Card className="bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-900 rounded-2xl shadow-sm">
         <CardContent className="p-5">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="font-semibold text-green-900 mb-1">Booking request submitted</p>
-              <p className="text-sm text-green-800 mb-3">
+              <p className="font-semibold text-green-900 dark:text-green-200 mb-1">Booking request submitted</p>
+              <p className="text-sm text-green-800 dark:text-green-200 mb-3">
                 Admin has been notified via Telegram. You'll get an email once they approve, then you can complete payment.
               </p>
               <Link to={createPageUrl('Bookings')}>
@@ -190,12 +190,12 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
             <span className="font-medium">₦{breakdown.serviceFee.toLocaleString()}</span>
           </div>
           {breakdown.caution > 0 && (
-            <div className="flex justify-between items-center py-2 px-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <span className="text-amber-900 flex items-center gap-1.5">
+            <div className="flex justify-between items-center py-2 px-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">
+              <span className="text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5" />
                 Refundable caution fee
               </span>
-              <span className="font-semibold text-amber-900">₦{breakdown.caution.toLocaleString()}</span>
+              <span className="font-semibold text-amber-900 dark:text-amber-200">₦{breakdown.caution.toLocaleString()}</span>
             </div>
           )}
           <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
@@ -205,23 +205,23 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
             </span>
           </div>
           {breakdown.caution > 0 && (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-amber-700 dark:text-amber-300">
               Caution fee of ₦{breakdown.caution.toLocaleString()} is fully refunded after checkout inspection.
             </p>
           )}
         </div>
 
         {booking.special_requests && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
-            <p className="text-xs font-semibold text-amber-900 mb-1">Special requests</p>
-            <p className="text-sm text-amber-800">{booking.special_requests}</p>
+          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3 mb-4">
+            <p className="text-xs font-semibold text-amber-900 dark:text-amber-200 mb-1">Special requests</p>
+            <p className="text-sm text-amber-800 dark:text-amber-200">{booking.special_requests}</p>
           </div>
         )}
 
         {status === 'error' && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mb-3 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
 

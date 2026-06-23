@@ -104,6 +104,44 @@
         }
       },
       "description": "NFT collectibles awarded to the user"
+    },
+    "push_subscriptions": {
+      "type": "array",
+      "description": "Web Push API subscription objects. Each entry stores the user's browser/PWA push endpoint + p256dh / auth keys so the server can encrypt and POST a notification to their device. Owned by savePushSubscription (append) and removePushSubscription (delete-by-endpoint). Service-role only — users never write each other's entries.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "Push service URL the browser handed us at subscribe time. Acts as the unique key for this subscription."
+          },
+          "expirationTime": {
+            "type": ["number", "null"],
+            "description": "Some browsers may set this; usually null."
+          },
+          "keys": {
+            "type": "object",
+            "properties": {
+              "p256dh": {
+                "type": "string",
+                "description": "Base64url-encoded client public key for ECDH."
+              },
+              "auth": {
+                "type": "string",
+                "description": "Base64url-encoded auth secret used by the encrypted payload envelope."
+              }
+            }
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable label set by the client (e.g. \"iPhone PWA\", \"Chrome desktop\") so users can tell devices apart in settings later."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
     }
   },
   "required": []

@@ -130,11 +130,11 @@ export default function IdUploadGate({ bookingId, onComplete }) {
 
   if (done) {
     return (
-      <Card className="bg-emerald-50 border-emerald-200 rounded-2xl">
+      <Card className="bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 rounded-2xl">
         <CardContent className="p-6 text-center">
-          <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
-          <p className="font-semibold text-emerald-900">ID received — thanks!</p>
-          <p className="text-sm text-emerald-800 mt-1">Taking you to your bookings…</p>
+          <CheckCircle2 className="w-10 h-10 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
+          <p className="font-semibold text-emerald-900 dark:text-emerald-200">ID received — thanks!</p>
+          <p className="text-sm text-emerald-800 dark:text-emerald-200 mt-1">Taking you to your bookings…</p>
         </CardContent>
       </Card>
     );
@@ -158,7 +158,7 @@ export default function IdUploadGate({ bookingId, onComplete }) {
       <CardContent className="p-6 space-y-4">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-            <ShieldCheck className="w-5 h-5 text-amber-700" />
+            <ShieldCheck className="w-5 h-5 text-amber-700 dark:text-amber-300" />
           </div>
           <div>
             <h3 className="font-semibold text-slate-900 dark:text-white">One last step — verify your ID</h3>
@@ -203,9 +203,9 @@ export default function IdUploadGate({ bookingId, onComplete }) {
         </div>
 
         {error && (
-          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
-            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
 

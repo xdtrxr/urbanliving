@@ -128,7 +128,7 @@ export default function PlanTripPage() {
         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800/50 p-5 sm:p-8 mb-6 sm:mb-8">
           <div className="flex flex-col gap-5 sm:gap-6">
             <div className="text-center">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold mb-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-xs font-semibold mb-4">
                 <Sparkles className="w-3 h-3" />
                 Chauffeur-driven · Abuja & Lagos
               </div>
@@ -230,11 +230,11 @@ export default function PlanTripPage() {
 
         {/* Error banner */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-red-900">Couldn&apos;t load vehicles</p>
-              <p className="text-sm text-red-700 mt-1">{error}</p>
+              <p className="font-semibold text-red-900 dark:text-red-200">Couldn&apos;t load vehicles</p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
             </div>
           </div>
         )}
