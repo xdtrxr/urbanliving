@@ -146,6 +146,24 @@ Have a smooth trip — see you soon.
     }
 }
 
+// Fire-and-forget push to a user. Errors are swallowed so a push outage
+// can never block payment confirmation. Stable `tag` per booking means a
+// re-delivered webhook for the same payment replaces the prior push
+// instead of stacking duplicates on the user's device.
+async function tryPush(sdk: any, opts: {
+    user_email: string;
+    title: string;
+    body?: string;
+    url?: string;
+    tag?: string;
+}) {
+    try {
+        await sdk.functions.invoke('sendPushNotification', opts);
+    } catch (err) {
+        console.warn('tryPush failed (non-fatal):', err);
+    }
+}
+
 async function notifyAdmin(opts: {
     bookingId: string;
     guestName: string;
@@ -266,6 +284,16 @@ Deno.serve(async (req) => {
             reference,
         });
 
+        // Push the guest — booking is locked in. Same tag as the verify
+        // path so whichever fires first wins on-device.
+        await tryPush(sdk, {
+            user_email: booking.guest_email,
+            title: '✅ Payment confirmed',
+            body: `Your stay is locked in. Tap for arrival details.`,
+            url: `/Bookings#booking-${booking.id}`,
+            tag: `booking-paid-${booking.id}`,
+        });
+
         // Re-read so we see any host_*_override that may have been filled.
         const bookingForEmail = await sdk.asServiceRole.entities.Booking.get(booking.id);
         const emailResult = await sendArrivalEmail({ sdk, booking: bookingForEmail });
@@ -335,6 +363,16 @@ Deno.serve(async (req) => {
                             amount_earned_ngn: amountNGN,
                         });
                         console.log(`🎁 Referrer ${referrer.email} awarded ₦${amountNGN}`);
+                        // Push the referrer. Same tag as the verify path so we
+                        // don't double-notify if both paths land for the same
+                        // payment in close succession.
+                        await tryPush(sdk, {
+                            user_email: referrer.email,
+                            title: '🎁 Referral payout',
+                            body: `₦${amountNGN.toLocaleString()} just landed in your referral balance.`,
+                            url: '/Withdrawals',
+                            tag: `referral-${referral.id}`,
+                        });
                     }
                 }
             }

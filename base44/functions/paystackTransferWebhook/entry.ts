@@ -46,6 +46,24 @@ function safeEqual(a: string, b: string): boolean {
     return diff === 0;
 }
 
+// Fire-and-forget push to the user. Swallows all errors so a push outage
+// can never block the parent business action. Use a stable tag so re-sent
+// pushes (e.g. failover + webhook re-delivery) replace each other instead
+// of stacking notifications on the user's device.
+async function tryPush(sdk: any, opts: {
+    user_email: string;
+    title: string;
+    body?: string;
+    url?: string;
+    tag?: string;
+}) {
+    try {
+        await sdk.functions.invoke('sendPushNotification', opts);
+    } catch (err) {
+        console.warn('tryPush failed (non-fatal):', err);
+    }
+}
+
 async function notifyAdmin(opts: {
     title: string;
     withdrawalId: string;
@@ -181,6 +199,13 @@ Deno.serve(async (req) => {
                 userEmail: withdrawal.user_email,
                 amountNGN: Number(withdrawal.amount) || 0,
             });
+            await tryPush(sdk, {
+                user_email: withdrawal.user_email,
+                title: '💸 Withdrawal sent',
+                body: `₦${(Number(withdrawal.amount) || 0).toLocaleString()} is on its way to your bank.`,
+                url: '/Withdrawals',
+                tag: `withdrawal-${withdrawal.id}`,
+            });
             return ack({ processed: true, withdrawal_id: withdrawal.id, status: 'completed' });
         }
 
@@ -198,6 +223,13 @@ Deno.serve(async (req) => {
             userEmail: withdrawal.user_email,
             amountNGN: Number(withdrawal.amount) || 0,
             reason,
+        });
+        await tryPush(sdk, {
+            user_email: withdrawal.user_email,
+            title: newStatus === 'reversed' ? '↩️ Withdrawal reversed' : '❌ Withdrawal failed',
+            body: `We've refunded ₦${(Number(withdrawal.amount) || 0).toLocaleString()} to your referral balance. Tap to try again.`,
+            url: '/Withdrawals',
+            tag: `withdrawal-${withdrawal.id}`,
         });
         return ack({ processed: true, withdrawal_id: withdrawal.id, status: newStatus });
     } catch (err) {

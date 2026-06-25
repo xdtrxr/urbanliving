@@ -128,6 +128,24 @@ Have a smooth trip — see you soon.
     }
 }
 
+// Fire-and-forget push to a user. Swallows all errors so a push outage
+// can never block the parent business action. Stable `tag` lets a re-sent
+// push for the same event replace the previous notification on-device
+// instead of stacking duplicates.
+async function tryPush(sdk: any, opts: {
+    user_email: string;
+    title: string;
+    body?: string;
+    url?: string;
+    tag?: string;
+}) {
+    try {
+        await sdk.functions.invoke('sendPushNotification', opts);
+    } catch (err) {
+        console.warn('tryPush failed (non-fatal):', err);
+    }
+}
+
 async function notifyAdmin(opts: {
     bookingId: string;
     guestName: string;
@@ -278,6 +296,17 @@ Deno.serve(async (req) => {
             reference,
         });
 
+        // Push the guest — booking is locked in. Tag by booking so a
+        // webhook re-fire for the same payment replaces this notification
+        // instead of stacking. Deep-links into their bookings list.
+        await tryPush(base44, {
+            user_email: booking.guest_email,
+            title: '✅ Payment confirmed',
+            body: `Your stay is locked in. Tap for arrival details.`,
+            url: `/Bookings#booking-${booking.id}`,
+            tag: `booking-paid-${booking.id}`,
+        });
+
         // Re-read so we see any host_*_override that may have been filled
         // before payment confirmed (rare but possible if admin pre-filled).
         const bookingForEmail = await base44.asServiceRole.entities.Booking.get(booking.id);
@@ -348,6 +377,15 @@ Deno.serve(async (req) => {
                             console.warn('Referrer loyalty log failed (non-fatal):', loyaltyErr);
                         }
                         console.log(`🎁 Referrer ${referrer.email} awarded ₦${amountNGN} + ${REFERRER_LOYALTY_BONUS} loyalty points`);
+                        // Push the referrer — they care a lot about this and
+                        // it's a great moment of feedback that the program works.
+                        await tryPush(base44, {
+                            user_email: referrer.email,
+                            title: '🎁 Referral payout',
+                            body: `₦${amountNGN.toLocaleString()} just landed in your referral balance.`,
+                            url: '/Withdrawals',
+                            tag: `referral-${referral.id}`,
+                        });
                     }
                 }
             }

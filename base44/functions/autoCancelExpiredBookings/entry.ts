@@ -21,6 +21,23 @@ function computeDeadlineMs(b: any): number | null {
     return Math.min(cap, Math.max(fromApproval, fromOpen));
 }
 
+// Fire-and-forget push. Swallows errors so a push outage can't block the
+// cancellation sweep. Stable tag prevents duplicate pushes if the same
+// booking somehow runs through the sweep twice.
+async function tryPush(sdk: any, opts: {
+    user_email: string;
+    title: string;
+    body?: string;
+    url?: string;
+    tag?: string;
+}) {
+    try {
+        await sdk.functions.invoke('sendPushNotification', opts);
+    } catch (err) {
+        console.warn('tryPush failed (non-fatal):', err);
+    }
+}
+
 async function notifyAdmin(b: any) {
     const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
     const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
@@ -86,6 +103,15 @@ If you believe this is an error, please contact our support team.
             } catch (emailErr) {
                 console.warn(`Guest expiry email failed for booking ${b.id} (non-fatal):`, emailErr);
             }
+            // Push the guest — they can re-book the same property + dates
+            // because checkAvailabilityWebhook doesn't block on cancelled rows.
+            await tryPush(sdk, {
+                user_email: b.guest_email,
+                title: '⏰ Payment window expired',
+                body: 'Your reservation lapsed before payment. Tap to re-book.',
+                url: `/Bookings#booking-${b.id}`,
+                tag: `booking-expired-${b.id}`,
+            });
             cancelled += 1;
             console.log(`⏰ Auto-cancelled expired booking ${b.id} (payment_expired)`);
         } catch (err) {

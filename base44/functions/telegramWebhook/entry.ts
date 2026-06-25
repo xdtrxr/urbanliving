@@ -7,6 +7,24 @@ const bookingLink = (bookingId: string) => `${APP_BASE_URL}/Bookings?focus=${enc
 const propertyLink = (propertyId: string) => `${APP_BASE_URL}/Property?id=${encodeURIComponent(propertyId)}`;
 const searchLink = () => `${APP_BASE_URL}/Search`;
 
+// Fire-and-forget push helper. Errors are swallowed so a push outage can
+// never block the parent flow (approve, reject, support reply). Stable
+// `tag` per event means a re-fire replaces the prior on-device notification
+// rather than stacking duplicates.
+async function tryPush(sdk: any, opts: {
+    user_email: string;
+    title: string;
+    body?: string;
+    url?: string;
+    tag?: string;
+}) {
+    try {
+        await sdk.functions.invoke('sendPushNotification', opts);
+    } catch (err) {
+        console.warn('tryPush failed (non-fatal):', err);
+    }
+}
+
 Deno.serve(async (req) => {
     console.log('=== TELEGRAM WEBHOOK CALLED ===');
 
@@ -205,6 +223,29 @@ Deno.serve(async (req) => {
             console.error('Failed to email guest about decision:', emailErr);
         }
 
+        // Push the guest. Deep-link into the specific booking when we found
+        // one — falls back to the bookings list if the match lookup missed.
+        const pushUrl = matchedBookingId
+            ? `/Bookings#booking-${matchedBookingId}`
+            : '/Bookings';
+        if (action === 'approve') {
+            await tryPush(base44, {
+                user_email: request.user_email,
+                title: '✅ Booking approved',
+                body: `"${request.property_title}" is yours for ${request.check_in} → ${request.check_out}. Tap to pay within 1 hour.`,
+                url: pushUrl,
+                tag: `booking-decision-${matchedBookingId || requestId}`,
+            });
+        } else {
+            await tryPush(base44, {
+                user_email: request.user_email,
+                title: '❌ Booking declined',
+                body: `"${request.property_title}" isn\'t available for those dates. Tap to find another stay.`,
+                url: '/Search',
+                tag: `booking-decision-${matchedBookingId || requestId}`,
+            });
+        }
+
         return new Response(JSON.stringify({ ok: true }), {
             headers: { 'Content-Type': 'application/json' }
         });
@@ -389,13 +430,31 @@ async function postAdminReply(base44: any, ticketId: string, message: string) {
         message_type: 'text',
         automated_response: false,
     });
+    let ticketOwnerEmail: string | undefined;
     try {
         const ticket = await base44.asServiceRole.entities.SupportTicket.get(ticketId);
-        if (ticket && ticket.status === 'open') {
-            await base44.asServiceRole.entities.SupportTicket.update(ticketId, { status: 'in_progress' });
+        if (ticket) {
+            ticketOwnerEmail = ticket.user_email;
+            if (ticket.status === 'open') {
+                await base44.asServiceRole.entities.SupportTicket.update(ticketId, { status: 'in_progress' });
+            }
         }
     } catch (e) {
         console.warn('Failed to bump ticket status:', (e as Error).message);
+    }
+
+    // Push the user — their support thread got a reply. Keep the preview
+    // short (push payloads are constrained) and link them straight into
+    // Support so they land on the conversation.
+    if (ticketOwnerEmail) {
+        const preview = message.length > 80 ? `${message.slice(0, 80)}…` : message;
+        await tryPush(base44, {
+            user_email: ticketOwnerEmail,
+            title: '💬 Reply from Urban Stays',
+            body: preview,
+            url: `/Support?ticket=${encodeURIComponent(ticketId)}`,
+            tag: `support-${ticketId}`,
+        });
     }
 }
 
