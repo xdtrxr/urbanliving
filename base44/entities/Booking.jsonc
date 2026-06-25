@@ -128,6 +128,21 @@
         "other"
       ],
       "description": "Why a cancelled booking ended. Distinguishes Payment Expired rows (guest can still re-book) from admin/user cancellations."
+    },
+    "payment_warning_pushed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Idempotency stamp for the autoCancelExpiredBookings 5-min warning push. Set once per booking; prevents duplicate warnings if the cron fires multiple times within the warning window."
+    },
+    "checkin_reminder_pushed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Idempotency stamp for the dailyBookingReminders check-in push. Set once per booking on the morning of check_in; prevents duplicate sends if the cron re-runs."
+    },
+    "checkout_reminder_pushed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Idempotency stamp for the dailyBookingReminders check-out push. Set once per booking on the morning of check_out."
     }
   },
   "required": [

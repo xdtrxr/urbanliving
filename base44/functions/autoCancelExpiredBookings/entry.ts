@@ -60,14 +60,46 @@ async function notifyAdmin(b: any) {
     }
 }
 
-async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number }> {
+// How close to the deadline before we warn the user. With the cron firing
+// every ~5 minutes, a 6-minute window guarantees at least one fire inside
+// the warning band even if the cron is a minute late.
+const WARNING_WINDOW_MS = 6 * 60 * 1000;
+
+async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number; warned: number }> {
     const pending = await sdk.asServiceRole.entities.Booking.filter({ status: 'pending' });
     const now = Date.now();
     let cancelled = 0;
+    let warned = 0;
 
     for (const b of pending) {
         const deadlineMs = computeDeadlineMs(b);
         if (deadlineMs === null) continue; // not approved yet
+
+        const remaining = deadlineMs - now;
+
+        // Warning band: deadline within ~5 min and we haven't pushed yet.
+        // Stamp payment_warning_pushed_at to make this idempotent across
+        // cron re-runs in the same window.
+        if (remaining > 0 && remaining <= WARNING_WINDOW_MS && !b.payment_warning_pushed_at) {
+            const minutesLeft = Math.max(1, Math.ceil(remaining / 60000));
+            try {
+                await sdk.asServiceRole.entities.Booking.update(b.id, {
+                    payment_warning_pushed_at: new Date().toISOString(),
+                });
+                await tryPush(sdk, {
+                    user_email: b.guest_email,
+                    title: `⏰ ${minutesLeft} min to pay`,
+                    body: 'Your reservation will be cancelled if payment isn\'t completed soon. Tap to finish.',
+                    url: `/Bookings#booking-${b.id}`,
+                    tag: `booking-warn-${b.id}`,
+                });
+                warned += 1;
+                console.log(`⏳ Payment-warning push sent for booking ${b.id} (${minutesLeft} min left)`);
+            } catch (warnErr) {
+                console.warn(`Payment-warning push failed for booking ${b.id} (non-fatal):`, warnErr);
+            }
+        }
+
         if (now <= deadlineMs) continue;
         try {
             // Stamp cancel_reason so the Bookings UI can show "Payment Expired"
@@ -119,7 +151,7 @@ If you believe this is an error, please contact our support team.
         }
     }
 
-    return { scanned: pending.length, cancelled };
+    return { scanned: pending.length, cancelled, warned };
 }
 
 // Note: Deno.cron registration is intentionally NOT used here because Base44's
