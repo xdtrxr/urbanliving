@@ -251,7 +251,7 @@ export default function WithdrawalsAdmin() {
                       )}
                     </div>
                     {isPending && (
-                      <div className="flex sm:flex-col sm:items-end gap-2 flex-shrink-0">
+                      <div className="flex flex-col sm:items-end gap-2 flex-shrink-0 w-full sm:w-auto">
                         <Button
                           size="sm"
                           onClick={() => setConfirmTarget(r)}
