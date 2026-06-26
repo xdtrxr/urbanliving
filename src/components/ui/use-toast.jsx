@@ -1,8 +1,12 @@
 // Inspired by react-hot-toast library
 import { useState, useEffect, createContext, useContext } from "react";
 
-const TOAST_LIMIT = 20;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_LIMIT = 3;
+// Time between Radix flipping data-state="closed" (the slide-out animation
+// starts) and us yanking the toast from React state. The shadcn default of
+// 1,000,000ms (~17 min) was an upstream placeholder — pinning at 400ms
+// covers the ~300ms slide-out without leaving stale toasts in the tree.
+const TOAST_REMOVE_DELAY = 400;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
