@@ -49,6 +49,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LeadsAdmin from '@/components/admin/LeadsAdmin';
 import ConfirmedBookingsAdmin from '@/components/admin/ConfirmedBookingsAdmin';
 import VehiclesAdmin from '@/components/admin/VehiclesAdmin';
+import WithdrawalsAdmin from '@/components/admin/WithdrawalsAdmin';
 import { Car } from 'lucide-react';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -1096,7 +1097,7 @@ export default function AdminPage() {
             mobile gets an explicit pt on each TabsContent for breathing
             room. */}
         <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 sm:space-y-8 mb-8">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-1 h-auto p-1">
             <TabsTrigger value="add-manual">
               <Plus className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">{editingPropertyId ? 'Edit Property' : 'Add Property'}</span>
@@ -1115,10 +1116,19 @@ export default function AdminPage() {
               <Users className="w-4 h-4 mr-2" />
               Leads
             </TabsTrigger>
+            <TabsTrigger value="withdrawals">
+              <Wallet className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Withdrawals</span>
+              <span className="sm:hidden">Payouts</span>
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="vehicles" className="mt-6 sm:mt-4">
             <VehiclesAdmin />
+          </TabsContent>
+
+          <TabsContent value="withdrawals" className="mt-6 sm:mt-4">
+            <WithdrawalsAdmin />
           </TabsContent>
 
           <TabsContent value="add-manual" className="mt-6 sm:mt-4">
