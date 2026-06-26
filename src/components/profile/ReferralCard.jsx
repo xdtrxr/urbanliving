@@ -39,7 +39,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                 <div>
                     <Label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Your Unique Referral Link</Label>
                     <div className="flex gap-2 mt-2">
-                        <Input value={referralLink} readOnly className="bg-slate-100 font-mono text-sm" />
+                        <Input value={referralLink} readOnly className="bg-slate-100 dark:bg-slate-800 font-mono text-sm" />
                         <Button onClick={handleCopy} variant="outline" size="icon">
                             {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
                         </Button>
@@ -122,7 +122,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                         <Target className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                         Your Referrals
                     </h4>
-                    <div className="border rounded-xl p-4 space-y-3 max-h-60 overflow-y-auto bg-slate-50">
+                    <div className="border rounded-xl p-4 space-y-3 max-h-60 overflow-y-auto bg-slate-50 dark:bg-slate-800/60">
                         {referrals.length > 0 ? (
                             referrals.map(ref => (
                                 <div key={ref.id} className="flex justify-between items-center text-sm bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">

@@ -8,7 +8,7 @@ import { Users, Car, Snowflake, MapPin } from 'lucide-react';
 // Small chip used inside the card body — keeps amenity / feature pills tight
 function Chip({ icon: Icon, children }) {
   return (
-    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 dark:text-slate-200 text-[11px] font-medium">
+    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-medium">
       {Icon && <Icon className="w-3 h-3" />}
       {children}
     </div>
@@ -26,7 +26,7 @@ export default function VehicleCard({ vehicle }) {
     <Link to={createPageUrl(`Vehicle?id=${vehicle.id}`)} className="block group">
       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group-hover:-translate-y-0.5">
         {/* Hero image */}
-        <div className="aspect-[4/3] bg-slate-100 overflow-hidden relative">
+        <div className="aspect-[4/3] bg-slate-100 dark:bg-slate-800 overflow-hidden relative">
           <img
             src={hero}
             alt={vehicle.name}

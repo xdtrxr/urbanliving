@@ -77,7 +77,7 @@ export default function BookingDetailsCard({ booking, property }) {
         </div>
 
         {booking.special_requests && (
-          <div className="bg-slate-50 rounded-lg p-2 text-xs">
+          <div className="bg-slate-50 dark:bg-slate-800/60 rounded-lg p-2 text-xs">
             <p className="text-slate-500 dark:text-slate-400">Special Requests:</p>
             <p className="text-slate-700 dark:text-slate-200">{booking.special_requests}</p>
           </div>

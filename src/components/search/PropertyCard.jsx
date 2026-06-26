@@ -134,7 +134,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
             {property.amenities?.slice(0, 3).map((amenity) => {
               const Icon = amenityIcons[amenity];
               return Icon ? (
-                <div key={amenity} className="p-2 bg-slate-100 rounded-lg">
+                <div key={amenity} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg">
                   <Icon className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                 </div>
               ) : null;

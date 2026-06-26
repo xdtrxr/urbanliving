@@ -102,7 +102,7 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
               />
             </div>
           ) : (
-            <div className="md:w-1/3 bg-slate-100 flex items-center justify-center h-48 md:h-full">
+            <div className="md:w-1/3 bg-slate-100 dark:bg-slate-800 flex items-center justify-center h-48 md:h-full">
               <MapPin className="w-16 h-16 text-slate-300" />
             </div>
           )}
@@ -284,7 +284,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
               />
             </div>
           ) : (
-            <div className="md:w-1/3 bg-slate-100 flex items-center justify-center h-48 md:h-full">
+            <div className="md:w-1/3 bg-slate-100 dark:bg-slate-800 flex items-center justify-center h-48 md:h-full">
               <MapPin className="w-16 h-16 text-slate-300" />
             </div>
           )}
@@ -353,7 +353,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
               </div>
 
               {booking.special_requests && (
-                <div className="bg-slate-50 rounded-xl p-4">
+                <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4">
                   <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Special Requests</p>
                   <p className="text-sm text-slate-600 dark:text-slate-300">{booking.special_requests}</p>
                 </div>
@@ -845,7 +845,7 @@ export default function BookingsPage() {
               <AlertDialogDescription>
                 Are you sure you want to cancel this booking? This action cannot be undone.
                 {selectedBooking && (
-                  <div className="mt-4 p-3 bg-slate-50 rounded-lg text-sm text-slate-700 dark:text-slate-200">
+                  <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg text-sm text-slate-700 dark:text-slate-200">
                     <p><strong>Property:</strong> {properties[selectedBooking.property_id]?.title || 'Property'}</p>
                     <p><strong>Check-in:</strong> {format(parseISO(selectedBooking.check_in), "MMM d, yyyy")}</p>
                     <p><strong>Total:</strong> ₦{selectedBooking.total_price.toLocaleString()}</p>

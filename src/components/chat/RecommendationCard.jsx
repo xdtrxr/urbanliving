@@ -28,7 +28,7 @@ export default function RecommendationCard({ recommendation, onCheckAvailability
               className="w-full h-56 object-cover"
             />
           ) : (
-            <div className="w-full h-56 bg-slate-200 flex flex-col items-center justify-center">
+            <div className="w-full h-56 bg-slate-200 dark:bg-slate-800 flex flex-col items-center justify-center">
               <ImageIcon className="w-16 h-16 text-slate-400 dark:text-slate-500" />
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Image not available</p>
             </div>
@@ -63,7 +63,7 @@ export default function RecommendationCard({ recommendation, onCheckAvailability
           
           <div>
             <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm mb-2">Why you'll love it:</h4>
-            <p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 p-3 rounded-lg border border-slate-200 dark:border-slate-800/80">
+            <p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800/80">
               {recommendation.perfect_for}
             </p>
           </div>

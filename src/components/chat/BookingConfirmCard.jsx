@@ -154,33 +154,33 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
-          <div className="bg-slate-50 rounded-xl p-3">
+          <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
             <p className="text-slate-500 dark:text-slate-400 text-xs mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> Check-in
             </p>
             <p className="font-semibold text-slate-900 dark:text-white">{safeDate(booking.check_in)}</p>
             <p className="text-[10px] text-slate-500 dark:text-slate-400">from 2:00 PM</p>
           </div>
-          <div className="bg-slate-50 rounded-xl p-3">
+          <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
             <p className="text-slate-500 dark:text-slate-400 text-xs mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> Check-out
             </p>
             <p className="font-semibold text-slate-900 dark:text-white">{safeDate(booking.check_out)}</p>
             <p className="text-[10px] text-slate-500 dark:text-slate-400">by 12:00 PM</p>
           </div>
-          <div className="bg-slate-50 rounded-xl p-3">
+          <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
             <p className="text-slate-500 dark:text-slate-400 text-xs mb-1 flex items-center gap-1">
               <Users className="w-3.5 h-3.5" /> Guests
             </p>
             <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
           </div>
-          <div className="bg-slate-50 rounded-xl p-3">
+          <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
             <p className="text-slate-500 dark:text-slate-400 text-xs mb-1">Nights</p>
             <p className="font-semibold text-slate-900 dark:text-white">{breakdown.nights || ''}</p>
           </div>
         </div>
 
-        <div className="bg-slate-50 rounded-xl p-4 mb-4 space-y-2 text-sm">
+        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 mb-4 space-y-2 text-sm">
           <div className="flex justify-between text-slate-700 dark:text-slate-200">
             <span>₦{breakdown.nightly.toLocaleString()} × {breakdown.nights} {breakdown.nights === 1 ? 'night' : 'nights'}</span>
             <span className="font-medium">₦{breakdown.subtotal.toLocaleString()}</span>

@@ -658,7 +658,7 @@ export default function CheckoutPage() {
                 )}
 
                 {nights > 0 && (
-                  <div className="bg-slate-50 p-4 rounded-xl space-y-2">
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl space-y-2">
                     <div className="flex justify-between">
                       <span>₦{property.price_per_night.toLocaleString()} × {nights} nights</span>
                       <span>₦{(property.price_per_night * nights).toLocaleString()}</span>

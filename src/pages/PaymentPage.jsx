@@ -624,7 +624,7 @@ export default function PaymentPage() {
             who they're paying through, then go straight to the pay button. */}
         <Card className="mb-6 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 shadow-lg">
           <CardContent className="p-6 space-y-5">
-            <div className="flex items-center justify-between gap-4 rounded-2xl border-2 border-slate-900 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-4 rounded-2xl border-2 border-slate-900 dark:border-slate-100 bg-slate-50 dark:bg-slate-800/60 p-4">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="flex-shrink-0">
                   <PaystackLogo />

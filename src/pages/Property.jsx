@@ -146,7 +146,7 @@ export default function PropertyPage() {
                                 setLightboxIndex(Math.max(0, heroIdx));
                                 setLightboxOpen(true);
                             }}
-                            className="group relative block w-full aspect-video bg-slate-200 rounded-2xl overflow-hidden shadow-lg cursor-zoom-in"
+                            className="group relative block w-full aspect-video bg-slate-200 dark:bg-slate-800 rounded-2xl overflow-hidden shadow-lg cursor-zoom-in"
                             aria-label="Open photo gallery"
                         >
                             <AnimatePresence mode="wait">
