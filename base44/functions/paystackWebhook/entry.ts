@@ -168,6 +168,7 @@ async function notifyAdmin(opts: {
     bookingId: string;
     guestName: string;
     guestEmail: string;
+    guestPhone?: string;
     propertyId: string;
     amountNGN: number;
     reference: string;
@@ -178,6 +179,7 @@ async function notifyAdmin(opts: {
     const text = `💰 *PAYMENT RECEIVED (webhook)*\n\n` +
         `Booking \`${opts.bookingId}\`\n` +
         `• Guest: ${opts.guestName} (${opts.guestEmail})\n` +
+        `• Mobile: ${opts.guestPhone || 'Not provided'}\n` +
         `• Property: \`${opts.propertyId}\`\n` +
         `• Amount: ₦${opts.amountNGN.toLocaleString()}\n` +
         `• Paystack ref: \`${opts.reference}\``;
@@ -275,10 +277,19 @@ Deno.serve(async (req) => {
             return ack({ skipped: 'lost_race', booking_id: booking.id });
         }
 
+        // Best-effort phone lookup — Booking rows don't carry a phone, but the
+        // guest's User profile usually does. Never let this block the notify.
+        let guestPhone = '';
+        try {
+            const guestUsers = await sdk.asServiceRole.entities.User.filter({ email: booking.guest_email });
+            guestPhone = guestUsers[0]?.phone_number || '';
+        } catch { /* noop — phone shows as "Not provided" */ }
+
         await notifyAdmin({
             bookingId: booking.id,
             guestName: booking.guest_name,
             guestEmail: booking.guest_email,
+            guestPhone,
             propertyId: booking.property_id,
             amountNGN: Number(booking.total_price) || 0,
             reference,
