@@ -78,6 +78,15 @@ const EMPTY_FORM = {
   min_hours_per_booking: 12,
 };
 
+// Pull the platform's actual error text out of an upload failure so admin
+// sees "integration limit reached — upgrade plan" instead of a generic
+// message (a 402 quota error will never succeed on retry).
+const uploadErrorText = (error) =>
+  error?.response?.data?.message ||
+  error?.data?.message ||
+  error?.message ||
+  'Unknown error';
+
 const csvToArray = (raw) =>
   (raw || '')
     .split(',')
@@ -259,7 +268,8 @@ export default function VehiclesAdmin() {
         if (file_url) uploaded.push(file_url);
       } catch (err) {
         console.error('Image upload failed for', file.name, err);
-        setError(`Failed to upload ${file.name}.`);
+        setError(`Failed to upload ${file.name}: ${uploadErrorText(err)}`);
+        break; // same failure will hit every file in the batch
       }
     }
     setForm((prev) => ({ ...prev, images: [...prev.images, ...uploaded] }));
@@ -287,7 +297,8 @@ export default function VehiclesAdmin() {
         if (file_url) uploaded.push(file_url);
       } catch (err) {
         console.error('Video upload failed for', file.name, err);
-        setError(`Failed to upload ${file.name}.`);
+        setError(`Failed to upload ${file.name}: ${uploadErrorText(err)}`);
+        break; // same failure will hit every file in the batch
       }
     }
     setForm((prev) => ({ ...prev, videos: [...prev.videos, ...uploaded] }));

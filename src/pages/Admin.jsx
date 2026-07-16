@@ -556,6 +556,15 @@ export default function AdminPage() {
     setIsSavingProperty(false); // Renamed from isSubmittingForm
   };
   
+  // Pull the platform's actual error text out of an upload failure so admin
+  // sees "integration limit reached — upgrade plan" instead of a useless
+  // "please try again" (a 402 quota error will never succeed on retry).
+  const uploadErrorText = (error) =>
+    error?.response?.data?.message ||
+    error?.data?.message ||
+    error?.message ||
+    'Unknown error';
+
   const handleImageUpload = async (event) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -573,7 +582,8 @@ export default function AdminPage() {
             uploadedUrls.push(uploadResult.file_url);
         } catch (error) {
             console.error('Error uploading image:', error);
-            alert(`Failed to upload ${file.name}. Please try again.`);
+            alert(`Failed to upload ${file.name}: ${uploadErrorText(error)}`);
+            break; // same failure will hit every file — don't spam one alert per file
         }
     }
 
@@ -610,7 +620,8 @@ export default function AdminPage() {
             uploadedUrls.push(uploadResult.file_url);
         } catch (error) {
             console.error('Error uploading video:', error);
-            alert(`Failed to upload ${file.name}. Please try again.`);
+            alert(`Failed to upload ${file.name}: ${uploadErrorText(error)}`);
+            break; // same failure will hit every file — don't spam one alert per file
         }
     }
 
