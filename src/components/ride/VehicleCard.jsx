@@ -77,7 +77,7 @@ export default function VehicleCard({ vehicle }) {
             </div>
             {price24 ? (
               <div className="text-right">
-                <div className="text-sm font-semibold text-amber-700">
+                <div className="text-sm font-semibold text-amber-700 dark:text-amber-300">
                   ₦{price24.toLocaleString()}
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">/ 24 hours</div>

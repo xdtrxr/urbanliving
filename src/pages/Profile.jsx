@@ -182,7 +182,7 @@ export default function ProfilePage() {
                     <span className="truncate text-sm sm:text-base">{user?.email}</span>
                   </div>
                   {isUploadingPicture && (
-                    <p className="text-sm text-blue-600 mt-2">Uploading profile picture...</p>
+                    <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">Uploading profile picture...</p>
                   )}
                 </div>
               </div>

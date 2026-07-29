@@ -39,11 +39,11 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_BADGE = {
-  pending: { icon: Clock, color: 'bg-amber-100 text-amber-800 border-amber-200' },
-  processing: { icon: Loader2, color: 'bg-blue-100 text-blue-800 border-blue-200' },
-  completed: { icon: CheckCircle, color: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  failed: { icon: XCircle, color: 'bg-rose-100 text-rose-800 border-rose-200' },
-  reversed: { icon: AlertTriangle, color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  pending: { icon: Clock, color: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900' },
+  processing: { icon: Loader2, color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900' },
+  completed: { icon: CheckCircle, color: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900' },
+  failed: { icon: XCircle, color: 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-rose-200 dark:border-rose-900' },
+  reversed: { icon: AlertTriangle, color: 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-900' },
 };
 
 const fmtDateTime = (s) => {
@@ -145,7 +145,7 @@ export default function WithdrawalsAdmin() {
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg text-slate-900 dark:text-white">
-            <Wallet className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <Wallet className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
             Withdrawals
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">

@@ -28,7 +28,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
             <div className="h-2 bg-gradient-to-r from-amber-400 via-orange-400 to-red-400" />
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <Gift className="w-6 h-6 text-amber-500" />
+                    <Gift className="w-6 h-6 text-amber-500 dark:text-amber-400" />
                     Refer & Earn 5%
                 </CardTitle>
                 <CardDescription>
@@ -41,7 +41,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                     <div className="flex gap-2 mt-2">
                         <Input value={referralLink} readOnly className="bg-slate-100 dark:bg-slate-800 font-mono text-sm" />
                         <Button onClick={handleCopy} variant="outline" size="icon">
-                            {copied ? <CheckCircle className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
+                            {copied ? <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400" /> : <Copy className="w-5 h-5" />}
                         </Button>
                     </div>
                 </div>
@@ -49,51 +49,51 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                 {/* Enhanced Stats Summary with Backend Data */}
                 {isLoadingStats ? (
                     <div className="flex items-center justify-center py-8">
-                        <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+                        <Loader2 className="w-6 h-6 animate-spin text-amber-500 dark:text-amber-400" />
                     </div>
                 ) : referralStats ? (
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/40 dark:to-blue-900/40 rounded-xl p-4 border border-blue-200 dark:border-blue-900">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <Users className="w-4 h-4 text-blue-600" />
-                                    <span className="text-xs text-blue-600 font-medium">Total Referrals</span>
+                                    <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Referrals</span>
                                 </div>
-                                <div className="text-2xl font-bold text-blue-900">{referralStats.totalReferrals}</div>
+                                <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{referralStats.totalReferrals}</div>
                             </div>
-                            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                            <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/40 rounded-xl p-4 border border-green-200 dark:border-green-900">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <CheckCircle className="w-4 h-4 text-green-600" />
-                                    <span className="text-xs text-green-600 font-medium">Completed</span>
+                                    <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">Completed</span>
                                 </div>
-                                <div className="text-2xl font-bold text-green-900">{referralStats.successfulReferrals}</div>
+                                <div className="text-2xl font-bold text-green-900 dark:text-green-100">{referralStats.successfulReferrals}</div>
                             </div>
                         </div>
 
-                        <div className="bg-gradient-to-br from-amber-50 to-orange-100 rounded-xl p-4 border-2 border-amber-200">
+                        <div className="bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-950/40 dark:to-orange-900/40 rounded-xl p-4 border-2 border-amber-200 dark:border-amber-900">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
-                                    <Wallet className="w-5 h-5 text-amber-600" />
-                                    <span className="text-sm text-amber-900 font-semibold">Total Revenue Generated</span>
+                                    <Wallet className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                                    <span className="text-sm text-amber-900 dark:text-amber-100 font-semibold">Total Revenue Generated</span>
                                 </div>
                             </div>
-                            <div className="text-3xl font-bold text-amber-900 mb-1">
+                            <div className="text-3xl font-bold text-amber-900 dark:text-amber-100 mb-1">
                                 ₦{referralStats.totalBookedByReferrals.toLocaleString()}
                             </div>
-                            <p className="text-xs text-amber-700">
+                            <p className="text-xs text-amber-700 dark:text-amber-300">
                                 From {referralStats.successfulReferrals} successful booking{referralStats.successfulReferrals !== 1 ? 's' : ''}
                             </p>
                         </div>
 
-                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border-2 border-purple-200">
+                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/40 dark:to-purple-900/40 rounded-xl p-4 border-2 border-purple-200 dark:border-purple-900">
                             <div className="flex items-center gap-2 mb-2">
-                                <TrendingUp className="w-5 h-5 text-purple-600" />
-                                <span className="text-sm text-purple-900 font-semibold">Your Earnings</span>
+                                <TrendingUp className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                <span className="text-sm text-purple-900 dark:text-purple-100 font-semibold">Your Earnings</span>
                             </div>
-                            <div className="text-3xl font-bold text-purple-900 mb-1">
+                            <div className="text-3xl font-bold text-purple-900 dark:text-purple-100 mb-1">
                                 ₦{referralStats.totalAmountEarnedFromReferralsNGN.toLocaleString()}
                             </div>
-                            <p className="text-xs text-purple-700">
+                            <p className="text-xs text-purple-700 dark:text-purple-300">
                                 5% commission on referral bookings
                             </p>
                         </div>
@@ -105,11 +105,11 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                             <div className="text-xs text-slate-500 dark:text-slate-400">Total Referrals</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-green-600">{completedReferrals.length}</div>
+                            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{completedReferrals.length}</div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">Completed</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-amber-600">
+                            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
                                 ₦{referrals.reduce((sum, ref) => sum + (ref.amount_earned_ngn || 0), 0).toLocaleString()}
                             </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">Earned (NGN)</div>
@@ -128,9 +128,9 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                                 <div key={ref.id} className="flex justify-between items-center text-sm bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
                                     <div className="flex items-center gap-3">
                                         {ref.status === 'booking_completed' ? (
-                                            <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                                            <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400 flex-shrink-0" />
                                         ) : (
-                                            <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                                            <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                                         )}
                                         <div>
                                             <div className="font-medium text-slate-700 dark:text-slate-200">{ref.referred_email}</div>
@@ -140,7 +140,7 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                                         </div>
                                     </div>
                                     {ref.status === 'booking_completed' && ref.amount_earned_ngn ? (
-                                        <div className="flex items-center gap-1 font-semibold text-green-600">
+                                        <div className="flex items-center gap-1 font-semibold text-green-600 dark:text-green-400">
                                             <span>+₦{ref.amount_earned_ngn.toLocaleString()}</span>
                                         </div>
                                     ) : (
@@ -153,8 +153,8 @@ export default function ReferralCard({ user, referrals, referralStats, isLoading
                         )}
                     </div>
                     {pendingReferrals.length > 0 && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-                            <p className="text-blue-800">
+                        <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg p-3 text-sm">
+                            <p className="text-blue-800 dark:text-blue-200">
                                 💡 You have {pendingReferrals.length} pending referral{pendingReferrals.length > 1 ? 's' : ''}. You'll earn 5% of their booking value in Naira when they complete their first booking!
                             </p>
                         </div>

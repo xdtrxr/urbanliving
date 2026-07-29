@@ -818,13 +818,13 @@ export default function VehiclesAdmin() {
                               </Badge>
                             )}
                             {v.admin_approved === false && (
-                              <Badge variant="outline" className="border-amber-300 text-amber-700 dark:text-amber-300">
+                              <Badge variant="outline" className="border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300">
                                 <AlertCircle className="w-3 h-3 mr-1" />
                                 Not approved
                               </Badge>
                             )}
                             {v.active && v.admin_approved && (
-                              <Badge variant="outline" className="border-green-300 text-green-700 dark:text-green-300">
+                              <Badge variant="outline" className="border-green-300 dark:border-green-800 text-green-700 dark:text-green-300">
                                 <CheckCircle2 className="w-3 h-3 mr-1" />
                                 Live
                               </Badge>

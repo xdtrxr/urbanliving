@@ -141,7 +141,7 @@ export default function LeadOtpGate({ lead, onVerified, onCancel }) {
               autoFocus
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <div className="flex justify-end gap-2">
             {onCancel && (
               <Button variant="outline" onClick={onCancel} className="rounded-xl" disabled={working}>
@@ -181,7 +181,7 @@ export default function LeadOtpGate({ lead, onVerified, onCancel }) {
               autoFocus
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <div className="flex justify-between items-center">
             <button
               type="button"

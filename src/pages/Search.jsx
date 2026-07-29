@@ -161,7 +161,7 @@ export default function SearchPage() {
           <div className="mb-6 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               {searchQuery === "AI Recommendations" && (
-                <Badge variant="outline" className="bg-purple-50 text-purple-700 flex items-center gap-1">
+                <Badge variant="outline" className="bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 flex items-center gap-1">
                   <Sparkles className="w-3 h-3" />
                   AI Personalized
                 </Badge>
@@ -192,13 +192,13 @@ export default function SearchPage() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl"
+            className="mb-6 p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl"
           >
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-red-900">Search Error</p>
-                <p className="text-sm text-red-700 mt-1">{error}</p>
+                <p className="font-semibold text-red-900 dark:text-red-100">Search Error</p>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
               </div>
             </div>
           </motion.div>
@@ -226,7 +226,7 @@ export default function SearchPage() {
               <div className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
                 {searchQuery === "AI Recommendations" ? (
                   <span className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-500" />
+                    <Sparkles className="w-4 h-4 text-purple-500 dark:text-purple-400" />
                     Personalized for you
                   </span>
                 ) : (

@@ -56,7 +56,7 @@ export default function RecommendationCard({ recommendation, onCheckAvailability
           <div className="flex items-center justify-between text-sm">
             <Badge variant="secondary" className="font-medium">{recommendation.property_type}</Badge>
             <div className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-100">
-              <Wallet className="w-4 h-4 text-green-600" />
+              <Wallet className="w-4 h-4 text-green-600 dark:text-green-400" />
               <span>₦{Number(recommendation.price_per_night || 0).toLocaleString()}</span>
             </div>
           </div>

@@ -73,7 +73,7 @@ export default function SearchHeader({
                   variant="outline"
                   className={`h-14 rounded-xl justify-start pl-4 font-medium transition-colors ${
                     checkIn
-                      ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
+                      ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-slate-900 dark:text-white'
                       : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 text-slate-500 dark:text-slate-400'
                   }`}
                 >
@@ -88,7 +88,7 @@ export default function SearchHeader({
                   onSelect={setCheckIn}
                   disabled={(date) => date < startOfToday}
                   modifiers={checkOut ? { rangeEnd: checkOut } : {}}
-                  modifiersClassNames={{ rangeEnd: 'bg-amber-200 text-amber-900 rounded-full font-semibold' }}
+                  modifiersClassNames={{ rangeEnd: 'bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-100 rounded-full font-semibold' }}
                 />
               </PopoverContent>
             </Popover>
@@ -99,7 +99,7 @@ export default function SearchHeader({
                   variant="outline"
                   className={`h-14 rounded-xl justify-start pl-4 font-medium transition-colors ${
                     checkOut
-                      ? 'border-amber-400 bg-amber-50 text-slate-900 dark:text-white'
+                      ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-slate-900 dark:text-white'
                       : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 text-slate-500 dark:text-slate-400'
                   }`}
                 >
@@ -114,7 +114,7 @@ export default function SearchHeader({
                   onSelect={setCheckOut}
                   disabled={(date) => date < startOfToday || (checkIn && date <= checkIn)}
                   modifiers={checkIn ? { rangeStart: checkIn } : {}}
-                  modifiersClassNames={{ rangeStart: 'bg-amber-200 text-amber-900 rounded-full font-semibold' }}
+                  modifiersClassNames={{ rangeStart: 'bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-100 rounded-full font-semibold' }}
                 />
               </PopoverContent>
             </Popover>

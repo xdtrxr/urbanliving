@@ -82,7 +82,7 @@ export default function SearchResultCard({ property, user: initialUser }) {
                 onClick={handleToggleWishlist}
                 disabled={isUpdatingWishlist}
                 className={`p-1 h-auto ${
-                  isWishlisted ? 'text-red-500' : 'text-slate-400 dark:text-slate-500 hover:text-red-500'
+                  isWishlisted ? 'text-red-500 dark:text-red-400' : 'text-slate-400 dark:text-slate-500 hover:text-red-500'
                 }`}
               >
                 {isUpdatingWishlist ? (

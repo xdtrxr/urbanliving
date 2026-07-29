@@ -121,7 +121,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
       <Card className="bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-900 rounded-2xl shadow-sm">
         <CardContent className="p-5">
           <div className="flex items-start gap-3">
-            <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
+            <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-semibold text-green-900 dark:text-green-200 mb-1">Booking request submitted</p>
               <p className="text-sm text-green-800 dark:text-green-200 mb-3">

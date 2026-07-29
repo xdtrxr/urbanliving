@@ -128,7 +128,7 @@ export default function PlanTripPage() {
         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800/50 p-5 sm:p-8 mb-6 sm:mb-8">
           <div className="flex flex-col gap-5 sm:gap-6">
             <div className="text-center">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-xs font-semibold mb-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-xs font-semibold mb-4">
                 <Sparkles className="w-3 h-3" />
                 Chauffeur-driven · Abuja & Lagos
               </div>

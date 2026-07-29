@@ -233,7 +233,7 @@ export default function PropertyPage() {
                             </div>
                             <div className="flex items-center gap-3 flex-shrink-0">
                                 <Button variant="outline" size="icon"><Share2 className="w-4 h-4" /></Button>
-                                <Button variant="outline" size="icon" className="text-red-500"><Heart className="w-4 h-4 fill-current" /></Button>
+                                <Button variant="outline" size="icon" className="text-red-500 dark:text-red-400"><Heart className="w-4 h-4 fill-current" /></Button>
                             </div>
                         </div>
                     </CardHeader>
@@ -243,9 +243,9 @@ export default function PropertyPage() {
                             <div className="lg:col-span-2">
                                 <div className="border-b pb-6 mb-6">
                                     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-slate-700 dark:text-slate-200">
-                                        <div className="flex items-center gap-2"><Users className="w-5 h-5 text-amber-500" /> <span>{property.max_guests} guests</span></div>
-                                        <div className="flex items-center gap-2"><Bed className="w-5 h-5 text-amber-500" /> <span>{property.bedrooms || 1} bedroom(s)</span></div>
-                                        <div className="flex items-center gap-2"><Bath className="w-5 h-5 text-amber-500" /> <span>{property.bathrooms || 1} bathroom(s)</span></div>
+                                        <div className="flex items-center gap-2"><Users className="w-5 h-5 text-amber-500 dark:text-amber-400" /> <span>{property.max_guests} guests</span></div>
+                                        <div className="flex items-center gap-2"><Bed className="w-5 h-5 text-amber-500 dark:text-amber-400" /> <span>{property.bedrooms || 1} bedroom(s)</span></div>
+                                        <div className="flex items-center gap-2"><Bath className="w-5 h-5 text-amber-500 dark:text-amber-400" /> <span>{property.bathrooms || 1} bathroom(s)</span></div>
                                     </div>
                                 </div>
 
@@ -270,14 +270,14 @@ export default function PropertyPage() {
                                     <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">Check-in & Check-out</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
-                                            <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                                            <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                                             <div>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400">Check-in</p>
                                                 <p className="font-semibold text-slate-900 dark:text-white">from 2:00 PM</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
-                                            <Clock className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                                            <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                                             <div>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400">Check-out</p>
                                                 <p className="font-semibold text-slate-900 dark:text-white">by 12:00 PM</p>
@@ -296,15 +296,15 @@ export default function PropertyPage() {
                                         <div className="text-base text-slate-600 dark:text-slate-300 mt-1">per night</div>
                                         
                                         {property.caution_fee > 0 && (
-                                            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                                            <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl">
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <Shield className="w-4 h-4 text-amber-600" />
-                                                    <span className="text-sm font-semibold text-amber-900">Refundable Caution Fee</span>
+                                                    <Shield className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                                    <span className="text-sm font-semibold text-amber-900 dark:text-amber-100">Refundable Caution Fee</span>
                                                 </div>
-                                                <div className="text-xl font-bold text-amber-900">
+                                                <div className="text-xl font-bold text-amber-900 dark:text-amber-100">
                                                     {currencySymbol}{property.caution_fee.toLocaleString()}
                                                 </div>
-                                                <p className="text-xs text-amber-700 mt-1">
+                                                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                                                     Fully refundable after checkout
                                                 </p>
                                             </div>

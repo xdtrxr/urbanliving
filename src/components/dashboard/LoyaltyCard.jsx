@@ -6,35 +6,35 @@ import { Trophy, Star, Crown, Gem, Award } from "lucide-react";
 
 const tierConfig = {
   Bronze: {
-    color: "bg-orange-100 text-orange-800 border-orange-200",
+    color: "bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-900",
     icon: Award,
     nextTier: "Silver",
     pointsRequired: 5000,
     gradient: "from-orange-400 to-orange-600"
   },
   Silver: {
-    color: "bg-gray-100 text-gray-800 border-gray-200",
+    color: "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700",
     icon: Star,
     nextTier: "Gold",
     pointsRequired: 12500,
     gradient: "from-gray-400 to-gray-600"
   },
   Gold: {
-    color: "bg-yellow-100 text-yellow-800 border-yellow-200",
+    color: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-900",
     icon: Trophy,
     nextTier: "Platinum",
     pointsRequired: 25000,
     gradient: "from-yellow-400 to-yellow-600"
   },
   Platinum: {
-    color: "bg-purple-100 text-purple-800 border-purple-200",
+    color: "bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-900",
     icon: Crown,
     nextTier: "Diamond",
     pointsRequired: 50000,
     gradient: "from-purple-400 to-purple-600"
   },
   Diamond: { 
-    color: "bg-blue-100 text-blue-800 border-blue-200",
+    color: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900",
     icon: Gem,
     nextTier: null,
     pointsRequired: null,
@@ -108,7 +108,7 @@ export default function LoyaltyCard({ user }) {
 
           {currentTier === "Diamond" && (
             <div className="text-center py-2">
-              <div className="flex items-center justify-center gap-2 text-blue-600 group-hover:text-blue-500 transition-colors duration-300">
+              <div className="flex items-center justify-center gap-2 text-blue-600 dark:text-blue-400 group-hover:text-blue-500 transition-colors duration-300">
                 <Gem className="w-4 h-4 transform transition-all duration-300 group-hover:scale-110" />
                 <span className="text-sm font-semibold">Maximum Tier Achieved!</span>
               </div>

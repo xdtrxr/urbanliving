@@ -109,11 +109,11 @@ const QUEST_REGISTRY = {
 };
 
 const LOYALTY_TIERS = {
-  Bronze: { threshold: 0, color: 'text-orange-600' },
+  Bronze: { threshold: 0, color: 'text-orange-600 dark:text-orange-400' },
   Silver: { threshold: 5000, color: 'text-gray-600' },
-  Gold: { threshold: 12500, color: 'text-yellow-600' },
-  Platinum: { threshold: 25000, color: 'text-purple-600' },
-  Diamond: { threshold: 50000, color: 'text-blue-600' }
+  Gold: { threshold: 12500, color: 'text-yellow-600 dark:text-yellow-400' },
+  Platinum: { threshold: 25000, color: 'text-purple-600 dark:text-purple-400' },
+  Diamond: { threshold: 50000, color: 'text-blue-600 dark:text-blue-400' }
 };
 
 /**
@@ -711,8 +711,8 @@ export default function QuestsPage() {
 
   const getQuestStatusIcon = (quest) => {
     if (!quest) return <Target className="w-5 h-5 text-slate-400 dark:text-slate-500" />;
-    if (quest.status === 'claimed') return <CheckCircle className="w-5 h-5 text-green-500" />;
-    if (quest.status === 'processing') return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
+    if (quest.status === 'claimed') return <CheckCircle className="w-5 h-5 text-green-500 dark:text-green-400" />;
+    if (quest.status === 'processing') return <Loader2 className="w-5 h-5 text-blue-500 dark:text-blue-400 animate-spin" />;
     return <Target className="w-5 h-5 text-slate-400 dark:text-slate-500" />;
   };
 
@@ -736,9 +736,9 @@ export default function QuestsPage() {
                   {config.name}
                 </CardTitle>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Star className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                  <span className="font-semibold text-amber-600 text-sm whitespace-nowrap">{config.points} Points</span>
-                  <Badge className={config.isDaily ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}>
+                  <Star className="w-4 h-4 text-amber-500 dark:text-amber-400 flex-shrink-0" />
+                  <span className="font-semibold text-amber-600 dark:text-amber-400 text-sm whitespace-nowrap">{config.points} Points</span>
+                  <Badge className={config.isDaily ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200' : 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200'}>
                     {config.isDaily ? 'Daily' : 'One-Time'}
                   </Badge>
                 </div>
@@ -753,9 +753,9 @@ export default function QuestsPage() {
         <CardContent className="px-6 pb-6 mt-auto">
           {isCompleted ? (
             <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-center gap-2 p-3 bg-green-50 border-2 border-green-400 rounded-xl">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <span className="font-bold text-green-800">
+              <div className="flex items-center justify-center gap-2 p-3 bg-green-50 dark:bg-green-950/40 border-2 border-green-400 rounded-xl">
+                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                <span className="font-bold text-green-800 dark:text-green-200">
                   {config.isDaily ? 'Completed Today ✓' : 'Completed Forever ✓'}
                 </span>
               </div>
@@ -812,11 +812,11 @@ export default function QuestsPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8 flex items-center justify-center">
-        <Card className="max-w-md bg-red-50 border-red-200 rounded-3xl">
+        <Card className="max-w-md bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 rounded-3xl">
           <CardContent className="p-8 text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-red-900 mb-2">System Error</h2>
-            <p className="text-red-700 mb-6">{error}</p>
+            <AlertCircle className="w-16 h-16 text-red-500 dark:text-red-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-red-900 dark:text-red-100 mb-2">System Error</h2>
+            <p className="text-red-700 dark:text-red-300 mb-6">{error}</p>
             <Button onClick={initializeQuestSystem} className="bg-red-600 hover:bg-red-700">
               <RefreshCw className="w-4 h-4 mr-2" />
               Retry Initialization
@@ -837,7 +837,7 @@ export default function QuestsPage() {
           className="text-center mb-8 sm:mb-12"
         >
           <div className="flex flex-wrap items-center justify-center gap-3 mb-3 sm:mb-4">
-            <Trophy className="w-9 h-9 sm:w-12 sm:h-12 text-amber-500" />
+            <Trophy className="w-9 h-9 sm:w-12 sm:h-12 text-amber-500 dark:text-amber-400" />
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">Quest Center</h1>
           </div>
           <p className="text-base sm:text-xl text-slate-600 dark:text-slate-300 px-2">
@@ -849,19 +849,19 @@ export default function QuestsPage() {
         <div className="grid grid-cols-3 gap-3 sm:gap-6 max-w-2xl mx-auto mb-8">
           <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-2xl hover:shadow-lg transition-shadow">
             <CardContent className="p-4 sm:p-6 text-center">
-              <div className="text-2xl sm:text-4xl font-bold text-amber-600 mb-1 sm:mb-2 break-words">{metrics.totalPoints}</div>
+              <div className="text-2xl sm:text-4xl font-bold text-amber-600 dark:text-amber-400 mb-1 sm:mb-2 break-words">{metrics.totalPoints}</div>
               <div className="text-[11px] sm:text-sm text-slate-600 dark:text-slate-300 font-medium">Total Points</div>
             </CardContent>
           </Card>
           <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-2xl hover:shadow-lg transition-shadow">
             <CardContent className="p-4 sm:p-6 text-center">
-              <div className="text-2xl sm:text-4xl font-bold text-green-600 mb-1 sm:mb-2 break-words">{metrics.completedCount}</div>
+              <div className="text-2xl sm:text-4xl font-bold text-green-600 dark:text-green-400 mb-1 sm:mb-2 break-words">{metrics.completedCount}</div>
               <div className="text-[11px] sm:text-sm text-slate-600 dark:text-slate-300 font-medium">Completed</div>
             </CardContent>
           </Card>
           <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-2xl hover:shadow-lg transition-shadow">
             <CardContent className="p-4 sm:p-6 text-center">
-              <div className="text-2xl sm:text-4xl font-bold text-blue-600 mb-1 sm:mb-2 break-words">{metrics.progressPercent}%</div>
+              <div className="text-2xl sm:text-4xl font-bold text-blue-600 dark:text-blue-400 mb-1 sm:mb-2 break-words">{metrics.progressPercent}%</div>
               <div className="text-[11px] sm:text-sm text-slate-600 dark:text-slate-300 font-medium">Progress</div>
             </CardContent>
           </Card>
@@ -907,12 +907,12 @@ export default function QuestsPage() {
                           {reward.name}
                         </CardTitle>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Star className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                          <span className="font-semibold text-amber-600 text-sm whitespace-nowrap">
+                          <Star className="w-4 h-4 text-amber-500 dark:text-amber-400 flex-shrink-0" />
+                          <span className="font-semibold text-amber-600 dark:text-amber-400 text-sm whitespace-nowrap">
                             +{reward.points.toLocaleString()} Points
                           </span>
                           {reward.extra && (
-                            <Badge className="bg-emerald-100 text-emerald-800">{reward.extra}</Badge>
+                            <Badge className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200">{reward.extra}</Badge>
                           )}
                         </div>
                       </div>
@@ -938,14 +938,14 @@ export default function QuestsPage() {
             animate={{ opacity: 1, scale: 1 }}
             className="mt-12"
           >
-            <Card className="bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-200 rounded-3xl">
+            <Card className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/40 dark:to-yellow-950/40 border-amber-200 dark:border-amber-900 rounded-3xl">
               <CardContent className="p-8 text-center">
                 <div className="text-6xl mb-4">🎉</div>
-                <h2 className="text-3xl font-bold text-amber-900 mb-4">All Quests Complete!</h2>
-                <p className="text-amber-800 text-lg mb-6">
+                <h2 className="text-3xl font-bold text-amber-900 dark:text-amber-100 mb-4">All Quests Complete!</h2>
+                <p className="text-amber-800 dark:text-amber-200 text-lg mb-6">
                   You've earned <strong>{metrics.totalPoints} Urban Points</strong>!
                 </p>
-                <Badge className="bg-amber-100 text-amber-800 px-6 py-3 text-lg font-bold">
+                <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 px-6 py-3 text-lg font-bold">
                   <Trophy className="w-5 h-5 mr-2 inline" />
                   Quest Master
                 </Badge>

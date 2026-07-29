@@ -156,14 +156,14 @@ export default function PushNotificationsCard() {
     <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
       <CardHeader className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800">
         <CardTitle className="flex items-center gap-2 text-base sm:text-lg text-slate-900 dark:text-white">
-          {subscribed ? <Bell className="w-5 h-5 text-amber-500" /> : <BellOff className="w-5 h-5 text-slate-400" />}
+          {subscribed ? <Bell className="w-5 h-5 text-amber-500 dark:text-amber-400" /> : <BellOff className="w-5 h-5 text-slate-400" />}
           Push notifications
         </CardTitle>
       </CardHeader>
       <CardContent className="p-5 sm:p-6 space-y-4">
         {!supported ? (
           <div className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold text-slate-900 dark:text-white mb-1">Not available on this device</p>
               <p>Install Urban Stays to your home screen (iOS) or use the desktop / Android app to get push notifications.</p>

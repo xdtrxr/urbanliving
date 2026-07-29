@@ -99,7 +99,7 @@ function InFlightBookingRow({ booking, onExpire }) {
 
   return (
     <div className={`rounded-2xl border p-4 ${
-      isUrgent ? 'border-red-200 bg-red-50/40' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+      isUrgent ? 'border-red-200 dark:border-red-900 bg-red-50/40' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
     }`}>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-[260px]">
@@ -122,7 +122,7 @@ function InFlightBookingRow({ booking, onExpire }) {
           {approvalLeft !== null && (
             <div>
               <div className={`font-mono text-base font-bold tabular-nums ${
-                approvalLeft < 10 * 60 * 1000 ? 'text-red-700' : 'text-slate-900 dark:text-white'
+                approvalLeft < 10 * 60 * 1000 ? 'text-red-700 dark:text-red-300' : 'text-slate-900 dark:text-white'
               }`}>
                 {formatLeft(approvalLeft)}
               </div>
@@ -132,7 +132,7 @@ function InFlightBookingRow({ booking, onExpire }) {
           {paymentLeft !== null ? (
             <div>
               <div className={`font-mono text-base font-bold tabular-nums ${
-                paymentLeft < 5 * 60 * 1000 ? 'text-red-700' : 'text-slate-900 dark:text-white'
+                paymentLeft < 5 * 60 * 1000 ? 'text-red-700 dark:text-red-300' : 'text-slate-900 dark:text-white'
               }`}>
                 {formatLeft(paymentLeft)}
               </div>
@@ -734,7 +734,7 @@ export default function AdminPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-8">
         <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl">
           <CardContent className="p-12 text-center">
-            <Shield className="w-16 h-16 text-red-500 mx-auto mb-6" />
+            <Shield className="w-16 h-16 text-red-500 dark:text-red-400 mx-auto mb-6" />
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Authentication Required</h2>
             <p className="text-slate-600 dark:text-slate-300 mb-6">
               Please log in to access the admin panel.
@@ -754,7 +754,7 @@ export default function AdminPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-8">
         <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl">
           <CardContent className="p-12 text-center">
-            <Shield className="w-16 h-16 text-red-500 mx-auto mb-6" />
+            <Shield className="w-16 h-16 text-red-500 dark:text-red-400 mx-auto mb-6" />
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Access Denied</h2>
             <p className="text-slate-600 dark:text-slate-300 mb-6">
               You need administrator privileges to access this page.
@@ -775,7 +775,7 @@ export default function AdminPage() {
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
             <Database className="w-7 h-7 sm:w-8 sm:h-8 text-slate-900 dark:text-white flex-shrink-0" />
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white break-words min-w-0">Property Data Admin</h1>
-            <Badge className="bg-red-100 text-red-800 border-red-200 text-[10px] sm:text-xs">Admin Only</Badge>
+            <Badge className="bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900 text-[10px] sm:text-xs">Admin Only</Badge>
           </div>
           <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-lg">Manage property data via manual entry or live data fetch</p>
         </div>
@@ -810,7 +810,7 @@ export default function AdminPage() {
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm text-slate-600 dark:text-slate-300">Total Bookings</p>
-                  <Briefcase className="w-4 h-4 text-blue-500" />
+                  <Briefcase className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                 </div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.bookings.total ?? '—'}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -820,7 +820,7 @@ export default function AdminPage() {
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm text-slate-600 dark:text-slate-300">Pending</p>
-                  <Clock className="w-4 h-4 text-amber-500" />
+                  <Clock className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                 </div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.bookings.pending ?? '—'}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -830,7 +830,7 @@ export default function AdminPage() {
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm text-slate-600 dark:text-slate-300">Revenue (Paid)</p>
-                  <Wallet className="w-4 h-4 text-green-500" />
+                  <Wallet className="w-4 h-4 text-green-500 dark:text-green-400" />
                 </div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {platformStats ? `₦${platformStats.revenue.paidNGN.toLocaleString()}` : '—'}
@@ -842,7 +842,7 @@ export default function AdminPage() {
               <div className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm text-slate-600 dark:text-slate-300">Referrals</p>
-                  <Users className="w-4 h-4 text-purple-500" />
+                  <Users className="w-4 h-4 text-purple-500 dark:text-purple-400" />
                 </div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{platformStats?.referrals.count ?? '—'}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -861,7 +861,7 @@ export default function AdminPage() {
                 <Clock className="w-5 h-5" />
                 Pending Availability Requests
                 {pendingRequests.length > 0 && (
-                  <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                  <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900">
                     {pendingRequests.length}
                   </Badge>
                 )}
@@ -889,7 +889,7 @@ export default function AdminPage() {
                   <div
                     key={req.id}
                     className={`rounded-2xl border p-4 ${
-                      req.has_conflict ? 'border-red-200 bg-red-50/50' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                      req.has_conflict ? 'border-red-200 dark:border-red-900 bg-red-50/50' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -897,7 +897,7 @@ export default function AdminPage() {
                         <div className="flex items-center gap-2 mb-1">
                           <p className="font-semibold text-slate-900 dark:text-white">{req.property_title || 'Untitled property'}</p>
                           {req.has_conflict && (
-                            <Badge className="bg-red-100 text-red-800 border-red-200 text-xs">⚠ Conflict</Badge>
+                            <Badge className="bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900 text-xs">⚠ Conflict</Badge>
                           )}
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -907,7 +907,7 @@ export default function AdminPage() {
                           {req.check_in} → {req.check_out} · {req.guests} guest{req.guests === 1 ? '' : 's'}
                         </p>
                         {req.has_conflict && req.conflict_details && (
-                          <p className="text-xs text-red-700 mt-2">
+                          <p className="text-xs text-red-700 dark:text-red-300 mt-2">
                             Conflicts with booking <code className="font-mono">{req.conflict_details.booking_id}</code>
                             {' '}({req.conflict_details.check_in} → {req.conflict_details.check_out})
                           </p>
@@ -931,7 +931,7 @@ export default function AdminPage() {
                           variant="outline"
                           onClick={() => handleDecide(req.id, 'reject')}
                           disabled={decidingId === req.id}
-                          className="rounded-xl border-red-300 text-red-700 hover:bg-red-50"
+                          className="rounded-xl border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50"
                         >
                           ❌ Reject
                         </Button>
@@ -952,7 +952,7 @@ export default function AdminPage() {
                 <Clock className="w-5 h-5" />
                 Bookings In Flight
                 {inFlightBookings.length > 0 && (
-                  <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                  <Badge className="bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900">
                     {inFlightBookings.length}
                   </Badge>
                 )}
@@ -1004,12 +1004,12 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Rate Limit Warning */}
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-4">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <p className="font-semibold text-amber-900 mb-1">⚠️ API Rate Limits Apply</p>
-                  <p className="text-amber-700">
+                  <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1">⚠️ API Rate Limits Apply</p>
+                  <p className="text-amber-700 dark:text-amber-300">
                     The Airbnb API has daily/monthly limits. If you get a <strong>429 error</strong>, 
                     your rate limit has been reached. Check your{' '}
                     <a 
@@ -1059,17 +1059,17 @@ export default function AdminPage() {
             {mcpResult && (
               <div className={`p-4 rounded-xl ${
                 mcpResult.success 
-                  ? 'bg-green-50 border border-green-200' 
-                  : 'bg-red-50 border border-red-200'
+                  ? 'bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-900' 
+                  : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900'
               }`}>
                 {mcpResult.success ? (
                   <div>
-                    <p className="font-semibold text-green-900 mb-2">✅ Success!</p>
-                    <p className="text-sm text-green-800">{mcpResult.message}</p>
+                    <p className="font-semibold text-green-900 dark:text-green-100 mb-2">✅ Success!</p>
+                    <p className="text-sm text-green-800 dark:text-green-200">{mcpResult.message}</p>
                     {mcpResult.errors && mcpResult.errors.length > 0 && (
                       <details className="mt-2">
-                        <summary className="text-xs text-green-700 cursor-pointer">View errors ({mcpResult.errors.length})</summary>
-                        <pre className="text-xs mt-2 overflow-auto max-h-32 text-green-700">
+                        <summary className="text-xs text-green-700 dark:text-green-300 cursor-pointer">View errors ({mcpResult.errors.length})</summary>
+                        <pre className="text-xs mt-2 overflow-auto max-h-32 text-green-700 dark:text-green-300">
                           {mcpResult.errors.join('\n')}
                         </pre>
                       </details>
@@ -1077,17 +1077,17 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   <div>
-                    <p className="font-semibold text-red-900 mb-2">❌ Failed</p>
-                    <p className="text-sm text-red-800">{mcpResult.message}</p>
+                    <p className="font-semibold text-red-900 dark:text-red-100 mb-2">❌ Failed</p>
+                    <p className="text-sm text-red-800 dark:text-red-200">{mcpResult.message}</p>
                     
                     {/* Specific guidance for 429 errors */}
                     {mcpResult.message?.includes('429') && (
-                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-xs font-semibold text-amber-900 mb-1">💡 Rate Limit Reached</p>
-                        <p className="text-xs text-amber-800">
+                      <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">
+                        <p className="text-xs font-semibold text-amber-900 dark:text-amber-100 mb-1">💡 Rate Limit Reached</p>
+                        <p className="text-xs text-amber-800 dark:text-amber-200">
                           You've exceeded your API quota. Solutions:
                         </p>
-                        <ul className="text-xs text-amber-800 list-disc list-inside mt-1 space-y-1">
+                        <ul className="text-xs text-amber-800 dark:text-amber-200 list-disc list-inside mt-1 space-y-1">
                           <li>Wait for your rate limit to reset (check RapidAPI dashboard)</li>
                           <li>Upgrade your RapidAPI plan for more requests</li>
                           <li>Use existing database properties (Search page)</li>
@@ -1146,7 +1146,7 @@ export default function AdminPage() {
             <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Plus className="w-6 h-6 text-amber-500" />
+                  <Plus className="w-6 h-6 text-amber-500 dark:text-amber-400" />
                   {editingPropertyId ? 'Edit Property' : 'Add New Property Manually'}
                 </CardTitle>
                 <CardDescription>
@@ -1155,8 +1155,8 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 {editingPropertyId && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
-                    <p className="text-sm text-blue-900">
+                  <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl p-3 mb-4">
+                    <p className="text-sm text-blue-900 dark:text-blue-100">
                       <strong>Editing:</strong> {propertyFormData.title} (ID: {editingPropertyId.substring(0,8)}...)
                     </p>
                     <Button variant="ghost" size="sm" onClick={() => {
@@ -1164,7 +1164,7 @@ export default function AdminPage() {
                         setPropertyFormData({
                           title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', host_phone: '', arrival_instructions: '', instant_book: false
                         });
-                      }} className="mt-2 text-blue-600 hover:bg-blue-100">
+                      }} className="mt-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100">
                       <XCircle className="w-3 h-3 mr-1" /> Clear Edit
                     </Button>
                   </div>
@@ -1173,7 +1173,7 @@ export default function AdminPage() {
                   {/* Basic Information */}
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-blue-600" />
+                      <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                       Basic Information
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1258,7 +1258,7 @@ export default function AdminPage() {
                   {/* Pricing */}
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                      <Wallet className="w-5 h-5 text-green-600" />
+                      <Wallet className="w-5 h-5 text-green-600 dark:text-green-400" />
                       Pricing
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1292,7 +1292,7 @@ export default function AdminPage() {
                   {/* Property Details */}
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                      <List className="w-5 h-5 text-purple-600" />
+                      <List className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                       Property Details
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1349,7 +1349,7 @@ export default function AdminPage() {
                   {/* Media */}
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                      <ImageIcon className="w-5 h-5 text-red-600" />
+                      <ImageIcon className="w-5 h-5 text-red-600 dark:text-red-400" />
                       Media
                     </h3>
                     <div>
@@ -1475,7 +1475,7 @@ export default function AdminPage() {
                         id="instant_book"
                         checked={propertyFormData.instant_book}
                         onChange={(e) => setPropertyFormData(prev => ({ ...prev, instant_book: e.target.checked }))}
-                        className="rounded border-slate-300 text-blue-600 shadow-sm focus:ring-blue-500"
+                        className="rounded border-slate-300 text-blue-600 dark:text-blue-400 shadow-sm focus:ring-blue-500"
                       />
                       <Label htmlFor="instant_book" className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                         Instant Book Available
@@ -1606,7 +1606,7 @@ export default function AdminPage() {
                               </Badge>
                             </td>
                             <td className="p-3">
-                              <Badge className={property.source === 'manual' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}>
+                              <Badge className={property.source === 'manual' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200' : 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200'}>
                                 {property.source}
                               </Badge>
                             </td>
@@ -1624,7 +1624,7 @@ export default function AdminPage() {
                                   variant="outline"
                                   size="sm"
                                   disabled={deletingPropertyId === property.id}
-                                  className="text-red-600 hover:bg-red-50 border-red-200"
+                                  className="text-red-600 dark:text-red-400 hover:bg-red-50 border-red-200 dark:border-red-900"
                                 >
                                   {deletingPropertyId === property.id ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -1666,7 +1666,7 @@ export default function AdminPage() {
                     </p>
                   </div>
                 )}
-                <p className="mt-3 text-red-600 font-semibold">
+                <p className="mt-3 text-red-600 dark:text-red-400 font-semibold">
                   This action cannot be undone.
                 </p>
               </AlertDialogDescription>
@@ -1709,7 +1709,7 @@ export default function AdminPage() {
                       <div
                         key={ticket.id}
                         onClick={() => handleSelectTicket(ticket)}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedTicket?.id === ticket.id ? 'bg-blue-50 border-blue-200 border' : 'hover:bg-slate-50 border border-transparent'}`}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedTicket?.id === ticket.id ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900 border' : 'hover:bg-slate-50 border border-transparent'}`}
                       >
                         <p className="font-semibold text-sm truncate">{ticket.subject}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{ticket.user_email}</p>
@@ -1784,15 +1784,15 @@ export default function AdminPage() {
         </Card>
 
         {/* Danger Zone Card */}
-        <Card className="bg-red-50/90 border-red-200 rounded-3xl shadow-lg mb-8">
+        <Card className="bg-red-50/90 border-red-200 dark:border-red-900 rounded-3xl shadow-lg mb-8">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-800">
+            <CardTitle className="flex items-center gap-2 text-red-800 dark:text-red-200">
               <AlertTriangle className="w-5 h-5" />
               Danger Zone
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-red-700 mb-4">
+            <p className="text-red-700 dark:text-red-300 mb-4">
               This is a high-risk area. Actions performed here are permanent and can result in data loss. Proceed with extreme caution.
             </p>
             <Button

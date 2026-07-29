@@ -68,7 +68,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
           onClick={handleToggleWishlist}
           disabled={isUpdating}
           className={`absolute top-4 right-4 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm hover:bg-white dark:bg-slate-900 transition-all duration-300 ${
-            isWishlisted ? 'text-red-500' : 'text-slate-600 dark:text-slate-300 hover:text-red-500'
+            isWishlisted ? 'text-red-500 dark:text-red-400' : 'text-slate-600 dark:text-slate-300 hover:text-red-500'
           }`}
         >
           {isUpdating ? (
@@ -83,7 +83,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
             {currencySymbol}{property.price_per_night.toLocaleString()}/night
           </Badge>
           {property.caution_fee > 0 && (
-            <Badge className="bg-amber-100/95 text-amber-900 font-medium px-3 py-1 rounded-full flex items-center gap-1">
+            <Badge className="bg-amber-100/95 text-amber-900 dark:text-amber-100 font-medium px-3 py-1 rounded-full flex items-center gap-1">
               <Shield className="w-3 h-3" />
               {currencySymbols[property.currency] || '₦'}{property.caution_fee.toLocaleString()} caution
             </Badge>

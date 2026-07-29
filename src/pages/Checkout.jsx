@@ -338,7 +338,7 @@ export default function CheckoutPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Phone className="w-5 h-5 text-amber-600" />
+              <Phone className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               Phone Number Required
             </DialogTitle>
             <DialogDescription>
@@ -362,12 +362,12 @@ export default function CheckoutPage() {
                 disabled={isSavingPhone}
               />
               {phoneError && (
-                <p className="text-sm text-red-600 mt-1">{phoneError}</p>
+                <p className="text-sm text-red-600 dark:text-red-400 mt-1">{phoneError}</p>
               )}
             </div>
             
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <p className="text-xs text-amber-900">
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg p-3">
+              <p className="text-xs text-amber-900 dark:text-amber-100">
                 <strong>📞 Important:</strong> Your phone number will be shared with the property owner for booking coordination and logged in our booking records.
               </p>
             </div>
@@ -439,15 +439,15 @@ export default function CheckoutPage() {
               <div className="px-6 py-6">
                 <ol className="space-y-3 mb-6">
                   <li className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+                    <span className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
                     <p className="text-sm text-slate-700 dark:text-slate-200">Admin reviews your request — usually within minutes.</p>
                   </li>
                   <li className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+                    <span className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
                     <p className="text-sm text-slate-700 dark:text-slate-200">Once approved, complete payment to confirm.</p>
                   </li>
                   <li className="flex items-start gap-3">
-                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                    <span className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
                     <p className="text-sm text-slate-700 dark:text-slate-200">Track everything from <strong>My Bookings</strong>.</p>
                   </li>
                 </ol>
@@ -632,7 +632,7 @@ export default function CheckoutPage() {
                     })()}
 
                     {availabilityStatus === 'pending' && (
-                      <div className="flex items-start gap-3 text-amber-600 bg-amber-50 border border-amber-200 p-4 rounded-xl mb-3">
+                      <div className="flex items-start gap-3 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-4 rounded-xl mb-3">
                         <Clock className="w-5 h-5 animate-pulse flex-shrink-0 mt-0.5" />
                         <div>
                           <p className="font-semibold text-sm mb-1">⏳ Awaiting Admin Approval</p>
@@ -642,14 +642,14 @@ export default function CheckoutPage() {
                     )}
 
                     {availabilityStatus === 'available' && (
-                      <div className="flex items-center gap-2 text-green-600 bg-green-50 border-2 border-green-200 p-4 rounded-xl mb-3">
+                      <div className="flex items-center gap-2 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/40 border-2 border-green-200 dark:border-green-900 p-4 rounded-xl mb-3">
                         <CheckCircle className="w-6 h-6" />
                         <span className="font-bold">✅ APPROVED! Ready to book</span>
                       </div>
                     )}
 
                     {availabilityStatus === 'unavailable' && (
-                      <div className="flex items-center gap-2 text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg mb-3">
+                      <div className="flex items-center gap-2 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 p-3 rounded-lg mb-3">
                         <AlertCircle className="w-5 h-5" />
                         <span className="font-medium">❌ Not available. Try different dates.</span>
                       </div>
@@ -668,12 +668,12 @@ export default function CheckoutPage() {
                       <span>₦{Math.round(property.price_per_night * nights * 0.025).toLocaleString()}</span>
                     </div>
                     {property.caution_fee > 0 && (
-                      <div className="flex justify-between items-center py-2 px-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex justify-between items-center py-2 px-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">
                         <div className="flex items-center gap-2">
-                          <Shield className="w-4 h-4 text-amber-600" />
-                          <span className="text-sm font-medium text-amber-900">Refundable Caution Fee</span>
+                          <Shield className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                          <span className="text-sm font-medium text-amber-900 dark:text-amber-100">Refundable Caution Fee</span>
                         </div>
-                        <span className="font-semibold text-amber-900">₦{property.caution_fee.toLocaleString()}</span>
+                        <span className="font-semibold text-amber-900 dark:text-amber-100">₦{property.caution_fee.toLocaleString()}</span>
                       </div>
                     )}
                     <hr className="border-slate-200 dark:border-slate-800" />
@@ -682,7 +682,7 @@ export default function CheckoutPage() {
                       <span>₦{totalPrice.toLocaleString()}</span>
                     </div>
                     {property.caution_fee > 0 && (
-                      <p className="text-xs text-amber-700 mt-2">
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
                         * Caution fee of ₦{property.caution_fee.toLocaleString()} will be fully refunded after checkout inspection
                       </p>
                     )}
@@ -691,9 +691,9 @@ export default function CheckoutPage() {
 
                 {availabilityStatus === 'available' && nights > 0 && (
                   <div className="pt-4">
-                    <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl p-4 text-sm">
-                      <p className="font-semibold mb-2 text-green-900">💳 Secure Payment with Paystack</p>
-                      <p className="text-green-800">Fast, secure, and reliable payment processing for Nigerian users.</p>
+                    <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/40 dark:to-blue-950/40 border border-green-200 dark:border-green-900 rounded-xl p-4 text-sm">
+                      <p className="font-semibold mb-2 text-green-900 dark:text-green-100">💳 Secure Payment with Paystack</p>
+                      <p className="text-green-800 dark:text-green-200">Fast, secure, and reliable payment processing for Nigerian users.</p>
                     </div>
                   </div>
                 )}

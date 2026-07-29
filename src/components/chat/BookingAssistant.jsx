@@ -127,7 +127,7 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
                 onSelect={setCheckIn}
                 disabled={(date) => date < startOfToday}
                 modifiers={checkOut ? { rangeEnd: checkOut } : {}}
-                modifiersClassNames={{ rangeEnd: 'bg-amber-200 text-amber-900 dark:text-amber-200 rounded-full font-semibold' }}
+                modifiersClassNames={{ rangeEnd: 'bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded-full font-semibold' }}
               />
             </PopoverContent>
           </Popover>
@@ -154,7 +154,7 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
                 onSelect={setCheckOut}
                 disabled={(date) => date < startOfToday || (checkIn && date <= checkIn)}
                 modifiers={checkIn ? { rangeStart: checkIn } : {}}
-                modifiersClassNames={{ rangeStart: 'bg-amber-200 text-amber-900 dark:text-amber-200 rounded-full font-semibold' }}
+                modifiersClassNames={{ rangeStart: 'bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded-full font-semibold' }}
               />
             </PopoverContent>
           </Popover>

@@ -403,7 +403,7 @@ export default function PaymentPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
         <Card className="p-8 text-center bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm max-w-md w-full">
-          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-blue-600" />
+          <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-blue-600 dark:text-blue-400" />
           <p className="text-slate-600 dark:text-slate-300 font-medium">Loading payment details...</p>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">Please wait, do not refresh the page</p>
         </Card>
@@ -416,7 +416,7 @@ export default function PaymentPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
         <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
           <CardContent className="p-8 text-center">
-            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <AlertTriangle className="w-16 h-16 text-red-500 dark:text-red-400 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Payment Error</h2>
             <p className="text-slate-600 dark:text-slate-300 mb-6">{error}</p>
             <div className="space-y-3">
@@ -444,7 +444,7 @@ export default function PaymentPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
         <Card className="p-8 text-center bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm max-w-md w-full">
-          <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+          <AlertTriangle className="w-12 h-12 text-yellow-500 dark:text-yellow-400 mx-auto mb-4" />
           <p className="text-slate-600 dark:text-slate-300 font-medium">No booking data found</p>
           <Button 
             onClick={() => navigate(createPageUrl('Search'))}
@@ -459,7 +459,7 @@ export default function PaymentPage() {
 
   if (paymentComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4 flex items-start justify-center pt-12">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 flex items-start justify-center pt-12">
         <motion.div
           initial={{ scale: 0.96, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -468,8 +468,8 @@ export default function PaymentPage() {
         >
           <Card className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm">
             <CardContent className="p-6 text-center">
-              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+              <div className="w-14 h-14 bg-green-100 dark:bg-green-900/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
               </div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Payment Successful</h2>
               <p className="text-sm text-slate-600 dark:text-slate-300">Booking ID: {bookingData.id}</p>
@@ -516,8 +516,8 @@ export default function PaymentPage() {
           <div
             className={`mb-6 rounded-2xl border px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm ${
               msLeft < 5 * 60 * 1000
-                ? 'bg-red-50 border-red-200 text-red-800'
-                : 'bg-amber-50 border-amber-200 text-amber-800'
+                ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-800 dark:text-red-200'
+                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200'
             }`}
             role="status"
             aria-live="polite"
@@ -596,7 +596,7 @@ export default function PaymentPage() {
                 />
               </div>
               {validationErrors.email && (
-                <p className="text-xs text-red-600 mt-1">{validationErrors.email}</p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.email}</p>
               )}
             </div>
 
@@ -614,7 +614,7 @@ export default function PaymentPage() {
                 disabled={isProcessing}
               />
               {validationErrors.fullName && (
-                <p className="text-xs text-red-600 mt-1">{validationErrors.fullName}</p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{validationErrors.fullName}</p>
               )}
             </div>
           </CardContent>
@@ -635,7 +635,7 @@ export default function PaymentPage() {
                   <p className="text-xs text-slate-500 dark:text-slate-400">Card, bank transfer, USSD or mobile money</p>
                 </div>
               </div>
-              <Badge className="bg-green-100 text-green-800 border-green-200 flex-shrink-0">
+              <Badge className="bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900 flex-shrink-0">
                 <ShieldCheck className="w-3 h-3 mr-1" />
                 Secured
               </Badge>
@@ -665,21 +665,21 @@ export default function PaymentPage() {
         <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 shadow-lg">
           <CardContent className="p-6">
             <div className="flex items-center justify-center space-x-2 text-slate-600 dark:text-slate-300 mb-4">
-              <Lock className="w-5 h-5 text-green-600" />
+              <Lock className="w-5 h-5 text-green-600 dark:text-green-400" />
               <span className="font-semibold">Your payment is encrypted & secure</span>
             </div>
             
             <div className="flex items-center justify-center space-x-8 text-xs text-slate-500 dark:text-slate-400">
               <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-4 h-4 text-green-600" />
+                <ShieldCheck className="w-4 h-4 text-green-600 dark:text-green-400" />
                 <span>256-bit SSL</span>
               </div>
               <div className="flex items-center space-x-2">
-                <Lock className="w-4 h-4 text-green-600" />
+                <Lock className="w-4 h-4 text-green-600 dark:text-green-400" />
                 <span>PCI Compliant</span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-600" />
+                <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
                 <span>Secure Payment</span>
               </div>
             </div>

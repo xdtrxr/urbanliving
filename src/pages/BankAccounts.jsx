@@ -239,13 +239,13 @@ export default function BankAccountsPage() {
                           <div className="flex items-center gap-2 mb-1">
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white">{account.bank_name}</h3>
                             {account.is_primary && (
-                              <Badge className="bg-amber-100 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900">
+                              <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900">
                                 <Star className="w-3 h-3 mr-1" />
                                 Primary
                               </Badge>
                             )}
                             {account.is_verified && (
-                              <Badge className="bg-green-100 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900">
+                              <Badge className="bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900">
                                 <CheckCircle className="w-3 h-3 mr-1" />
                                 Verified
                               </Badge>
@@ -369,7 +369,7 @@ export default function BankAccountsPage() {
                 }`}>
                   {verificationResult.success ? (
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
                       <div>
                         <p className="font-semibold text-green-900 dark:text-green-200">Account Verified!</p>
                         <p className="text-sm text-green-700 dark:text-green-300">{verificationResult.account_name}</p>

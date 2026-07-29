@@ -157,7 +157,7 @@ export default function IdUploadGate({ bookingId, onComplete }) {
     <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-md">
       <CardContent className="p-6 space-y-4">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
             <ShieldCheck className="w-5 h-5 text-amber-700 dark:text-amber-300" />
           </div>
           <div>

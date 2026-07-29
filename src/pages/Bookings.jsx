@@ -22,18 +22,18 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const statusColors = {
-  pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  confirmed: "bg-green-100 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900",
-  cancelled: "bg-red-100 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900",
-  completed: "bg-blue-100 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900",
+  pending: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-900",
+  confirmed: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900",
+  cancelled: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900",
+  completed: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900",
   // Paid + still future/current → emphasize the cleared payment with a strong
   // green badge so the guest immediately sees the booking is locked in.
-  paid: "bg-emerald-100 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900",
+  paid: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900",
   // payment_expired is a sub-status of cancelled — the guest can re-book the
   // same property + dates because checkAvailabilityWebhook only blocks against
   // pending/confirmed bookings. Distinct amber styling so it doesn't look like
   // an admin rejection or a user cancellation.
-  payment_expired: "bg-amber-100 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900",
+  payment_expired: "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900",
 };
 
 // Returns the right label + key for the status badge, factoring in payment_status
@@ -49,9 +49,9 @@ const labelForStatus = (booking) => {
 };
 
 const approvalStatusColors = {
-  pending: "bg-amber-100 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900",
-  approved: "bg-green-100 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900",
-  rejected: "bg-red-100 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900"
+  pending: "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900",
+  approved: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900",
+  rejected: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900"
 };
 
 const isValidSystemId = (id) => id && typeof id === 'string' && id.length > 10 && !id.startsWith("prop_");
@@ -131,8 +131,8 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                   {approvalStatus === 'approved' && msLeft != null && msLeft > 0 && (
                     <Badge className={`border font-medium ${
                       msLeft < 5 * 60 * 1000
-                        ? 'bg-red-100 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900'
-                        : 'bg-amber-100 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900'
+                        ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900'
+                        : 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900'
                     }`}>
                       <Clock className="w-3 h-3 mr-1 inline" />
                       Pay in {formatRemaining(msLeft)}
@@ -304,7 +304,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                     </div>
                   )}
                   {!property && booking.property_id && !isValidSystemId(booking.property_id) && (
-                    <p className="text-xs text-red-500 break-all">Invalid property ID: {booking.property_id}</p>
+                    <p className="text-xs text-red-500 dark:text-red-400 break-all">Invalid property ID: {booking.property_id}</p>
                   )}
                 </div>
                 {(() => {
@@ -399,7 +399,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                       </div>
                     )}
                     {property.arrival_instructions && (
-                      <div className="text-sm text-slate-700 dark:text-slate-200 bg-white/60 dark:bg-slate-900/60 rounded-lg p-3 border border-emerald-100">
+                      <div className="text-sm text-slate-700 dark:text-slate-200 bg-white/60 dark:bg-slate-900/60 rounded-lg p-3 border border-emerald-100 dark:border-emerald-900">
                         <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide mb-1">Host notes</p>
                         <p className="whitespace-pre-wrap">{property.arrival_instructions}</p>
                       </div>
@@ -839,7 +839,7 @@ export default function BookingsPage() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-500" />
+                <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />
                 Cancel Booking?
               </AlertDialogTitle>
               <AlertDialogDescription>

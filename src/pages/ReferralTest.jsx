@@ -205,7 +205,7 @@ export default function ReferralTestPage() {
               <div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Your Referral Code</p>
                 <div className="flex items-center gap-2">
-                  <p className="font-mono font-bold text-amber-600">{user?.referral_code || 'Not set'}</p>
+                  <p className="font-mono font-bold text-amber-600 dark:text-amber-400">{user?.referral_code || 'Not set'}</p>
                   {user?.referral_code && (
                     <Button size="sm" variant="ghost" onClick={copyReferralLink}>
                       <Copy className="w-3 h-3" />
@@ -225,7 +225,7 @@ export default function ReferralTestPage() {
               </div>
               <div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Referral Balance</p>
-                <p className="font-semibold text-green-600">₦{user?.referral_balance_ngn?.toLocaleString() || 0}</p>
+                <p className="font-semibold text-green-600 dark:text-green-400">₦{user?.referral_balance_ngn?.toLocaleString() || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -273,16 +273,16 @@ export default function ReferralTestPage() {
                   <div 
                     key={idx} 
                     className={`p-3 rounded-lg border flex items-start gap-3 ${
-                      result.type === 'success' ? 'bg-green-50 border-green-200' :
-                      result.type === 'error' ? 'bg-red-50 border-red-200' :
-                      result.type === 'warning' ? 'bg-amber-50 border-amber-200' :
-                      'bg-blue-50 border-blue-200'
+                      result.type === 'success' ? 'bg-green-50 dark:bg-green-950/40 border-green-200 dark:border-green-900' :
+                      result.type === 'error' ? 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900' :
+                      result.type === 'warning' ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900' :
+                      'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900'
                     }`}
                   >
-                    {result.type === 'success' && <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />}
-                    {result.type === 'error' && <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />}
-                    {result.type === 'warning' && <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />}
-                    {result.type === 'info' && <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />}
+                    {result.type === 'success' && <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />}
+                    {result.type === 'error' && <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />}
+                    {result.type === 'warning' && <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />}
+                    {result.type === 'info' && <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />}
                     
                     <div className="flex-1">
                       <p className="font-semibold text-sm">{result.message}</p>
@@ -329,7 +329,7 @@ export default function ReferralTestPage() {
                         {ref.status === 'booking_completed' ? '✅ Booked' : '⏳ Signed Up'}
                       </Badge>
                       {ref.amount_earned_ngn > 0 && (
-                        <p className="text-sm font-semibold text-green-600 mt-1">
+                        <p className="text-sm font-semibold text-green-600 dark:text-green-400 mt-1">
                           +₦{ref.amount_earned_ngn.toLocaleString()}
                         </p>
                       )}
@@ -359,7 +359,7 @@ export default function ReferralTestPage() {
                       <div>
                         <p className="font-semibold text-slate-900 dark:text-white">{u.email}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Code: <span className="font-mono text-amber-600">{u.referral_code || 'None'}</span>
+                          Code: <span className="font-mono text-amber-600 dark:text-amber-400">{u.referral_code || 'None'}</span>
                         </p>
                       </div>
                       <div className="text-right text-xs">

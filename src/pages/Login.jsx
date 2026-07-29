@@ -222,7 +222,7 @@ export default function LoginPage() {
 
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
-                <Label htmlFor="otpCode">Verification code <span className="text-red-500">*</span></Label>
+                <Label htmlFor="otpCode">Verification code <span className="text-red-500 dark:text-red-400">*</span></Label>
                 <Input
                   id="otpCode"
                   inputMode="numeric"
@@ -241,9 +241,9 @@ export default function LoginPage() {
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-800">{error}</p>
+                <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
                 </div>
               )}
 
@@ -367,7 +367,7 @@ export default function LoginPage() {
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label htmlFor="firstName">First name <span className="text-red-500">*</span></Label>
+                    <Label htmlFor="firstName">First name <span className="text-red-500 dark:text-red-400">*</span></Label>
                     <div className="relative mt-1">
                       <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <Input
@@ -395,7 +395,7 @@ export default function LoginPage() {
                   </div>
                 </div>
                 <div>
-                  <Label htmlFor="phoneNumber">Phone number <span className="text-red-500">*</span></Label>
+                  <Label htmlFor="phoneNumber">Phone number <span className="text-red-500 dark:text-red-400">*</span></Label>
                   <div className="relative mt-1">
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
@@ -413,7 +413,7 @@ export default function LoginPage() {
               </>
             )}
             <div>
-              <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
+              <Label htmlFor="email">Email <span className="text-red-500 dark:text-red-400">*</span></Label>
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
@@ -429,7 +429,7 @@ export default function LoginPage() {
               </div>
             </div>
             <div>
-              <Label htmlFor="password">Password <span className="text-red-500">*</span></Label>
+              <Label htmlFor="password">Password <span className="text-red-500 dark:text-red-400">*</span></Label>
               <div className="relative mt-1">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
@@ -447,7 +447,7 @@ export default function LoginPage() {
 
             {mode === 'signup' && (
               <div>
-                <Label htmlFor="confirmPassword">Confirm password <span className="text-red-500">*</span></Label>
+                <Label htmlFor="confirmPassword">Confirm password <span className="text-red-500 dark:text-red-400">*</span></Label>
                 <div className="relative mt-1">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input
@@ -465,15 +465,15 @@ export default function LoginPage() {
             )}
 
             {mode === 'signup' && referralCode && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-800">
+              <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl p-3 text-sm text-blue-800 dark:text-blue-200">
                 Using referral code <strong>{referralCode}</strong>
               </div>
             )}
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-800">{error}</p>
+              <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
               </div>
             )}
 

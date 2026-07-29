@@ -288,7 +288,7 @@ export default function DashboardPage() {
           />
         </div>
         <div className="mt-4 flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-          <Heart className="w-4 h-4 text-pink-500" />
+          <Heart className="w-4 h-4 text-pink-500 dark:text-pink-400" />
           <span>{stats.wishlist} wishlisted properties</span>
         </div>
       </div>
@@ -338,7 +338,7 @@ export default function DashboardPage() {
             <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-amber-400/20 before:via-orange-400/20 before:to-red-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
               <div className="relative z-10 flex items-center gap-4 w-full">
                 <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
-                  <Search className="w-8 h-8 text-amber-500 group-hover:text-orange-500 transition-colors duration-300" />
+                  <Search className="w-8 h-8 text-amber-500 dark:text-amber-400 group-hover:text-orange-500 transition-colors duration-300" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-amber-600 group-hover:to-orange-600 group-hover:bg-clip-text transition-all duration-300">New Search</h3>
@@ -351,7 +351,7 @@ export default function DashboardPage() {
             <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-purple-400/20 before:via-indigo-400/20 before:to-blue-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
               <div className="relative z-10 flex items-center gap-4 w-full">
                 <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
-                  <Settings className="w-8 h-8 text-amber-500 group-hover:text-purple-500 transition-colors duration-300" />
+                  <Settings className="w-8 h-8 text-amber-500 dark:text-amber-400 group-hover:text-purple-500 transition-colors duration-300" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-indigo-600 group-hover:bg-clip-text transition-all duration-300">Manage Profile</h3>
@@ -364,7 +364,7 @@ export default function DashboardPage() {
             <Card className="group hover:border-amber-400/50 hover:shadow-2xl transition-all duration-500 p-6 flex items-center gap-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800/60 dark:border-slate-800/60 rounded-2xl overflow-hidden relative before:absolute before:inset-0 before:bg-gradient-to-r before:from-green-400/20 before:via-emerald-400/20 before:to-teal-400/20 before:opacity-0 before:transition-opacity before:duration-500 hover:before:opacity-100 before:animate-pulse">
               <div className="relative z-10 flex items-center gap-4 w-full">
                 <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
-                  <Briefcase className="w-8 h-8 text-amber-500 group-hover:text-green-500 transition-colors duration-300" />
+                  <Briefcase className="w-8 h-8 text-amber-500 dark:text-amber-400 group-hover:text-green-500 transition-colors duration-300" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-green-600 group-hover:to-emerald-600 group-hover:bg-clip-text transition-all duration-300">All Bookings</h3>

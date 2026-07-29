@@ -21,27 +21,27 @@ const WITHDRAWAL_THRESHOLD_NGN = 10000;
 const statusConfig = {
   pending: {
     icon: Clock,
-    color: 'bg-amber-100 text-amber-800 border-amber-200',
+    color: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900',
     label: 'Pending'
   },
   processing: {
     icon: Loader2,
-    color: 'bg-blue-100 text-blue-800 border-blue-200',
+    color: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900',
     label: 'Processing'
   },
   completed: {
     icon: CheckCircle,
-    color: 'bg-green-100 text-green-800 border-green-200',
+    color: 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900',
     label: 'Completed'
   },
   failed: {
     icon: XCircle,
-    color: 'bg-red-100 text-red-800 border-red-200',
+    color: 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900',
     label: 'Failed'
   },
   reversed: {
     icon: AlertCircle,
-    color: 'bg-purple-100 text-purple-800 border-purple-200',
+    color: 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-900',
     label: 'Reversed'
   }
 };
@@ -203,14 +203,14 @@ export default function WithdrawalsPage() {
             </Link>
           </Card>
         ) : availableBalance < WITHDRAWAL_THRESHOLD_NGN ? (
-          <Card className="bg-amber-50 border-amber-200 rounded-2xl p-6 mb-8">
+          <Card className="bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 rounded-2xl p-6 mb-8">
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-amber-900 mb-1">
+                <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1">
                   Withdrawal threshold not met
                 </p>
-                <p className="text-sm text-amber-800">
+                <p className="text-sm text-amber-800 dark:text-amber-200">
                   You need at least ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} in referral
                   earnings to request a withdrawal. You currently have ₦{availableBalance.toLocaleString()}
                   {' '}— ₦{(WITHDRAWAL_THRESHOLD_NGN - availableBalance).toLocaleString()} to go.
@@ -251,7 +251,7 @@ export default function WithdrawalsPage() {
                           <div className="flex items-center gap-2">
                             <span>{account.bank_name} - {account.account_number}</span>
                             {account.is_primary && (
-                              <Badge className="bg-amber-100 text-amber-800 text-xs">Primary</Badge>
+                              <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 text-xs">Primary</Badge>
                             )}
                           </div>
                         </SelectItem>
@@ -278,8 +278,8 @@ export default function WithdrawalsPage() {
                   </p>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <p className="text-sm text-blue-900">
+                <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl p-4">
+                  <p className="text-sm text-blue-900 dark:text-blue-100">
                     <strong>Processing Time:</strong> Withdrawals are processed within 24-48 hours during business days.
                   </p>
                 </div>
@@ -364,8 +364,8 @@ export default function WithdrawalsPage() {
                               </p>
                             )}
                             {withdrawal.error_message && (
-                              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
-                                <p className="text-xs text-red-700">{withdrawal.error_message}</p>
+                              <div className="mt-2 p-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg">
+                                <p className="text-xs text-red-700 dark:text-red-300">{withdrawal.error_message}</p>
                               </div>
                             )}
                           </div>

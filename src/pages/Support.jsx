@@ -27,18 +27,18 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 const categoryColors = {
-  booking: 'bg-blue-100 text-blue-800',
-  payment: 'bg-green-100 text-green-800',
-  account: 'bg-purple-100 text-purple-800',
-  technical: 'bg-orange-100 text-orange-800',
-  general: 'bg-gray-100 text-gray-800'
+  booking: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200',
+  payment: 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200',
+  account: 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200',
+  technical: 'bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200',
+  general: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
 };
 
 const statusColors = {
-  open: 'bg-red-100 text-red-800',
-  in_progress: 'bg-yellow-100 text-yellow-800',
-  resolved: 'bg-green-100 text-green-800',
-  closed: 'bg-gray-100 text-gray-800'
+  open: 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200',
+  in_progress: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200',
+  resolved: 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200',
+  closed: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
 };
 
 const statusIcons = {
@@ -248,7 +248,7 @@ export default function SupportPage() {
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <HelpCircle className="w-7 h-7 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0" />
+              <HelpCircle className="w-7 h-7 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400 flex-shrink-0" />
               <div className="min-w-0">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">Support Center</h1>
                 <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">Get help with your bookings, payments, and account</p>
@@ -359,7 +359,7 @@ export default function SupportPage() {
                           onClick={() => openTicket(ticket)}
                           className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 hover:shadow-md ${
                             selectedTicket?.id === ticket.id 
-                              ? 'border-blue-400 bg-blue-50' 
+                              ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/40' 
                               : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
                           }`}
                         >
@@ -411,7 +411,7 @@ export default function SupportPage() {
                         >
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                             message.sender_type === 'user' 
-                              ? 'bg-blue-100 text-blue-600' 
+                              ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' 
                               : 'bg-slate-100 text-slate-600 dark:text-slate-300'
                           }`}>
                             {message.sender_type === 'user' ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}

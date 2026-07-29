@@ -241,7 +241,7 @@ export default function VehiclePage() {
                     </Badge>
                   )}
                   {vehicle.driver_included !== false && (
-                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800">
+                    <Badge variant="outline" className="border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200">
                       <CheckCircle className="w-3 h-3 mr-1" />
                       Driver included
                     </Badge>
@@ -272,7 +272,7 @@ export default function VehiclePage() {
                         const Icon = meta?.icon || Sparkles;
                         return (
                           <div key={id} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
-                            <Icon className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                            <Icon className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                             <span className="text-sm text-slate-700 dark:text-slate-200">
                               {meta?.label || id.replace(/_/g, ' ')}
                             </span>

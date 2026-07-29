@@ -18,11 +18,11 @@ const STATUS_OPTIONS = [
 
 const STATUS_STYLES = {
   qualifying: 'bg-slate-100 text-slate-700 dark:text-slate-200',
-  qualified: 'bg-blue-100 text-blue-800',
-  shown_options: 'bg-indigo-100 text-indigo-800',
-  booking_started: 'bg-amber-100 text-amber-800',
-  booked: 'bg-emerald-100 text-emerald-800',
-  lost: 'bg-rose-100 text-rose-800',
+  qualified: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200',
+  shown_options: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200',
+  booking_started: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200',
+  booked: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200',
+  lost: 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200',
 };
 
 const fmt = (s) => {
@@ -83,7 +83,7 @@ export default function LeadsAdmin() {
       <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-            <Users className="w-6 h-6 text-amber-500 flex-shrink-0" /> Leads
+            <Users className="w-6 h-6 text-amber-500 dark:text-amber-400 flex-shrink-0" /> Leads
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">Captured by Agent Nova — work them through the pipeline.</CardDescription>
         </div>

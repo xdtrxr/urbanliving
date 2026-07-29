@@ -17,10 +17,10 @@ import {
 
 const rarityConfig = {
   Common: { color: "bg-gray-100 text-gray-700 border-gray-200", glow: "" },
-  Rare: { color: "bg-blue-100 text-blue-700 border-blue-200", glow: "shadow-blue-200" },
-  Epic: { color: "bg-purple-100 text-purple-700 border-purple-200", glow: "shadow-purple-200" },
-  Legendary: { color: "bg-amber-100 text-amber-700 border-amber-200", glow: "shadow-amber-200" },
-  Mythic: { color: "bg-rose-100 text-rose-700 border-rose-200", glow: "shadow-rose-200" }
+  Rare: { color: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900", glow: "shadow-blue-200" },
+  Epic: { color: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-900", glow: "shadow-purple-200" },
+  Legendary: { color: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900", glow: "shadow-amber-200" },
+  Mythic: { color: "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900", glow: "shadow-rose-200" }
 };
 
 const tokenTypeIcons = {
@@ -58,7 +58,7 @@ export default function NFTCollection({ user }) {
           <CardHeader>
             <CardTitle className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 group-hover:bg-clip-text transition-all duration-300">
               <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
-                <Sparkles className="w-5 h-5 text-amber-500 group-hover:text-purple-500 transition-colors duration-300" />
+                <Sparkles className="w-5 h-5 text-amber-500 dark:text-amber-400 group-hover:text-purple-500 transition-colors duration-300" />
               </div>
               NFT Travel Tokens
             </CardTitle>
@@ -85,7 +85,7 @@ export default function NFTCollection({ user }) {
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 group-hover:bg-clip-text transition-all duration-300">
               <div className="transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-12">
-                <Sparkles className="w-5 h-5 text-amber-500 group-hover:text-purple-500 transition-colors duration-300" />
+                <Sparkles className="w-5 h-5 text-amber-500 dark:text-amber-400 group-hover:text-purple-500 transition-colors duration-300" />
               </div>
               NFT Travel Tokens
             </CardTitle>
@@ -106,7 +106,7 @@ export default function NFTCollection({ user }) {
                   className={`relative group/token cursor-pointer transition-all duration-300 hover:scale-105 ${rarityStyle.glow} hover:shadow-lg`}
                   onClick={() => setSelectedToken(token)}
                 >
-                  <div className="aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-slate-200 dark:border-slate-800 group-hover/token:border-amber-400 transition-all duration-300">
+                  <div className="aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 border-2 border-slate-200 dark:border-slate-800 group-hover/token:border-amber-400 transition-all duration-300">
                     {token.image_url ? (
                       <img
                         src={token.image_url}

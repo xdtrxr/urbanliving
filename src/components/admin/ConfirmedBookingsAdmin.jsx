@@ -80,13 +80,13 @@ export default function ConfirmedBookingsAdmin() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-slate-900 dark:text-white truncate">{b.guest_name || b.guest_email}</p>
-                      <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs">Paid</Badge>
+                      <Badge className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-0 text-xs">Paid</Badge>
                       {hasId ? (
-                        <Badge className="bg-blue-100 text-blue-800 border-0 text-xs">
+                        <Badge className="bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-0 text-xs">
                           {ID_TYPE_LABELS[b.id_document_type] || 'ID uploaded'}
                         </Badge>
                       ) : (
-                        <Badge className="bg-rose-100 text-rose-800 border-0 text-xs flex items-center gap-1">
+                        <Badge className="bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-0 text-xs flex items-center gap-1">
                           <ShieldAlert className="w-3 h-3" /> ID missing
                         </Badge>
                       )}
