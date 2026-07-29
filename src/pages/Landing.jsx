@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import BrandMark from '@/components/brand/BrandMark';
 import { useAuth } from '@/lib/AuthContext';
 import {
-  Home,
   ArrowRight,
   Download,
   Search,
@@ -79,9 +79,7 @@ export default function LandingPage() {
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.5rem)' }}
       >
         <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
-            <Home className="w-5 h-5 text-amber-400" strokeWidth={2.5} />
-          </div>
+          <BrandMark className="w-9 h-9" radius="rounded-xl" iconClassName="w-5 h-5 text-amber-400" />
           <span className="text-lg font-bold tracking-tight text-slate-900">UrbanStays</span>
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">

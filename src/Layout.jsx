@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Search, Calendar, User, Heart, Home, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard } from "lucide-react";
+import { Search, Calendar, User, Heart, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +21,7 @@ import ReferralTracker from "@/components/utils/ReferralTracker";
 import { useAuth } from "@/lib/AuthContext";
 import { LogIn } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import BrandMark from "@/components/brand/BrandMark";
 
 const navigationItems = [
   {
@@ -190,9 +191,7 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
         <Sidebar collapsible="icon" className="border-r border-slate-200/60 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl">
           <SidebarHeader className="border-b border-slate-100 dark:border-slate-800 p-4">
             <div className="flex items-center gap-3 justify-center group-data-[collapsible=icon]:justify-center">
-              <div className="w-8 h-8 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
-                <Home className="w-4 h-4 text-amber-400" />
-              </div>
+              <BrandMark className="w-8 h-8" radius="rounded-xl" />
               <div className="sidebar-header-text group-data-[collapsible=icon]:hidden">
                 <h2 className="font-bold text-slate-900 dark:text-white text-base tracking-tight">Urban Stays</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Luxury Stays Worldwide</p>
@@ -327,9 +326,7 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
                   className={`text-xl font-bold text-slate-900 dark:text-white ${user ? 'md:hidden' : ''} flex items-center gap-2 hover:opacity-80 transition-opacity`}
                   aria-label="Urban Stays — go to home"
                 >
-                  <span className="w-7 h-7 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-lg flex items-center justify-center">
-                    <Home className="w-4 h-4 text-amber-400" />
-                  </span>
+                  <BrandMark className="w-7 h-7" radius="rounded-lg" />
                   Urban Stays
                 </Link>
               </div>

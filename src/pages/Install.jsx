@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import BrandMark from '@/components/brand/BrandMark';
 import {
   Apple,
   Monitor,
@@ -9,7 +10,6 @@ import {
   PlusSquare,
   CheckCircle,
   Info,
-  Home,
   ArrowRight,
   Download,
   MoreVertical,
@@ -68,9 +68,11 @@ export default function InstallPage() {
       >
         {/* Hero */}
         <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 shadow-[0_0_60px_-10px_rgba(245,158,11,0.6)] flex items-center justify-center mb-6">
-            <Home className="w-10 h-10 text-slate-900" strokeWidth={2.5} />
-          </div>
+          <BrandMark
+            className="w-20 h-20 mb-6 shadow-[0_0_60px_-10px_rgba(245,158,11,0.6)]"
+            radius="rounded-2xl"
+            iconClassName="w-10 h-10 text-amber-400"
+          />
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-3">
             Install UrbanStays
           </h1>
