@@ -4,43 +4,35 @@ Last updated: 2026-07-29. Sorted easiest → hardest. Each item has enough conte
 
 ---
 
-## 1. Upgrade the Base44 plan (integration credits exhausted)
-**Effort:** 5 minutes, user-only (no code)
-**Why:** The account hit its monthly integration-credits quota. Every `UploadFile` (property/vehicle media, guest IDs, profile pictures) returns HTTP 402 `integration_credits_limit_reached` — and `SendEmail` (arrival/expiry emails) plus Nova's `InvokeLLM` draw from the same pool, so guest emails and AI chat are likely failing too. Bookings/payments/push/Telegram are unaffected.
-**How:** Base44 dashboard → Workspace → Billing/Usage → upgrade. Quick health check for the quota:
-`curl -sS -X POST -F "file=@/dev/null;filename=x.jpg" https://base44.app/api/apps/69f75159e3beeee0837b5b60/integration-endpoints/Core/UploadFile` — 402 = still exhausted, 401 = healthy again.
-
----
-
-## 2. Verify `dailyBookingReminders` fires
+## 1. Verify `dailyBookingReminders` fires
 **Effort:** 5 minutes, one-time check
 **Why:** The cron was scheduled through the Base44 builder alongside `autoCancelExpiredBookings`. The 5-minute expiry sweep is **verified live** (a stale canary booking got auto-cancelled on the first run), but the daily reminder job hasn't had an observable run yet — it only does anything when a paid booking checks in or out that day.
 **How:** On a day with a real check-in, confirm the guest got the "🏠 Check-in today" push, or query the Booking row for a populated `checkin_reminder_pushed_at`.
 
 ---
 
-## 3. Nova lead-reply push trigger (deferred)
+## 2. Nova lead-reply push trigger (deferred)
 **Effort:** blocked on a missing feature, not on push infra
 **Why:** All other push triggers are wired. This one has nothing to hook into: there is no admin-replies-to-lead flow in the codebase (LeadsAdmin only edits `Lead.status`). When a lead-messaging feature is built, add a `tryPush` call in its send path — the pattern is in any of the wired functions (e.g. `telegramWebhook`'s `postAdminReply`).
 
 ---
 
-## 4. Rides — new architecture design (USER, blocks everything below)
+## 3. Rides — new architecture design (USER, blocks everything below)
 **Effort:** design work, user is doing this themselves
 **Why:** Stage 1 (Vehicle/Driver/RideBooking entities, /PlanTrip + /Vehicle pages, VehiclesAdmin) shipped, but the user wants to re-architect before Stages 2–3 are built. Do not build on the old flow until the new design lands.
 
-## 5. Rides Stage 2 (blocked on #4)
+## 4. Rides Stage 2 (blocked on #3)
 - `/RideCheckout` page: service_date, start_time, duration_tier, pickup_location → compute `end_at` → create `RideBooking`.
 - `checkRideAvailabilityWebhook` Deno function mirroring `checkAvailabilityWebhook` — overlap check per vehicle + Telegram admin approve/reject.
 - Bookings page Rides sub-section (Pending / Upcoming / Active / Completed / Cancelled).
 
-## 6. Rides Stage 3 (blocked on #5)
+## 5. Rides Stage 3 (blocked on #4)
 - Paystack ride payment (mirror PaymentPage for RideBooking).
 - Admin driver-assignment UI (pick from approved Driver roster → stamp `driver_id` + `driver_assigned_at`).
 - Driver contact reveal: only visible to guest when `status === confirmed && paid && driver_id != null`.
 - Ride confirmation email; wire "Add a Ride" from property bookings via `linked_property_booking_id`.
 
-## 7. Ride push triggers (blocked on #5/#6)
+## 6. Ride push triggers (blocked on #4/#5)
 - Ride approved, ride payment confirmed, driver assigned — one-liner `tryPush` calls in the Stage 2/3 functions.
 - Driver arriving soon — hardest: per-booking timing. Simplest approach: extend the 5-min cron to scan confirmed rides with `start_time` within 15 min and push once (idempotency stamp `driver_arrival_push_sent_at` on RideBooking).
 
@@ -59,3 +51,4 @@ Last updated: 2026-07-29. Sorted easiest → hardest. Each item has enough conte
 - **PaymentPage** — Badge import fix (white-screen), Stripe removed (Paystack-only)
 - **Telegram** — payment-received message now includes guest mobile (profile lookup)
 - **Upload errors** — surface real platform message (quota 402) instead of "try again"
+- **Base44 plan upgraded (2026-07-29)** — integration quota lifted; UploadFile probe passes the credit gate again, so media uploads, guest emails, and Nova chat are back
