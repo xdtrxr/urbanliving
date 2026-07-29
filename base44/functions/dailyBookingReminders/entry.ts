@@ -54,18 +54,32 @@ async function getPropertyTitle(sdk: any, propertyId: string | undefined): Promi
     }
 }
 
+// Base44's .filter() returns 50 rows by default — page through so a busy
+// check-in day doesn't silently drop reminders past the 50th booking.
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown> = {}): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
 async function runSweep(sdk: any): Promise<{ checkin: number; checkout: number; scanned: number }> {
     const today = todayUtc();
 
     // One filter for each side. We only ever care about paid + confirmed
     // rows — pending / cancelled / payment-expired bookings shouldn't
     // trigger arrival reminders.
-    const todayCheckIns = await sdk.asServiceRole.entities.Booking.filter({
+    const todayCheckIns = await fetchAll(sdk.asServiceRole.entities.Booking, {
         check_in: today,
         status: 'confirmed',
         payment_status: 'paid',
     });
-    const todayCheckOuts = await sdk.asServiceRole.entities.Booking.filter({
+    const todayCheckOuts = await fetchAll(sdk.asServiceRole.entities.Booking, {
         check_out: today,
         status: 'confirmed',
         payment_status: 'paid',

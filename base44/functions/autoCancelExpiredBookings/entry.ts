@@ -65,8 +65,23 @@ async function notifyAdmin(b: any) {
 // the warning band even if the cron is a minute late.
 const WARNING_WINDOW_MS = 6 * 60 * 1000;
 
+// Base44's .filter() returns 50 rows by default. A bare filter here meant the
+// sweep only ever saw the first 50 pending bookings, so with a backlog larger
+// than that the rest would never expire or get warned. Page through instead.
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown> = {}): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
 async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number; warned: number }> {
-    const pending = await sdk.asServiceRole.entities.Booking.filter({ status: 'pending' });
+    const pending = await fetchAll(sdk.asServiceRole.entities.Booking, { status: 'pending' });
     const now = Date.now();
     let cancelled = 0;
     let warned = 0;

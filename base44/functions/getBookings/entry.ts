@@ -65,14 +65,29 @@ Deno.serve(async (req) => {
         const body = await req.json().catch(() => ({}));
         const scope: 'mine' | 'all' = body.scope === 'all' ? 'all' : 'mine';
 
+        // Base44's .filter() caps at 50 rows by default, which silently hid a
+        // user's older bookings (and almost all bookings in admin scope) from
+        // the Bookings page. Page through the full set instead.
+        const PAGE = 500;
+        const fetchAll = async (entity: any, query: Record<string, unknown>) => {
+            const out: any[] = [];
+            for (let skip = 0; skip < 50000; skip += PAGE) {
+                const page = await entity.filter(query, '-created_date', PAGE, skip);
+                if (!Array.isArray(page) || page.length === 0) break;
+                out.push(...page);
+                if (page.length < PAGE) break;
+            }
+            return out;
+        };
+
         let bookings: any[];
         if (scope === 'all') {
             if (user.role !== 'admin') {
                 return new Response(JSON.stringify({ success: false, error: 'Admin access required' }), { status: 403, headers });
             }
-            bookings = await base44.asServiceRole.entities.Booking.filter({}, '-created_date');
+            bookings = await fetchAll(base44.asServiceRole.entities.Booking, {});
         } else {
-            bookings = await base44.entities.Booking.filter({ guest_email: user.email }, '-created_date');
+            bookings = await fetchAll(base44.entities.Booking, { guest_email: user.email });
         }
 
         const nowMs = Date.now();

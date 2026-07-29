@@ -31,7 +31,8 @@ import {
   Briefcase,
   Clock,
   Users,
-  RefreshCw
+  RefreshCw,
+  TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -50,6 +51,7 @@ import LeadsAdmin from '@/components/admin/LeadsAdmin';
 import ConfirmedBookingsAdmin from '@/components/admin/ConfirmedBookingsAdmin';
 import VehiclesAdmin from '@/components/admin/VehiclesAdmin';
 import WithdrawalsAdmin from '@/components/admin/WithdrawalsAdmin';
+import PlatformStatsAdmin from '@/components/admin/PlatformStatsAdmin';
 import { Car } from 'lucide-react';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -213,7 +215,7 @@ export default function AdminPage() {
   const [propertyToDelete, setPropertyToDelete] = useState(null);
 
   // State for the new Tabs component
-  const [activeAdminTab, setActiveAdminTab] = useState('add-manual'); // Default to manual entry tab
+  const [activeAdminTab, setActiveAdminTab] = useState('overview'); // Land on platform stats
 
   // Platform overview stats
   const [platformStats, setPlatformStats] = useState(null);
@@ -1108,7 +1110,11 @@ export default function AdminPage() {
             mobile gets an explicit pt on each TabsContent for breathing
             room. */}
         <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 sm:space-y-8 mb-8">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-1 h-auto p-1">
+            <TabsTrigger value="overview">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Overview
+            </TabsTrigger>
             <TabsTrigger value="add-manual">
               <Plus className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">{editingPropertyId ? 'Edit Property' : 'Add Property'}</span>
@@ -1133,6 +1139,10 @@ export default function AdminPage() {
               <span className="sm:hidden">Payouts</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="overview" className="mt-6 sm:mt-4">
+            <PlatformStatsAdmin />
+          </TabsContent>
 
           <TabsContent value="vehicles" className="mt-6 sm:mt-4">
             <VehiclesAdmin />
