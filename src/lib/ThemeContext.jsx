@@ -25,7 +25,7 @@ const applyThemeClass = (resolved) => {
   // Keep the iOS status-bar / Android theme-color meta tag in sync so the
   // PWA chrome around the viewport flips with the rest of the UI.
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0a0a0a' : '#0f172a');
+  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0a0a0a' : '#0B1733');
 };
 
 export function ThemeProvider({ children }) {

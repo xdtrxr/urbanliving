@@ -3,13 +3,18 @@ import { Home } from 'lucide-react';
 
 // BrandMark — the single source of truth for the Urban Stays logo.
 //
-// Renders /logo.svg, which already carries its own dark-navy rounded-square
-// background, so callers should NOT wrap this in a coloured tile.
+// Renders /icon.svg rather than /logo.svg. The source artwork is landscape
+// (4221x3663), so in the square slots every caller uses it would letterbox:
+// the navy shape would float inside the box and the corner rounding would
+// never touch it. icon.svg is the squared, full-bleed derivative, so it
+// fills its box and reads as a proper app tile.
+//
+// It carries its own navy background, so callers must NOT wrap this in a
+// coloured tile.
 //
 // If the file is missing or fails to decode we fall back to the previous
 // mark (a Lucide house on a navy gradient tile). That keeps every surface
-// rendering something sane rather than a broken-image glyph, and means this
-// component was safe to ship before the artwork landed.
+// rendering something sane rather than a broken-image glyph.
 //
 // Sizing is caller-controlled so each surface keeps its existing dimensions:
 //   <BrandMark className="w-8 h-8" radius="rounded-xl" />
@@ -35,7 +40,7 @@ export default function BrandMark({
 
   return (
     <img
-      src="/logo.svg"
+      src="/icon.svg"
       alt={alt}
       aria-hidden={alt ? undefined : 'true'}
       onError={() => setFailed(true)}
