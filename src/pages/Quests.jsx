@@ -796,12 +796,12 @@ export default function QuestsPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-8">
-            <div className="h-12 bg-slate-200 rounded-xl w-64 mx-auto" />
+            <div className="h-12 bg-slate-200 dark:bg-slate-800 rounded-xl w-64 mx-auto" />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-2xl mx-auto">
-              {[1, 2, 3].map(i => <div key={i} className="h-32 bg-slate-200 rounded-2xl" />)}
+              {[1, 2, 3].map(i => <div key={i} className="h-32 bg-slate-200 dark:bg-slate-800 rounded-2xl" />)}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3].map(i => <div key={i} className="h-64 bg-slate-200 rounded-3xl" />)}
+              {[1, 2, 3].map(i => <div key={i} className="h-64 bg-slate-200 dark:bg-slate-800 rounded-3xl" />)}
             </div>
           </div>
         </div>
@@ -920,7 +920,7 @@ export default function QuestsPage() {
                     <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">{reward.description}</p>
                   </CardHeader>
                   <CardContent className="px-6 pb-6 mt-auto">
-                    <div className="flex items-center justify-center gap-2 p-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl">
+                    <div className="flex items-center justify-center gap-2 p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-xl">
                       <Gift className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                       <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Auto-credited</span>
                     </div>

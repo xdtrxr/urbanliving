@@ -1372,7 +1372,7 @@ export default function AdminPage() {
                           accept="image/*"
                           onChange={handleImageUpload}
                           disabled={isUploadingImages}
-                          className="flex-1 rounded-xl border-slate-200 dark:border-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 dark:text-slate-200 hover:file:bg-slate-200"
+                          className="flex-1 rounded-xl border-slate-200 dark:border-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-200 dark:text-slate-200 hover:file:bg-slate-200"
                         />
                         {isUploadingImages && (
                           <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
@@ -1405,7 +1405,7 @@ export default function AdminPage() {
                           accept="video/*"
                           onChange={handleVideoUpload}
                           disabled={isUploadingVideos}
-                          className="flex-1 rounded-xl border-slate-200 dark:border-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 dark:text-slate-200 hover:file:bg-slate-200"
+                          className="flex-1 rounded-xl border-slate-200 dark:border-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-200 dark:text-slate-200 hover:file:bg-slate-200"
                         />
                         {isUploadingVideos && (
                           <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
@@ -1570,7 +1570,7 @@ export default function AdminPage() {
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50 border-b-2 border-slate-200 dark:border-slate-800">
+                      <thead className="bg-slate-50 dark:bg-slate-800/60 border-b-2 border-slate-200 dark:border-slate-800">
                         <tr>
                           <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-200">Property</th>
                           <th className="text-left p-3 font-semibold text-slate-700 dark:text-slate-200">Location</th>
@@ -1669,7 +1669,7 @@ export default function AdminPage() {
               <AlertDialogDescription>
                 Are you sure you want to delete this property?
                 {propertyToDelete && (
-                  <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                  <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg">
                     <p className="font-semibold text-slate-900 dark:text-white">{propertyToDelete.title}</p>
                     <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
                       {propertyToDelete.location?.city}, {propertyToDelete.location?.country}
@@ -1753,7 +1753,7 @@ export default function AdminPage() {
                         </Select>
                       </div>
                     </div>
-                    <div className="flex-1 bg-slate-50 rounded-xl p-4 overflow-y-auto space-y-4 mb-4" style={{ minHeight: '300px' }}>
+                    <div className="flex-1 bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 overflow-y-auto space-y-4 mb-4" style={{ minHeight: '300px' }}>
                       {ticketMessages.map((message, index) => (
                         <div key={index} className={`flex w-full ${message.sender_type === 'user' ? 'justify-start' : 'justify-end'}`}>
                             <div className={`p-3 rounded-xl max-w-md ${message.sender_type === 'user' ? 'bg-white dark:bg-slate-900 border' : 'bg-blue-600 text-white'}`}>

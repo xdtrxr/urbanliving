@@ -449,7 +449,7 @@ export default function BankAccountsPage() {
               <AlertDialogDescription>
                 Are you sure you want to delete this bank account?
                 {accountToDelete && (
-                  <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                  <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg">
                     <p className="font-semibold text-slate-900 dark:text-white">{accountToDelete.bank_name}</p>
                     <p className="text-sm text-slate-600 dark:text-slate-300">{accountToDelete.account_name}</p>
                     <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{accountToDelete.account_number}</p>

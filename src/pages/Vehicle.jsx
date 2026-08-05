@@ -137,7 +137,7 @@ export default function VehiclePage() {
                 setLightboxIndex(Math.max(0, heroIdx));
                 setLightboxOpen(true);
               }}
-              className="group relative block w-full aspect-video bg-slate-200 rounded-2xl overflow-hidden shadow-lg cursor-zoom-in"
+              className="group relative block w-full aspect-video bg-slate-200 dark:bg-slate-800 rounded-2xl overflow-hidden shadow-lg cursor-zoom-in"
               aria-label="Open photo gallery"
             >
               <AnimatePresence mode="wait">
@@ -271,7 +271,7 @@ export default function VehiclePage() {
                         const meta = AMENITY_LABELS[id];
                         const Icon = meta?.icon || Sparkles;
                         return (
-                          <div key={id} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
+                          <div key={id} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3">
                             <Icon className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                             <span className="text-sm text-slate-700 dark:text-slate-200">
                               {meta?.label || id.replace(/_/g, ' ')}
@@ -330,7 +330,7 @@ export default function VehiclePage() {
                     the Bookings page once status is confirmed + paid. */}
                 <div>
                   <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">Your driver</h3>
-                  <div className="bg-slate-50 rounded-2xl p-4 sm:p-5 flex items-start gap-4">
+                  <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 sm:p-5 flex items-start gap-4">
                     <div className="w-14 h-14 rounded-full bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center flex-shrink-0">
                       <Car className="w-7 h-7 text-amber-400" />
                     </div>
@@ -346,7 +346,7 @@ export default function VehiclePage() {
 
               {/* Right: pricing + CTA */}
               <div className="lg:col-span-1">
-                <Card className="bg-slate-50/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
+                <Card className="bg-slate-50/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
                   <div className="mb-5">
                     <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
                       Choose a duration

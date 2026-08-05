@@ -113,8 +113,8 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-8">
         <div className="max-w-2xl mx-auto">
           <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-slate-200 rounded-xl w-48" />
-            <div className="h-96 bg-slate-200 rounded-3xl" />
+            <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-48" />
+            <div className="h-96 bg-slate-200 dark:bg-slate-800 rounded-3xl" />
           </div>
         </div>
       </div>

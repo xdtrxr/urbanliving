@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 const rarityConfig = {
-  Common: { color: "bg-gray-100 text-gray-700 border-gray-200", glow: "" },
+  Common: { color: "bg-gray-100 dark:bg-gray-800 text-gray-700 border-gray-200", glow: "" },
   Rare: { color: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900", glow: "shadow-blue-200" },
   Epic: { color: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-900", glow: "shadow-purple-200" },
   Legendary: { color: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900", glow: "shadow-amber-200" },
@@ -141,7 +141,7 @@ export default function NFTCollection({ user }) {
           )}
 
           {selectedToken && (
-            <div className="mt-6 p-4 bg-slate-50 rounded-xl border transform transition-all duration-300 hover:bg-slate-100">
+            <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border transform transition-all duration-300 hover:bg-slate-100">
               <div className="flex items-start gap-3">
                 <div className="w-12 h-12 rounded-lg overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center flex-shrink-0">
                   {selectedToken.image_url ? (

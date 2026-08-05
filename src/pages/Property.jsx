@@ -269,14 +269,14 @@ export default function PropertyPage() {
                                 <div className="mt-8">
                                     <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">Check-in & Check-out</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+                                        <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
                                             <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                                             <div>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400">Check-in</p>
                                                 <p className="font-semibold text-slate-900 dark:text-white">from 2:00 PM</p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+                                        <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
                                             <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                                             <div>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400">Check-out</p>
@@ -288,7 +288,7 @@ export default function PropertyPage() {
                             </div>
 
                             <div className="lg:col-span-1">
-                                <Card className="bg-slate-50/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
+                                <Card className="bg-slate-50/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
                                     <div className="mb-6">
                                         <div className="text-3xl font-bold text-slate-900 dark:text-white">
                                             {currencySymbol}{property.price_per_night.toLocaleString()}

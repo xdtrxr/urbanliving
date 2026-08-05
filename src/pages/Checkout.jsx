@@ -424,6 +424,8 @@ export default function CheckoutPage() {
             >
               {/* Green hero — big checkmark so the success is unmistakable */}
               <div className="bg-gradient-to-br from-green-500 to-emerald-600 px-6 pt-8 pb-6 text-center">
+                {/* Frosted circle sits on the green gradient above, so plain
+                    white/20 is correct in both themes — no dark variant. */}
                 <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
                   <CheckCircle className="w-9 h-9 text-white" strokeWidth={2.5} />
                 </div>

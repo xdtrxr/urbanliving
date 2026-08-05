@@ -208,7 +208,7 @@ export default function LoginPage() {
           paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
         }}
       >
-        <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
+        <Card className="w-full max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
           <CardContent className="p-6 sm:p-8">
             <div className="text-center mb-6">
               <div className="w-12 h-12 mx-auto mb-3 bg-slate-900 rounded-full flex items-center justify-center">
@@ -290,7 +290,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
+      <Card className="w-full max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
         <CardContent className="p-6 sm:p-8">
           <div className="text-center mb-6">
             <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-lg">
@@ -308,7 +308,7 @@ export default function LoginPage() {
 
           {/* Tabs — make the Sign In / Sign Up choice front-and-center so new
               vs. existing users know exactly where they should go. */}
-          <div role="tablist" className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl mb-6">
+          <div role="tablist" className="grid grid-cols-2 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-6">
             <button
               type="button"
               role="tab"
@@ -316,7 +316,7 @@ export default function LoginPage() {
               onClick={() => { setMode('signin'); setError(null); }}
               className={`h-11 rounded-lg text-sm font-semibold transition-colors ${
                 mode === 'signin'
-                  ? 'bg-white text-slate-900 shadow-sm'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -329,7 +329,7 @@ export default function LoginPage() {
               onClick={() => { setMode('signup'); setError(null); }}
               className={`h-11 rounded-lg text-sm font-semibold transition-colors ${
                 mode === 'signup'
-                  ? 'bg-white text-slate-900 shadow-sm'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -357,9 +357,9 @@ export default function LoginPage() {
           </div>
 
           <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-slate-200" />
+            <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
             <span className="text-xs uppercase tracking-wide text-slate-500">or with email</span>
-            <div className="flex-1 h-px bg-slate-200" />
+            <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
           </div>
 
           <form onSubmit={handleEmailSubmit} className="space-y-4">

@@ -17,7 +17,7 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_STYLES = {
-  qualifying: 'bg-slate-100 text-slate-700 dark:text-slate-200',
+  qualifying: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200',
   qualified: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200',
   shown_options: 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200',
   booking_started: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200',
@@ -119,7 +119,7 @@ export default function LeadsAdmin() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-semibold text-slate-900 dark:text-white truncate">{lead.name}</h4>
-                      <Badge className={`${STATUS_STYLES[lead.status] || 'bg-slate-100 text-slate-700 dark:text-slate-200'} border-0`}>
+                      <Badge className={`${STATUS_STYLES[lead.status] || 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'} border-0`}>
                         {STATUS_OPTIONS.find((s) => s.value === lead.status)?.label || lead.status}
                       </Badge>
                       {lead.user_email && (

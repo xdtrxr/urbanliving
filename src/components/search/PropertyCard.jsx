@@ -83,7 +83,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
             {currencySymbol}{property.price_per_night.toLocaleString()}/night
           </Badge>
           {property.caution_fee > 0 && (
-            <Badge className="bg-amber-100/95 text-amber-900 dark:text-amber-100 font-medium px-3 py-1 rounded-full flex items-center gap-1">
+            <Badge className="bg-amber-100/95 dark:bg-amber-900/60 text-amber-900 dark:text-amber-100 font-medium px-3 py-1 rounded-full flex items-center gap-1">
               <Shield className="w-3 h-3" />
               {currencySymbols[property.currency] || '₦'}{property.caution_fee.toLocaleString()} caution
             </Badge>

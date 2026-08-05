@@ -208,10 +208,10 @@ export default function SupportPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-slate-200 rounded-xl w-48" />
+            <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-48" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="h-96 bg-slate-200 rounded-3xl" />
-              <div className="h-96 bg-slate-200 rounded-3xl" />
+              <div className="h-96 bg-slate-200 dark:bg-slate-800 rounded-3xl" />
+              <div className="h-96 bg-slate-200 dark:bg-slate-800 rounded-3xl" />
             </div>
           </div>
         </div>
@@ -412,14 +412,14 @@ export default function SupportPage() {
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                             message.sender_type === 'user' 
                               ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' 
-                              : 'bg-slate-100 text-slate-600 dark:text-slate-300'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                           }`}>
                             {message.sender_type === 'user' ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                           </div>
                           <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-xl ${
                             message.sender_type === 'user'
                               ? 'bg-blue-600 text-white'
-                              : 'bg-slate-100 text-slate-900 dark:text-white'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
                           }`}>
                             <p className="text-sm">{message.message}</p>
                             <p className={`text-xs mt-1 ${

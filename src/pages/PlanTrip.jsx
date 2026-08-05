@@ -253,9 +253,9 @@ export default function PlanTripPage() {
           <div className="grid gap-5 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {[0, 1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="animate-pulse">
-                <div className="aspect-[4/3] bg-slate-200 rounded-2xl mb-3" />
-                <div className="h-5 bg-slate-200 rounded w-3/4 mb-2" />
-                <div className="h-4 bg-slate-200 rounded w-1/2" />
+                <div className="aspect-[4/3] bg-slate-200 dark:bg-slate-800 rounded-2xl mb-3" />
+                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded w-3/4 mb-2" />
+                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
               </div>
             ))}
           </div>

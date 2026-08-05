@@ -224,11 +224,11 @@ export default function DashboardPage() {
     return (
       <div className="p-4 md:p-8">
         <div className="animate-pulse space-y-8">
-          <div className="h-8 bg-slate-200 rounded-lg w-1/3" />
+          <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg w-1/3" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="h-28 bg-slate-200 rounded-lg" />
-            <div className="h-28 bg-slate-200 rounded-lg" />
-            <div className="h-48 bg-slate-200 rounded-lg md:col-span-2" />
+            <div className="h-28 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+            <div className="h-28 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+            <div className="h-48 bg-slate-200 dark:bg-slate-800 rounded-lg md:col-span-2" />
           </div>
         </div>
       </div>

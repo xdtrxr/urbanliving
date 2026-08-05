@@ -123,7 +123,7 @@ export default function SearchResultCard({ property, user: initialUser }) {
             </div>
 
             <div className="flex justify-between items-center pt-1">
-              <Badge className="bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-semibold">
+              <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold">
                 {currencySymbol}{property.price_per_night}/night
               </Badge>
               <Link to={createPageUrl(`Property?id=${property.id}`)}>

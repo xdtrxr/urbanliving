@@ -71,7 +71,7 @@ export default function WishlistPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
            <div className="animate-pulse space-y-6">
-            <div className="h-8 bg-slate-200 rounded-xl w-48" />
+            <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-48" />
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {Array(3).fill(0).map((_, i) => (
                   <div key={i} className="bg-white/50 dark:bg-slate-900/50 rounded-3xl h-96" />

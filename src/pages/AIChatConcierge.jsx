@@ -1119,7 +1119,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
 
   if (isLoadingHistory) {
     return (
-      <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex items-center justify-center bg-slate-50">
+      <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex items-center justify-center bg-slate-50 dark:bg-slate-800/60">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-900 border-t-transparent mx-auto mb-4"></div>
           <p className="text-slate-600 dark:text-slate-300">Loading your conversation history...</p>
@@ -1129,7 +1129,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
   }
 
   return (
-    <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex flex-col bg-slate-50">
+    <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex flex-col bg-slate-50 dark:bg-slate-800/60">
       <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg">
         <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between">
@@ -1328,7 +1328,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                           ))}
                         </div>
                         {message.content.results.length > 3 && (
-                          <div className="bg-slate-50 border border-slate-200 dark:border-slate-800 p-3 rounded-xl text-center">
+                          <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 p-3 rounded-xl text-center">
                             <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
                               And {message.content.results.length - 3} more properties available
                             </p>
@@ -1437,7 +1437,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
         <div className="px-3 sm:px-4 py-2.5">
           {/* Live interim transcript shown while the user is speaking */}
           {isListening && transcript && (
-            <div className="mb-2 px-3 py-1.5 bg-slate-100 rounded-md text-xs text-slate-700 dark:text-slate-200 flex items-center gap-2">
+            <div className="mb-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-md text-xs text-slate-700 dark:text-slate-200 flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               <span className="italic">{transcript}</span>
             </div>
@@ -1474,7 +1474,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                 className={`p-2.5 rounded-lg shadow-sm transition-all duration-200 ${
                   isListening
                     ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:text-slate-200'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200'
                 }`}
               >
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
