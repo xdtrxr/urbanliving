@@ -1,0 +1,369 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+// checkRideAvailability
+// ----------------------------------------------------------------------------
+// Entry point for every ride request. Mirrors checkAvailabilityWebhook's role
+// in the apartment flow, with four deliberate differences:
+//
+//   1. ONE ROW, NOT TWO. Apartments create an AvailabilityRequest *and* a
+//      Booking, then re-join them later by a 4-field composite match. Rides
+//      keep the decision state (approved_at / admin_response /
+//      telegram_message_id) on the RideBooking itself. No FK to maintain.
+//
+//   2. CONFLICTS ARE A HARD BLOCK. The apartment flow flags a conflict and
+//      creates the booking anyway, leaving the admin to enforce. A car cannot
+//      be in two places, so there is no judgement call to preserve — we 409
+//      before creating anything.
+//
+//   3. PRICE IS COMPUTED SERVER-SIDE from the Vehicle row. The apartment flow
+//      trusts a client-supplied total_price, which means a tampered request
+//      could set its own price and still pass payment verification (the
+//      verifier only checks Paystack's amount against the stored total).
+//      Rides never read a price off the request body.
+//
+//   4. ADD-ONS SKIP APPROVAL. A ride attached to a stay that is already
+//      confirmed AND paid comes from a vetted guest, so it goes straight to
+//      payment. An add-on against an *unpaid* stay is rejected outright
+//      rather than silently downgraded to a standalone request.
+
+// ── Ride time model ─────────────────────────────────────────────────────────
+// DUPLICATED across ride functions — Base44 function directories are isolated
+// and cannot import a shared module. Keep every copy in lockstep.
+//
+// Nigeria is WAT (UTC+1) year-round with no DST, and the offset MUST be
+// pinned. Parsing "2026-08-10T09:00" without it resolves to the *runtime's*
+// local zone: correct by accident on a WAT laptop, an hour out on the UTC
+// server. That failure mode is invisible in local testing.
+const WAT_OFFSET = '+01:00';
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const TURNAROUND_MS = 2 * HOUR_MS;   // vehicle must get back before its next hire
+const PAYMENT_WINDOW_MS = 1 * HOUR_MS;
+const MAX_OPEN_REQUESTS = 3;
+
+function rideStartAt(serviceDate: string, startTime: string): number {
+    return Date.parse(`${serviceDate}T${startTime}:00${WAT_OFFSET}`);
+}
+
+function rideDurationMs(tier: string, days?: number): number {
+    switch (tier) {
+        case '12hr': return 12 * HOUR_MS;
+        case '24hr': return DAY_MS;
+        case 'multi_day': return Math.max(1, Number(days) || 1) * DAY_MS;
+        case 'weekly': return 7 * DAY_MS;
+        case 'monthly': return 30 * DAY_MS;
+        default: return NaN;
+    }
+}
+
+function rideWindow(r: any): { startMs: number; endMs: number } | null {
+    const startMs = rideStartAt(r.service_date, r.start_time);
+    const dur = rideDurationMs(r.duration_tier, r.duration_days);
+    if (Number.isNaN(startMs) || Number.isNaN(dur)) return null;
+    return { startMs, endMs: startMs + dur };
+}
+
+// Conflict when the gap between two windows is smaller than the buffer, in
+// either direction. The buffer appears once per side, which requires BUFFER
+// of clearance rather than doubling it.
+function windowsOverlap(
+    aStart: number, aEnd: number,
+    bStart: number, bEnd: number,
+    buffer = TURNAROUND_MS,
+): boolean {
+    return aStart < bEnd + buffer && aEnd + buffer > bStart;
+}
+
+// ── Pricing — derived from the Vehicle, never from the request body ─────────
+function priceForTier(vehicle: any, tier: string, days?: number): number | null {
+    const d = Math.max(1, Number(days) || 1);
+    const p12 = Number(vehicle.price_12hr_ngn) || 0;
+    const p24 = Number(vehicle.price_24hr_ngn) || 0;
+    const extra = Number(vehicle.price_per_extra_day_ngn) || 0;
+    switch (tier) {
+        case '12hr': return p12 || null;
+        case '24hr': return p24 || null;
+        // Fall back to a flat per-day rate when no extra-day price is set.
+        case 'multi_day': return p24 ? p24 + (d - 1) * (extra || p24) : null;
+        case 'weekly': return Number(vehicle.price_per_week_ngn) || (p24 ? p24 * 7 : null);
+        case 'monthly': return Number(vehicle.price_per_month_ngn) || (p24 ? p24 * 30 : null);
+        default: return null;
+    }
+}
+
+// Base44's .filter() silently caps at 50 rows. Anything scanning for conflicts
+// must page or it will happily approve a double-booking it never saw.
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+async function notifyAdmin(opts: {
+    ride: any;
+    vehicle: any;
+    startMs: number;
+    endMs: number;
+}): Promise<string | null> {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
+    if (!token || !chatId) {
+        console.warn('Telegram not configured — skipping ride admin notification');
+        return null;
+    }
+
+    const fmt = (ms: number) =>
+        new Date(ms).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' });
+    const loc = opts.ride.pickup_location || {};
+    const pickup = [loc.address, loc.area, loc.city].filter(Boolean).join(', ') || 'Not specified';
+
+    const text = `🚗 *RIDE REQUEST*\n\n` +
+        `*${opts.vehicle.name}* (${opts.vehicle.brand})\n` +
+        `📍 ${opts.vehicle.city}\n\n` +
+        `👤 *Guest*\n` +
+        `• Name: ${opts.ride.guest_name}\n` +
+        `• Email: ${opts.ride.guest_email}\n` +
+        `• Phone: ${opts.ride.guest_phone}\n` +
+        `• Passengers: ${opts.ride.passengers}\n\n` +
+        `🕒 *Window* (${opts.ride.duration_tier})\n` +
+        `• From: ${fmt(opts.startMs)}\n` +
+        `• To:   ${fmt(opts.endMs)}\n\n` +
+        `📌 Pickup: ${pickup}\n` +
+        `💰 Total: ₦${(Number(opts.ride.total_price) || 0).toLocaleString()}\n` +
+        (opts.ride.special_requests ? `\n📝 ${opts.ride.special_requests}\n` : '') +
+        `\n*Ride ID:* \`${opts.ride.id}\``;
+
+    const replyMarkup = {
+        inline_keyboard: [[
+            { text: '✅ Approve', callback_data: `ride_approve_${opts.ride.id}` },
+            { text: '❌ Reject', callback_data: `ride_reject_${opts.ride.id}` },
+        ]],
+    };
+
+    const send = async (endpoint: string, payload: Record<string, unknown>) => {
+        const res = await fetch(`https://api.telegram.org/bot${token}/${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        return res.json();
+    };
+
+    try {
+        // Prefer a photo of the vehicle. If Telegram cannot fetch the image
+        // (signed URL, bad host) fall back to text so the request is never
+        // silently dropped — the same failure the apartment flow hit.
+        const image = Array.isArray(opts.vehicle.images) ? opts.vehicle.images[0] : null;
+        if (image) {
+            const photo = await send('sendPhoto', {
+                chat_id: chatId, photo: image, caption: text,
+                parse_mode: 'Markdown', reply_markup: replyMarkup,
+            });
+            if (photo.ok) return String(photo.result.message_id);
+            console.warn('sendPhoto failed, falling back to sendMessage:', photo.description);
+        }
+        const msg = await send('sendMessage', {
+            chat_id: chatId,
+            text: image ? `${text}\n\n🖼 ${image}` : text,
+            parse_mode: 'Markdown', reply_markup: replyMarkup,
+        });
+        return msg.ok ? String(msg.result.message_id) : null;
+    } catch (err) {
+        console.error('Ride admin notification failed (non-fatal):', err);
+        return null;
+    }
+}
+
+Deno.serve(async (req) => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+    const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), { status, headers });
+
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+    if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
+
+    try {
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
+        if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+
+        const body = await req.json().catch(() => ({}));
+        const {
+            vehicle_id, service_date, start_time, duration_tier,
+            duration_days, pickup_location, dropoff_location,
+            passengers, special_requests, linked_property_booking_id,
+        } = body || {};
+
+        // ── Validation ──────────────────────────────────────────────────
+        if (!vehicle_id || !service_date || !start_time || !duration_tier) {
+            return json({
+                success: false,
+                error: 'vehicle_id, service_date, start_time and duration_tier are all required',
+            }, 400);
+        }
+        if (!user.phone_number && !body.guest_phone) {
+            return json({ success: false, error: 'A phone number is required to book a ride', code: 'PHONE_REQUIRED' }, 400);
+        }
+        if (duration_tier === 'multi_day' && (!Number(duration_days) || Number(duration_days) < 1)) {
+            return json({ success: false, error: 'multi_day bookings need duration_days of at least 1' }, 400);
+        }
+
+        const win = rideWindow({ service_date, start_time, duration_tier, duration_days });
+        if (!win) return json({ success: false, error: 'Invalid date, time or duration tier' }, 400);
+        if (win.startMs <= Date.now()) {
+            return json({ success: false, error: 'Pickup time must be in the future', code: 'START_IN_PAST' }, 400);
+        }
+
+        // ── Vehicle must exist and be bookable ──────────────────────────
+        const vehicle = await base44.asServiceRole.entities.Vehicle.get(vehicle_id);
+        if (!vehicle) return json({ success: false, error: 'Vehicle not found' }, 404);
+        if (vehicle.active === false || vehicle.admin_approved === false) {
+            return json({ success: false, error: 'This vehicle is not currently available', code: 'VEHICLE_UNAVAILABLE' }, 409);
+        }
+        if (passengers && vehicle.max_passengers && Number(passengers) > Number(vehicle.max_passengers)) {
+            return json({
+                success: false,
+                error: `This vehicle seats ${vehicle.max_passengers}`,
+                code: 'TOO_MANY_PASSENGERS',
+            }, 400);
+        }
+
+        const total_price = priceForTier(vehicle, duration_tier, duration_days);
+        if (!total_price) {
+            return json({
+                success: false,
+                error: 'This vehicle has no price set for that duration',
+                code: 'NO_PRICE_FOR_TIER',
+            }, 409);
+        }
+
+        // ── Open-request cap ────────────────────────────────────────────
+        // Replaces the apartment flow's same-user-same-property rule, which
+        // for rides would wrongly block a guest booking one car for two
+        // different days. This caps inventory a single account can hold.
+        const openRides = await fetchAll(base44.asServiceRole.entities.RideBooking, {
+            guest_email: user.email, status: 'pending', payment_status: 'unpaid',
+        });
+        if (openRides.length >= MAX_OPEN_REQUESTS) {
+            return json({
+                success: false,
+                error: `You already have ${openRides.length} ride requests awaiting approval or payment. Complete or cancel one first.`,
+                code: 'TOO_MANY_OPEN_REQUESTS',
+            }, 409);
+        }
+
+        // ── Hard conflict block ─────────────────────────────────────────
+        const held = await fetchAll(base44.asServiceRole.entities.RideBooking, {
+            vehicle_id, status: { $in: ['pending', 'confirmed'] },
+        });
+        for (const other of held) {
+            const ow = rideWindow(other);
+            if (!ow) continue;
+            if (windowsOverlap(win.startMs, win.endMs, ow.startMs, ow.endMs)) {
+                return json({
+                    success: false,
+                    error: 'This vehicle is already booked for an overlapping window.',
+                    code: 'VEHICLE_DOUBLE_BOOKED',
+                    conflict: { start_at: new Date(ow.startMs).toISOString(), end_at: new Date(ow.endMs).toISOString() },
+                }, 409);
+            }
+        }
+
+        // ── Add-on branch ───────────────────────────────────────────────
+        // A ride attached to a stay that is confirmed AND paid comes from an
+        // already-vetted guest, so it skips approval. Anything else is
+        // rejected explicitly — silently falling through to a standalone
+        // request would give the guest a second approval queue and a second
+        // payment clock drifting against the first.
+        let isAddOn = false;
+        if (linked_property_booking_id) {
+            const stay = await base44.asServiceRole.entities.Booking.get(linked_property_booking_id);
+            if (!stay || stay.guest_email !== user.email) {
+                return json({ success: false, error: 'Linked booking not found', code: 'STAY_NOT_FOUND' }, 404);
+            }
+            if (stay.status !== 'confirmed' || stay.payment_status !== 'paid') {
+                return json({
+                    success: false,
+                    error: 'Finish paying for your stay before adding a ride to it.',
+                    code: 'STAY_NOT_PAID',
+                    booking_id: stay.id,
+                }, 409);
+            }
+            isAddOn = true;
+        }
+
+        // ── Create ──────────────────────────────────────────────────────
+        const nowIso = new Date().toISOString();
+        const payload: Record<string, unknown> = {
+            vehicle_id,
+            vehicle_name: vehicle.name,
+            vehicle_image: Array.isArray(vehicle.images) ? vehicle.images[0] : undefined,
+            guest_name: user.full_name || 'Guest User',
+            guest_email: user.email,
+            guest_phone: body.guest_phone || user.phone_number,
+            service_date,
+            start_time,
+            duration_tier,
+            duration_days: duration_tier === 'multi_day' ? Number(duration_days) : 1,
+            start_at: new Date(win.startMs).toISOString(),
+            end_at: new Date(win.endMs).toISOString(),
+            pickup_location: pickup_location || undefined,
+            dropoff_location: dropoff_location || undefined,
+            passengers: Number(passengers) || 1,
+            special_requests: special_requests || '',
+            total_price,
+            status: 'pending',
+            payment_status: 'unpaid',
+            linked_property_booking_id: linked_property_booking_id || undefined,
+        };
+
+        // Add-ons are pre-approved, so the payment clock starts immediately.
+        if (isAddOn) {
+            payload.approved_at = nowIso;
+            payload.payment_deadline = new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString();
+            payload.admin_response = 'Added to your existing stay — no approval needed.';
+        }
+
+        const ride = await base44.entities.RideBooking.create(payload);
+
+        if (isAddOn) {
+            return json({
+                success: true,
+                data: { ride_booking_id: ride.id, total_price, next: 'payment' },
+            });
+        }
+
+        const messageId = await notifyAdmin({ ride, vehicle, startMs: win.startMs, endMs: win.endMs });
+        if (messageId) {
+            try {
+                await base44.asServiceRole.entities.RideBooking.update(ride.id, { telegram_message_id: messageId });
+            } catch (err) {
+                console.warn('Could not stamp telegram_message_id (non-fatal):', err);
+            }
+        }
+
+        return json({
+            success: true,
+            data: {
+                ride_booking_id: ride.id,
+                total_price,
+                next: 'await_approval',
+                telegram_sent: !!messageId,
+            },
+        });
+    } catch (error) {
+        console.error('checkRideAvailability error:', error);
+        return json({ success: false, error: 'Internal server error', details: (error as Error).message }, 500);
+    }
+});

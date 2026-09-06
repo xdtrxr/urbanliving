@@ -43,10 +43,15 @@
       "type": "number",
       "description": "For multi_day bookings, the total number of days. Always 1 for 12hr/24hr."
     },
+    "start_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Computed pickup datetime, derived from service_date + start_time pinned to WAT (UTC+1). Stored rather than re-derived so overlap queries and bucketing are cheap and every consumer agrees on the same instant."
+    },
     "end_at": {
       "type": "string",
       "format": "date-time",
-      "description": "Computed end datetime in ISO format. Drives conflict detection."
+      "description": "Computed end datetime in ISO format. start_at + the duration implied by duration_tier. Drives conflict detection."
     },
     "pickup_location": {
       "type": "object",
@@ -96,7 +101,15 @@
     "approved_at": {
       "type": "string",
       "format": "date-time",
-      "description": "When admin approved the availability request — same role as Booking.approved_at"
+      "description": "When admin approved the request — same role as Booking.approved_at. Also the decision idempotency guard: a row with approved_at set has already been decided."
+    },
+    "admin_response": {
+      "type": "string",
+      "description": "Decision message shown to the guest. Lives here rather than on a separate request entity — Rides deliberately uses one row per request, unlike the apartment flow's AvailabilityRequest + Booking split."
+    },
+    "telegram_message_id": {
+      "type": "string",
+      "description": "Id of the admin Telegram message, so it can be edited in place when the decision is made."
     },
     "payment_deadline": {
       "type": "string",
@@ -105,7 +118,18 @@
     },
     "payment_started_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "Stamped server-side by startRidePayment on first open of the payment page. Never written by the client."
+    },
+    "paid_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When payment cleared. Revenue reporting keys off this."
+    },
+    "payment_method": {
+      "type": "string",
+      "enum": ["paystack", "other"],
+      "default": "paystack"
     },
     "cancel_reason": {
       "type": "string",
@@ -124,6 +148,16 @@
       "type": "string",
       "format": "date-time",
       "description": "When admin assigned a driver. Used by the UI to know when to surface the driver contact card."
+    },
+    "payment_warning_pushed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Idempotency stamp for the 5-minute payment warning push, so a re-run of the sweep cannot double-notify."
+    },
+    "driver_arrival_push_sent_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Idempotency stamp for the driver-arriving-soon push (~30 min before start_at)."
     },
     "linked_property_booking_id": {
       "type": "string",
