@@ -15,7 +15,10 @@ function Chip({ icon: Icon, children }) {
   );
 }
 
-export default function VehicleCard({ vehicle }) {
+// propertyBookingId, when set, means the guest arrived here from a confirmed
+// stay and is adding a ride to it. It has to survive every hop from Bookings
+// through to RideCheckout, which is the only place that can act on it.
+export default function VehicleCard({ vehicle, propertyBookingId }) {
   const hero = vehicle.images?.[0]
     || 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=800';
   const hasAC = (vehicle.amenities || []).includes('air_conditioning');
@@ -23,7 +26,13 @@ export default function VehicleCard({ vehicle }) {
   const price24 = vehicle.price_24hr_ngn;
 
   return (
-    <Link to={createPageUrl(`Vehicle?id=${vehicle.id}`)} className="block group">
+    <Link
+      to={`${createPageUrl('Vehicle')}?${new URLSearchParams({
+        id: vehicle.id,
+        ...(propertyBookingId ? { property_booking_id: propertyBookingId } : {}),
+      })}`}
+      className="block group"
+    >
       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group-hover:-translate-y-0.5">
         {/* Hero image */}
         <div className="aspect-[4/3] bg-slate-100 dark:bg-slate-800 overflow-hidden relative">

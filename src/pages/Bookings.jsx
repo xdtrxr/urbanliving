@@ -422,8 +422,10 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                       </Button>
                     </Link>
                   )}
+                  {/* createPageUrl lowercases everything it is given, ids
+                      included, so the query string is built outside it. */}
                   {booking.status === 'confirmed' && (
-                    <Link to={createPageUrl(`PlanTrip?property_booking_id=${booking.id}`)}>
+                    <Link to={`${createPageUrl('PlanTrip')}?${new URLSearchParams({ property_booking_id: booking.id })}`}>
                       <Button size="sm" className="rounded-xl bg-slate-900 hover:bg-slate-800">
                         <Compass className="w-4 h-4 mr-2" />
                         Add a Ride

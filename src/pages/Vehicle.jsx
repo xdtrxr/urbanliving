@@ -47,6 +47,9 @@ export default function VehiclePage() {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const location = useLocation();
+  // Present when the guest came from a confirmed stay via "Add a Ride".
+  // RideCheckout turns it into an add-on, which skips admin approval.
+  const addOnBookingId = new URLSearchParams(location.search).get('property_booking_id') || '';
 
   useEffect(() => {
     const loadVehicle = async () => {
@@ -110,14 +113,22 @@ export default function VehiclePage() {
         ? multiDayTotal
         : tier24;
 
-  const checkoutHref = `${createPageUrl('RideCheckout')}?vehicle=${vehicle.id}&tier=${selectedTier}${
-    selectedTier === 'multi_day' ? `&days=${multiDayCount}` : ''
-  }`;
+  const checkoutHref = `${createPageUrl('RideCheckout')}?${new URLSearchParams({
+    vehicle: vehicle.id,
+    tier: selectedTier,
+    ...(selectedTier === 'multi_day' ? { days: String(multiDayCount) } : {}),
+    ...(addOnBookingId ? { property_booking_id: addOnBookingId } : {}),
+  })}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
-        <Link to={createPageUrl('PlanTrip')}>
+        {/* Going back must not drop add-on mode, or the guest silently ends
+            up requesting a standalone ride that needs approval. */}
+        <Link to={addOnBookingId
+          ? `${createPageUrl('PlanTrip')}?${new URLSearchParams({ property_booking_id: addOnBookingId })}`
+          : createPageUrl('PlanTrip')}
+        >
           <Button variant="ghost" className="mb-6 flex items-center gap-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:text-white">
             <ArrowLeft className="w-4 h-4" />
             Back to all vehicles

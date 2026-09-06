@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -59,6 +60,12 @@ function FilterChip({ icon: Icon, label, isActive, children }) {
 }
 
 export default function PlanTripPage() {
+  // Carried in from Bookings' "Add a Ride". PlanTrip does nothing with it but
+  // hand it to each card — the chain has to stay unbroken all the way to
+  // RideCheckout or the ride silently becomes a standalone one needing
+  // approval, which is the opposite of what the guest asked for.
+  const [searchParams] = useSearchParams();
+  const addOnBookingId = searchParams.get('property_booking_id') || '';
   const [vehicles, setVehicles] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -124,6 +131,18 @@ export default function PlanTripPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Add-on mode. Worth saying out loud, because the difference the guest
+            will actually notice is that no admin has to approve this one. */}
+        {addOnBookingId && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 p-3 sm:p-4">
+            <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-emerald-900 dark:text-emerald-100">
+              <span className="font-semibold">Adding a ride to your stay.</span>{' '}
+              Pick a vehicle and you&apos;ll go straight to payment — no waiting on approval.
+            </p>
+          </div>
+        )}
+
         {/* Hero header — explains what this surface is for */}
         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-200 dark:border-slate-800/50 p-5 sm:p-8 mb-6 sm:mb-8">
           <div className="flex flex-col gap-5 sm:gap-6">
@@ -273,7 +292,7 @@ export default function PlanTripPage() {
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ delay: Math.min(index * 0.05, 0.3) }}
                 >
-                  <VehicleCard vehicle={vehicle} />
+                  <VehicleCard vehicle={vehicle} propertyBookingId={addOnBookingId} />
                 </motion.div>
               ))}
             </div>
