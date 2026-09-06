@@ -52,6 +52,7 @@ import ConfirmedBookingsAdmin from '@/components/admin/ConfirmedBookingsAdmin';
 import VehiclesAdmin from '@/components/admin/VehiclesAdmin';
 import WithdrawalsAdmin from '@/components/admin/WithdrawalsAdmin';
 import PlatformStatsAdmin from '@/components/admin/PlatformStatsAdmin';
+import RidesAdmin from '@/components/admin/RidesAdmin';
 import { Car } from 'lucide-react';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -1110,7 +1111,7 @@ export default function AdminPage() {
             mobile gets an explicit pt on each TabsContent for breathing
             room. */}
         <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 sm:space-y-8 mb-8">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-1 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-1 h-auto p-1">
             <TabsTrigger value="overview">
               <TrendingUp className="w-4 h-4 mr-2" />
               Overview
@@ -1129,6 +1130,10 @@ export default function AdminPage() {
               <Car className="w-4 h-4 mr-2" />
               Vehicles
             </TabsTrigger>
+            <TabsTrigger value="rides">
+              <Car className="w-4 h-4 mr-2" />
+              Rides
+            </TabsTrigger>
             <TabsTrigger value="leads">
               <Users className="w-4 h-4 mr-2" />
               Leads
@@ -1142,6 +1147,10 @@ export default function AdminPage() {
 
           <TabsContent value="overview" className="mt-6 sm:mt-4">
             <PlatformStatsAdmin />
+          </TabsContent>
+
+          <TabsContent value="rides" className="mt-6 sm:mt-4">
+            <RidesAdmin />
           </TabsContent>
 
           <TabsContent value="vehicles" className="mt-6 sm:mt-4">
