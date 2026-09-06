@@ -9,13 +9,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Loader2, RefreshCw, Car, Clock, MapPin, Mail, Phone, Users,
-  Check, X, CalendarClock, UserPlus,
+  Check, X, CalendarClock, UserPlus, Inbox, IdCard,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import DriversAdmin from '@/components/admin/DriversAdmin';
 
 // RidesAdmin — the in-app twin of the Telegram approve/reject keyboard.
 //
@@ -144,7 +146,7 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
           </div>
         ) : relevant.length === 0 ? (
           <p className="text-sm text-slate-600 dark:text-slate-300 py-6 text-center">
-            No approved, active drivers{city ? ` in ${city}` : ''}. Add one under Vehicles → Drivers first.
+            No approved, active drivers{city ? ` in ${city}` : ''}. Add one on the Drivers tab, and make sure they are both active and approved.
           </p>
         ) : (
           <div className="space-y-2 max-h-80 overflow-y-auto">
@@ -183,7 +185,7 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
   );
 }
 
-export default function RidesAdmin() {
+function RideRequestsPanel() {
   const { toast } = useToast();
   const [rides, setRides] = useState([]);
   const [counts, setCounts] = useState({});
@@ -481,5 +483,35 @@ export default function RidesAdmin() {
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+  );
+}
+
+// The Rides tab holds two jobs that share nothing but a subject: acting on
+// incoming requests, and maintaining the roster those requests get dispatched
+// to. Nesting them here rather than adding an eighth top-level Admin tab keeps
+// the header from wrapping on a phone, which is where these decisions actually
+// get made.
+export default function RidesAdmin() {
+  const [innerTab, setInnerTab] = useState('requests');
+
+  return (
+    <Tabs value={innerTab} onValueChange={setInnerTab} className="space-y-4">
+      <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsTrigger value="requests">
+          <Inbox className="w-4 h-4 mr-2" /> Requests
+        </TabsTrigger>
+        <TabsTrigger value="drivers">
+          <IdCard className="w-4 h-4 mr-2" /> Drivers
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="requests">
+        <RideRequestsPanel />
+      </TabsContent>
+
+      <TabsContent value="drivers">
+        <DriversAdmin />
+      </TabsContent>
+    </Tabs>
   );
 }
