@@ -1,8 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
-// Auto-cancels pending bookings whose payment_deadline has passed and notifies
-// admin via Telegram. Runs on a schedule (Deno.cron) and is also exposed as a
-// manual POST endpoint for testing or admin re-runs.
+// The platform's 5-minute sweep. Despite the name it now covers three things:
+//
+//   1. Stays  — auto-cancel past the payment deadline, plus a 5-minute warning.
+//   2. Rides  — the same two passes against RideBooking.
+//   3. Rides  — a driver-arriving-soon push ~30 minutes before pickup.
+//
+// The name is kept deliberately. It is the identifier the Base44 dashboard
+// schedule points at, and renaming it would silently detach the cron — which
+// for rides means approved bookings holding vehicles forever.
+//
+// Runs on a schedule and is also exposed as a manual POST for admin re-runs.
 
 const APP_BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://urbanstays.io';
 const bookingLink = (bookingId: string) => `${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(bookingId)}#booking-${encodeURIComponent(bookingId)}`;
@@ -78,6 +86,126 @@ async function fetchAll(entity: any, query: Record<string, unknown> = {}): Promi
         if (page.length < PAGE) break;
     }
     return out;
+}
+
+// ── Rides ───────────────────────────────────────────────────────────────────
+// RideBooking stores payment_deadline directly rather than recomputing it from
+// approved_at like stays do, so there is one authoritative value here and no
+// formula to keep in sync across files.
+
+// Fires the "driver arriving soon" push at a nominal 30 minutes out. The
+// window is 35 so a cron tick running a few minutes late still catches the
+// ride rather than skipping straight past it — same reasoning as the
+// 6-minute payment warning band above.
+const ARRIVAL_WINDOW_MS = 35 * 60 * 1000;
+
+async function notifyAdminRideExpired(ride: any) {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
+    if (!token || !chatId) return;
+    const text = `⏰ *RIDE PAYMENT EXPIRED*\n\n` +
+        `Ride \`${ride.id}\` was auto-cancelled.\n` +
+        `• Vehicle: ${ride.vehicle_name}\n` +
+        `• Guest: ${ride.guest_name} (${ride.guest_email})\n` +
+        `• Value: ₦${(Number(ride.total_price) || 0).toLocaleString()}\n\n` +
+        `The vehicle is free again for that window.`;
+    try {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+        });
+    } catch (err) {
+        console.error('Ride expiry notify failed:', err);
+    }
+}
+
+async function runRideSweep(sdk: any): Promise<{ scanned: number; cancelled: number; warned: number; arriving: number }> {
+    const now = Date.now();
+    let cancelled = 0;
+    let warned = 0;
+    let arriving = 0;
+
+    // Pass 1 + 2 — unpaid rides that have been approved are on the clock.
+    const pending = await fetchAll(sdk.asServiceRole.entities.RideBooking, { status: 'pending' });
+    for (const r of pending) {
+        if (!r.approved_at || !r.payment_deadline) continue;
+        const deadlineMs = Date.parse(r.payment_deadline);
+        if (Number.isNaN(deadlineMs)) continue;
+        const remaining = deadlineMs - now;
+
+        if (remaining > 0 && remaining <= WARNING_WINDOW_MS && !r.payment_warning_pushed_at) {
+            const minutesLeft = Math.max(1, Math.ceil(remaining / 60000));
+            try {
+                // Stamp before pushing: a push failure must not cause a retry
+                // loop that spams the guest on every subsequent tick.
+                await sdk.asServiceRole.entities.RideBooking.update(r.id, {
+                    payment_warning_pushed_at: new Date().toISOString(),
+                });
+                await tryPush(sdk, {
+                    user_email: r.guest_email,
+                    title: `⏰ ${minutesLeft} min to pay`,
+                    body: `Your ${r.vehicle_name} booking is about to be released.`,
+                    url: `/Bookings#ride-${r.id}`,
+                    tag: `ride-warn-${r.id}`,
+                });
+                warned += 1;
+            } catch (err) {
+                console.warn(`Ride warning failed for ${r.id} (non-fatal):`, err);
+            }
+        }
+
+        if (remaining > 0) continue;
+
+        try {
+            await sdk.asServiceRole.entities.RideBooking.update(r.id, {
+                status: 'cancelled',
+                cancel_reason: 'payment_expired',
+            });
+            await notifyAdminRideExpired(r);
+            await tryPush(sdk, {
+                user_email: r.guest_email,
+                title: '⏰ Ride released',
+                body: `Payment wasn't completed, so the ${r.vehicle_name} is back in the pool. Tap to rebook.`,
+                url: '/PlanTrip',
+                tag: `ride-expired-${r.id}`,
+            });
+            cancelled += 1;
+            console.log(`⏰ Auto-cancelled expired ride ${r.id}`);
+        } catch (err) {
+            console.error(`Failed to auto-cancel ride ${r.id}:`, err);
+        }
+    }
+
+    // Pass 3 — driver arriving soon, for paid rides with a driver assigned.
+    const confirmed = await fetchAll(sdk.asServiceRole.entities.RideBooking, {
+        status: 'confirmed', payment_status: 'paid',
+    });
+    for (const r of confirmed) {
+        if (!r.driver_id || r.driver_arrival_push_sent_at) continue;
+        const startMs = Date.parse(r.start_at || '');
+        if (Number.isNaN(startMs)) continue;
+        const until = startMs - now;
+        if (until <= 0 || until > ARRIVAL_WINDOW_MS) continue;
+        try {
+            await sdk.asServiceRole.entities.RideBooking.update(r.id, {
+                driver_arrival_push_sent_at: new Date().toISOString(),
+            });
+            const mins = Math.max(1, Math.round(until / 60000));
+            await tryPush(sdk, {
+                user_email: r.guest_email,
+                title: '🚗 Your ride is soon',
+                body: `Your ${r.vehicle_name} is due in about ${mins} minutes. Tap for your driver's details.`,
+                url: `/Bookings#ride-${r.id}`,
+                tag: `ride-arriving-${r.id}`,
+            });
+            arriving += 1;
+        } catch (err) {
+            console.warn(`Arrival push failed for ride ${r.id} (non-fatal):`, err);
+        }
+    }
+
+    return { scanned: pending.length + confirmed.length, cancelled, warned, arriving };
 }
 
 async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number; warned: number }> {
@@ -206,7 +334,17 @@ Deno.serve(async (req) => {
     }
 
     try {
-        const result = await runSweep(sdk);
+        const stays = await runSweep(sdk);
+        // Rides sweep independently: a failure in one must not silently skip
+        // the other, since both are holding inventory.
+        let rides = { scanned: 0, cancelled: 0, warned: 0, arriving: 0, error: undefined as string | undefined };
+        try {
+            rides = { ...rides, ...(await runRideSweep(sdk)) };
+        } catch (rideErr) {
+            console.error('Ride sweep failed:', rideErr);
+            rides.error = (rideErr as Error).message;
+        }
+        const result = { stays, rides };
         return new Response(JSON.stringify({ success: true, data: result }), { status: 200, headers });
     } catch (error) {
         console.error('autoCancelExpiredBookings error:', error);
