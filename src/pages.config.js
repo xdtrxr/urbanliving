@@ -10,6 +10,7 @@ const AIChatConcierge = lazy(() => import('./pages/AIChatConcierge'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const PlanTrip = lazy(() => import('./pages/PlanTrip'));
 const Vehicle = lazy(() => import('./pages/Vehicle'));
+const RideCheckout = lazy(() => import('./pages/RideCheckout'));
 const Admin = lazy(() => import('./pages/Admin'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 const FAQ = lazy(() => import('./pages/FAQ'));
@@ -39,6 +40,7 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "PlanTrip": PlanTrip,
     "Vehicle": Vehicle,
+    "RideCheckout": RideCheckout,
     "Admin": Admin,
     "PrivacyPolicy": PrivacyPolicy,
     "FAQ": FAQ,
