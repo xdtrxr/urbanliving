@@ -9,6 +9,7 @@ import { Calendar, MapPin, Users, Clock, ExternalLink, Compass, X, AlertCircle, 
 import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import RideBookingsSection from "@/components/booking/RideBookingsSection";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertDialog,
@@ -834,6 +835,8 @@ export default function BookingsPage() {
             </AnimatePresence>
           </TabsContent>
         </Tabs>
+
+        <RideBookingsSection />
 
         <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
           <AlertDialogContent>
