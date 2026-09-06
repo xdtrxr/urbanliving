@@ -94,6 +94,20 @@ Deno.serve(async (req) => {
             rides = await fetchAll(base44.entities.RideBooking, { guest_email: user.email });
         }
 
+        // Admins already have full read on Driver, so hiding the assignment
+        // from them protects nothing and just costs a round trip. Resolve the
+        // names once for the whole page instead of per row.
+        const driverNames = new Map<string, string>();
+        if (scope === 'all') {
+            const ids = new Set(rides.map((r) => r.driver_id).filter(Boolean));
+            if (ids.size > 0) {
+                const roster = await fetchAll(base44.asServiceRole.entities.Driver, {});
+                for (const d of roster) {
+                    if (ids.has(d.id)) driverNames.set(d.id, d.full_name || '');
+                }
+            }
+        }
+
         const nowMs = Date.now();
         const counts: Record<string, number> = {
             'pending-approval': 0, upcoming: 0, current: 0, past: 0, cancelled: 0,
@@ -109,9 +123,12 @@ Deno.serve(async (req) => {
                 // them and risks disagreeing about the timezone.
                 start_at: w ? new Date(w.startMs).toISOString() : null,
                 end_at: w ? new Date(w.endMs).toISOString() : null,
-                // Never leak driver identity through the list endpoint — the
-                // reveal is gated behind getRideDriverContact.
-                driver_id: undefined,
+                // A guest never learns driver identity from the list — the
+                // reveal is gated behind getRideDriverContact, which also
+                // checks paid + assigned. Admins keep the id and a name so the
+                // reassignment dialog can say who is being replaced.
+                driver_id: scope === 'all' ? r.driver_id : undefined,
+                driver_name: scope === 'all' ? (driverNames.get(r.driver_id) || undefined) : undefined,
                 driver_assigned: !!r.driver_id,
             };
         });

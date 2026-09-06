@@ -103,7 +103,7 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
       });
       if (res?.data?.success) {
         toast({
-          title: 'Driver assigned',
+          title: ride?.driver_id ? 'Driver changed' : 'Driver assigned',
           description: `${driver.full_name} is on this ride. The guest has been emailed and notified.`,
         });
         onAssigned();
@@ -130,11 +130,14 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
     <Dialog open={!!ride} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Assign a driver</DialogTitle>
+          <DialogTitle>{ride?.driver_id ? 'Change driver' : 'Assign a driver'}</DialogTitle>
           <DialogDescription>
             {ride && (
               <>
                 {ride.vehicle_name} · {fmtWindow(ride.start_at, ride.end_at)}
+                {ride.driver_id && (
+                  <> · currently {ride.driver_name || 'assigned'}</>
+                )}
               </>
             )}
           </DialogDescription>
@@ -163,18 +166,29 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{d.full_name}</p>
+                  <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">
+                    {d.full_name}
+                    {d.id === ride?.driver_id && (
+                      <span className="ml-2 text-xs font-normal text-emerald-600 dark:text-emerald-400">
+                        on this ride
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                     {[d.city, d.years_experience ? `${d.years_experience} yrs` : null,
                       d.trips_completed ? `${d.trips_completed} trips` : null].filter(Boolean).join(' · ')}
                   </p>
                 </div>
                 <Button
-                  size="sm" disabled={saving === d.id}
+                  size="sm"
+                  variant={d.id === ride?.driver_id ? 'outline' : 'default'}
+                  disabled={saving === d.id || d.id === ride?.driver_id}
                   onClick={() => assign(d)}
                   className="rounded-xl flex-shrink-0"
                 >
-                  {saving === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Assign'}
+                  {saving === d.id
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : d.id === ride?.driver_id ? 'Assigned' : 'Assign'}
                 </Button>
               </div>
             ))}
@@ -359,7 +373,9 @@ function RideRequestsPanel() {
                           <Badge variant="outline" className="text-xs">Add-on to a stay</Badge>
                         )}
                         {r.driver_assigned && (
-                          <Badge variant="outline" className="text-xs">Driver assigned</Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {r.driver_name ? `Driver: ${r.driver_name}` : 'Driver assigned'}
+                          </Badge>
                         )}
                       </div>
 
@@ -398,14 +414,24 @@ function RideRequestsPanel() {
                       )}
                     </div>
 
-                    {r.payment_status === 'paid' && r.status === 'confirmed' && !r.driver_assigned && (
+                    {r.payment_status === 'paid' && r.status === 'confirmed'
+                      && (!r.driver_assigned || r.bucket === 'upcoming' || r.bucket === 'current') && (
                       <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
+                        {/* Reassignment stays available right up to the end of the
+                            ride: a driver calling in sick on the morning is the
+                            case this exists for. assignRideDriver re-runs the
+                            overlap and city checks and re-pushes the guest, so
+                            swapping is as safe as the first assignment. */}
                         <Button
                           size="sm"
+                          variant={r.driver_assigned ? 'outline' : 'default'}
                           onClick={() => setAssigning(r)}
-                          className="rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-950 text-white w-full sm:w-auto"
+                          className={r.driver_assigned
+                            ? 'rounded-xl w-full sm:w-auto'
+                            : 'rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-950 text-white w-full sm:w-auto'}
                         >
-                          <UserPlus className="w-4 h-4 mr-2" /> Assign driver
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          {r.driver_assigned ? 'Change driver' : 'Assign driver'}
                         </Button>
                       </div>
                     )}
