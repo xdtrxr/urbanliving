@@ -40,6 +40,12 @@ export default function PaymentPage() {
   const [error, setError] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // This page serves both stays and rides. A ride is identified by
+  // ride_booking_id in the URL; every stay branch below is left byte-for-byte
+  // as it was, so the apartment path is unchanged.
+  const rideBookingId = searchParams.get('ride_booking_id');
+  const isRide = !!rideBookingId;
   const [paystackPublicKey, setPaystackPublicKey] = useState(null);
 
   // Payment form data
@@ -154,6 +160,32 @@ export default function PaymentPage() {
         return;
       }
 
+      // Rides: one server call stamps payment_started_at, extends the
+      // deadline and returns the price. Nothing about a ride's payment window
+      // is client-writable, unlike the stay path below.
+      if (isRide) {
+        const startRes = await base44.functions.invoke('startRidePayment', {
+          ride_booking_id: rideBookingId,
+        });
+        if (!startRes?.data?.success) {
+          setError(startRes?.data?.error || 'This ride is not ready for payment.');
+          setIsPageLoading(false);
+          return;
+        }
+        const r = startRes.data.data;
+        setBookingData({
+          id: rideBookingId,
+          total_price: Number(r.total_price) || 0,
+          property_title: r.vehicle_name || 'Your ride',
+          guest_email: user.email,
+        });
+        const dl = Date.parse(r.payment_deadline || '');
+        if (!Number.isNaN(dl)) setDeadlineMs(dl);
+        setPaymentDetails({ email: user.email, fullName: user.full_name || '' });
+        setIsPageLoading(false);
+        return;
+      }
+
       // Fetch the full booking record so we can compute the payment deadline
       // and stamp payment_started_at on first visit.
       let fullBooking = null;
@@ -245,17 +277,24 @@ export default function PaymentPage() {
       if (bookingData.id && !bookingData.id.startsWith('temp_')) {
         // Paystack is the only processor — server verifies the transaction
         // (authoritative), notifies admin, and triggers the referral reward.
-        const result = await base44.functions.invoke('verifyPaystackPayment', {
-          booking_id: bookingData.id,
-          reference: transactionRef,
-        });
+        const result = isRide
+          ? await base44.functions.invoke('verifyRidePayment', {
+              ride_booking_id: bookingData.id,
+              reference: transactionRef,
+            })
+          : await base44.functions.invoke('verifyPaystackPayment', {
+              booking_id: bookingData.id,
+              reference: transactionRef,
+            });
         if (!result?.data?.success) {
           throw new Error(result?.data?.error || 'Payment verification failed');
         }
         dlog('✅ Payment verified server-side');
-        // Award client-driven loyalty milestones (5% + first-booking + 3-in-month)
+        // Award client-driven loyalty milestones (5% + first-booking + 3-in-month).
+        // Stays only — verifyRidePayment awards ride loyalty server-side, and
+        // these milestones are stay-specific (first booking, 3-in-a-month).
         try {
-          await awardBookingMilestones({
+          if (!isRide) await awardBookingMilestones({
             id: bookingData.id,
             total_price: bookingData.total_price,
           });
@@ -335,7 +374,10 @@ export default function PaymentPage() {
         currency: 'NGN',
         ref: paymentReference,
         metadata: {
-          booking_id: bookingData.id,
+          // paystackWebhook routes on which of these two keys is present.
+          ...(isRide
+            ? { ride_booking_id: bookingData.id }
+            : { booking_id: bookingData.id }),
           property_title: bookingData.property_title,
           custom_fields: [
             {
@@ -472,14 +514,35 @@ export default function PaymentPage() {
                 <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
               </div>
               <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Payment Successful</h2>
-              <p className="text-sm text-slate-600 dark:text-slate-300">Booking ID: {bookingData.id}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                {isRide ? 'Ride' : 'Booking'} ID: {bookingData.id}
+              </p>
+              {isRide && (
+                <p className="text-sm text-slate-600 dark:text-slate-300 mt-3">
+                  We&apos;re assigning your driver now — you&apos;ll get their name and number
+                  by email and notification as soon as they&apos;re confirmed.
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          <IdUploadGate
-            bookingId={bookingData.id}
-            onComplete={() => navigate(createPageUrl('Bookings'))}
-          />
+          {/* Rides skip the ID gate: KYC is captured on the guest's first
+              stay, and IdUploadGate writes to a Booking row — pointing it at
+              a ride id would stamp nothing and strand the guest on a form
+              that never completes. */}
+          {isRide ? (
+            <Button
+              onClick={() => navigate(createPageUrl('Bookings'))}
+              className="w-full rounded-xl"
+            >
+              View my ride
+            </Button>
+          ) : (
+            <IdUploadGate
+              bookingId={bookingData.id}
+              onComplete={() => navigate(createPageUrl('Bookings'))}
+            />
+          )}
         </motion.div>
       </div>
     );
