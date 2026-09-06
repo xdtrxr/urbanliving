@@ -232,6 +232,18 @@ Deno.serve(async (req) => {
     const metadata = event?.data?.metadata || {};
     const bookingId: string | undefined = metadata?.booking_id;
 
+    // Rides carry ride_booking_id instead of booking_id. This must be routed
+    // before the stay path below, which would otherwise discard a ride payment
+    // as 'missing_fields' and leave it unconfirmed until the guest happened to
+    // hit verifyRidePayment.
+    const rideBookingId: string | undefined = metadata?.ride_booking_id;
+    if (reference && rideBookingId) {
+        if (currency && currency !== 'NGN') {
+            return ack({ skipped: `bad_currency:${currency}` });
+        }
+        return await handleRidePayment(createClientFromRequest(req), rideBookingId, reference, amountKobo, ack);
+    }
+
     if (!reference || !bookingId) {
         console.warn('Webhook missing reference or booking_id', { reference, bookingId });
         return ack({ skipped: 'missing_fields' });
@@ -397,3 +409,190 @@ Deno.serve(async (req) => {
         return ack({ error: (err as Error).message });
     }
 });
+
+
+// === Ride payment handling ===
+// Server-to-server twin of base44/functions/verifyRidePayment/entry.ts, which
+// runs the same block when the client reports back from the Paystack popup.
+// Base44 function dirs are isolated and cannot share a module, so this is
+// duplicated. KEEP THE TWO IN LOCKSTEP — the equivalent stays pair has already
+// drifted in the ordering of its referral writes.
+
+const RIDE_REFERRAL_RATE = 0.05;
+const RIDE_REFERRER_LOYALTY_BONUS = 250;
+const GUEST_RIDE_POINTS = 500;
+
+async function handleRidePayment(
+    sdk: any,
+    rideId: string,
+    reference: string,
+    amountKobo: number,
+    ack: (extra?: Record<string, unknown>) => Response,
+): Promise<Response> {
+    const ride = await sdk.asServiceRole.entities.RideBooking.get(rideId);
+    if (!ride) return ack({ skipped: 'ride_not_found' });
+    if (ride.payment_status === 'paid' && ride.status === 'confirmed') {
+        return ack({ skipped: 'already_paid' });
+    }
+
+    const expectedKobo = Math.round((Number(ride.total_price) || 0) * 100);
+    if (amountKobo !== expectedKobo) {
+        console.error(`Ride webhook amount mismatch: expected ${expectedKobo}, got ${amountKobo}`);
+        return ack({ skipped: 'amount_mismatch' });
+    }
+
+    const nowIso = new Date().toISOString();
+    await sdk.asServiceRole.entities.RideBooking.update(ride.id, {
+        payment_status: 'paid',
+        status: 'confirmed',
+        payment_method: 'paystack',
+        transaction_hash: reference,
+        paid_at: nowIso,
+    });
+
+    // Race arbitration against verifyRidePayment.
+    const after = await sdk.asServiceRole.entities.RideBooking.get(ride.id);
+    if (after?.transaction_hash !== reference) {
+        return ack({ skipped: 'lost_race', ride_booking_id: ride.id });
+    }
+
+    const fmtWhen = (iso: string) => {
+        try {
+            return new Date(iso).toLocaleString('en-GB', {
+                timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short',
+            });
+        } catch { return iso; }
+    };
+
+    // Admin notify
+    try {
+        const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+        const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
+        if (token && chatId) {
+            const text = `💰 *RIDE PAID (webhook)*\n\n` +
+                `Ride \`${ride.id}\`\n` +
+                `• Vehicle: ${ride.vehicle_name}\n` +
+                `• Guest: ${ride.guest_name} (${ride.guest_email})\n` +
+                `• Mobile: ${ride.guest_phone || 'Not provided'}\n` +
+                `• Pickup: ${fmtWhen(ride.start_at)}\n` +
+                `• Amount: ₦${(Number(ride.total_price) || 0).toLocaleString()}\n` +
+                `• Paystack ref: \`${reference}\`\n\n` +
+                `⚠️ *Assign a driver* — the guest cannot see driver details until you do.`;
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+            });
+        }
+    } catch (err) {
+        console.error('Ride payment notify failed (non-fatal):', err);
+    }
+
+    // Guest confirmation email
+    try {
+        const pickup = [ride.pickup_location?.address, ride.pickup_location?.area, ride.pickup_location?.city]
+            .filter(Boolean).join(', ');
+        await sdk.integrations.Core.SendEmail({
+            to: ride.guest_email,
+            subject: `Ride confirmed — ${ride.vehicle_name}`,
+            body: `Hi ${ride.guest_name || 'there'},\n\n` +
+                `Payment received — your ride is confirmed. 🎉\n\n` +
+                `🔖 Status: CONFIRMED & PAID\n` +
+                `🚗 Vehicle: ${ride.vehicle_name}\n` +
+                `🕒 Pickup: ${fmtWhen(ride.start_at)}\n` +
+                (pickup ? `📍 From: ${pickup}\n` : '') +
+                `💰 Paid: ₦${(Number(ride.total_price) || 0).toLocaleString()}\n\n` +
+                `We're assigning your driver now. You'll get their name and number here and in the app as soon as they're confirmed.\n\n` +
+                `👉 View your ride: ${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(ride.id)}#ride-${encodeURIComponent(ride.id)}\n\n` +
+                `— Urban Stays`,
+            from_name: 'Urban Stays',
+        });
+    } catch (err) {
+        console.warn('Ride confirmation email failed (non-fatal):', err);
+    }
+
+    await tryPush(sdk, {
+        user_email: ride.guest_email,
+        title: '✅ Ride confirmed',
+        body: `${ride.vehicle_name} is booked. We'll share your driver's details shortly.`,
+        url: `/Bookings#ride-${ride.id}`,
+        tag: `ride-paid-${ride.id}`,
+    });
+
+    // Guest loyalty — dedup key is (email, 'booking', ride.id). Ride and
+    // booking ids share a namespace, so the key stays unique.
+    try {
+        const users = await sdk.asServiceRole.entities.User.filter({ email: ride.guest_email });
+        const guest = users[0];
+        if (guest) {
+            const existing = await sdk.asServiceRole.entities.LoyaltyTransaction.filter({
+                user_email: ride.guest_email, transaction_type: 'booking', booking_id: ride.id,
+            });
+            if (existing.length === 0) {
+                await sdk.asServiceRole.entities.User.update(guest.id, {
+                    loyalty_points: (Number(guest.loyalty_points) || 0) + GUEST_RIDE_POINTS,
+                });
+                await sdk.asServiceRole.entities.LoyaltyTransaction.create({
+                    user_email: ride.guest_email,
+                    points_earned: GUEST_RIDE_POINTS,
+                    transaction_type: 'booking',
+                    booking_id: ride.id,
+                    description: `Earned ${GUEST_RIDE_POINTS} points from a ride booking (webhook)`,
+                });
+            }
+        }
+    } catch (err) {
+        console.warn('Ride loyalty award failed (non-fatal):', err);
+    }
+
+    // Referral payout
+    try {
+        const guests = await sdk.asServiceRole.entities.User.filter({ email: ride.guest_email });
+        const guest = guests[0];
+        if (guest?.referred_by_code) {
+            const referrers = await sdk.asServiceRole.entities.User.filter({ referral_code: guest.referred_by_code });
+            const referrer = referrers[0];
+            if (referrer) {
+                let rows = await sdk.asServiceRole.entities.Referral.filter({
+                    referrer_email: referrer.email, referred_email: guest.email,
+                });
+                let referral = rows[0];
+                if (!referral) {
+                    referral = await sdk.asServiceRole.entities.Referral.create({
+                        referrer_email: referrer.email, referred_email: guest.email, status: 'signed_up',
+                    });
+                }
+                if (referral.status !== 'booking_completed' && referral.booking_id !== ride.id) {
+                    const amountNGN = Math.round((Number(ride.total_price) || 0) * RIDE_REFERRAL_RATE);
+                    await sdk.asServiceRole.entities.User.update(referrer.id, {
+                        referral_balance_ngn: (Number(referrer.referral_balance_ngn) || 0) + amountNGN,
+                        loyalty_points: (Number(referrer.loyalty_points) || 0) + RIDE_REFERRER_LOYALTY_BONUS,
+                    });
+                    await sdk.asServiceRole.entities.Referral.update(referral.id, {
+                        status: 'booking_completed', booking_id: ride.id, amount_earned_ngn: amountNGN,
+                    });
+                    try {
+                        await sdk.asServiceRole.entities.LoyaltyTransaction.create({
+                            user_email: referrer.email,
+                            points_earned: RIDE_REFERRER_LOYALTY_BONUS,
+                            transaction_type: 'referral',
+                            booking_id: ride.id,
+                            description: `REFERRAL_BONUS — Referred ${guest.email} who booked a ride (webhook)`,
+                        });
+                    } catch { /* log-only */ }
+                    await tryPush(sdk, {
+                        user_email: referrer.email,
+                        title: '🎁 Referral payout',
+                        body: `₦${amountNGN.toLocaleString()} just landed in your referral balance.`,
+                        url: '/Withdrawals',
+                        tag: `referral-${referral.id}`,
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('Ride referral reward failed (non-fatal):', err);
+    }
+
+    return ack({ processed: true, ride_booking_id: ride.id });
+}
