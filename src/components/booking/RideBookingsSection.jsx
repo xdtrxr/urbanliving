@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Car, Clock, MapPin, Users, Loader2, ChevronDown, X, CalendarClock, Compass,
+  CreditCard, Phone, UserRound,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { createPageUrl } from '@/utils';
@@ -39,6 +40,76 @@ const remaining = (ms) => {
   const s = Math.floor((ms % 60000) / 1000);
   return `${m}m ${String(s).padStart(2, '0')}s`;
 };
+
+// Driver details live behind getRideDriverContact rather than coming down
+// with the ride, so this fetches them on demand. The gate is server-side
+// (owner + confirmed + paid + assigned); this component only renders when
+// the ride row already reports driver_assigned, so a denial here means
+// something changed underneath and is worth showing plainly.
+const DriverCard = React.memo(function DriverCard({ rideId }) {
+  const [driver, setDriver] = useState(null);
+  const [state, setState] = useState('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await base44.functions.invoke('getRideDriverContact', { ride_booking_id: rideId });
+        if (cancelled) return;
+        if (res?.data?.success) { setDriver(res.data.data); setState('ready'); }
+        else setState('unavailable');
+      } catch {
+        if (!cancelled) setState('unavailable');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [rideId]);
+
+  if (state === 'loading') {
+    return (
+      <div className="mt-3 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading your driver&apos;s details…
+      </div>
+    );
+  }
+  if (state !== 'ready' || !driver) {
+    return (
+      <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+        Driver details aren&apos;t available yet. We&apos;ll notify you as soon as they are.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-xl p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200 mb-2">
+        Your driver
+      </p>
+      <div className="flex items-center gap-3">
+        {driver.photo ? (
+          <img src={driver.photo} alt="" className="w-11 h-11 rounded-full object-cover flex-shrink-0" />
+        ) : (
+          <div className="w-11 h-11 rounded-full bg-emerald-100 dark:bg-emerald-900/60 flex items-center justify-center flex-shrink-0">
+            <UserRound className="w-5 h-5 text-emerald-700 dark:text-emerald-300" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-slate-900 dark:text-white truncate">{driver.full_name}</p>
+          <p className="text-xs text-slate-600 dark:text-slate-300 truncate">
+            {[driver.years_experience ? `${driver.years_experience} yrs` : null,
+              Array.isArray(driver.languages) && driver.languages.length ? driver.languages.join(', ') : null]
+              .filter(Boolean).join(' · ') || 'Vetted by Urban Stays'}
+          </p>
+        </div>
+        <a href={`tel:${driver.phone}`} className="flex-shrink-0">
+          <Button size="sm" variant="outline" className="rounded-xl border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200">
+            <Phone className="w-4 h-4 mr-1.5" /> Call
+          </Button>
+        </a>
+      </div>
+    </div>
+  );
+});
 
 // Module scope so the 30s refresh does not remount these and reset the
 // countdown — the same reason the stay cards live at module scope.
@@ -118,18 +189,24 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
             <span className="font-semibold text-slate-900 dark:text-white">{ngn(ride.total_price)}</span>
           </div>
 
-          {/* Stage 3 replaces this with a Pay button routed at PaymentPage.
-              Until then an approved ride is settled by arrangement, so say
-              that plainly rather than leaving the guest at a dead end. */}
           {awaitingPayment && (
             <div className="mt-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3">
-              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-0.5">
-                Approved — we&apos;ll be in touch to take payment
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-2">
+                Approved — pay to lock it in
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                Your vehicle is held. Our team will call {ride.guest_phone} shortly to complete the booking.
-              </p>
+              <Link to={`${createPageUrl('PaymentPage')}?${new URLSearchParams({ ride_booking_id: ride.id }).toString()}`}>
+                <Button size="sm" className="rounded-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white w-full sm:w-auto">
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  Pay {ngn(ride.total_price)}
+                </Button>
+              </Link>
             </div>
+          )}
+
+          {/* Driver contact is served by getRideDriverContact, never by the
+              list endpoint — getRideBookings strips driver_id deliberately. */}
+          {ride.driver_assigned && ride.payment_status === 'paid' && (
+            <DriverCard rideId={ride.id} />
           )}
 
           {ride.bucket === 'pending-approval' && (

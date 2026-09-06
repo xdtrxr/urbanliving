@@ -9,10 +9,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Loader2, RefreshCw, Car, Clock, MapPin, Mail, Phone, Users,
-  Check, X, CalendarClock,
+  Check, X, CalendarClock, UserPlus,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 
 // RidesAdmin — the in-app twin of the Telegram approve/reject keyboard.
 //
@@ -36,6 +39,7 @@ const fmtWindow = (startIso, endIso) => {
 
 const BUCKETS = [
   { value: 'pending-approval', label: 'Awaiting decision' },
+  { value: 'needs-driver', label: 'Needs a driver' },
   { value: 'upcoming', label: 'Upcoming' },
   { value: 'current', label: 'In progress' },
   { value: 'past', label: 'Past' },
@@ -51,6 +55,134 @@ const STATUS_STYLE = {
   cancelled: 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-rose-200 dark:border-rose-900',
 };
 
+// AssignDriverDialog — picks a driver for a paid ride.
+//
+// Reads Driver directly rather than through a function: Driver RLS is
+// admin-only for read, so this list is already gated and only ever loads for
+// an admin. Guests never see the roster — their view comes from
+// getRideDriverContact, which returns a narrow projection.
+//
+// Availability is enforced server-side by assignRideDriver (overlap on the
+// driver's other bookings, plus a city match). This dialog pre-filters by city
+// to keep the list short, but does not attempt to predict the overlap check —
+// a clash comes back as DRIVER_DOUBLE_BOOKED with the conflicting window.
+function AssignDriverDialog({ ride, onClose, onAssigned }) {
+  const { toast } = useToast();
+  const [drivers, setDrivers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(null);
+
+  useEffect(() => {
+    if (!ride) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const rows = await base44.entities.Driver.filter(
+          { active: true, admin_approved: true }, 'full_name', 200,
+        );
+        if (!cancelled) setDrivers(Array.isArray(rows) ? rows : []);
+      } catch (err) {
+        console.error('Could not load drivers:', err);
+        if (!cancelled) setDrivers([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ride]);
+
+  const assign = async (driver) => {
+    setSaving(driver.id);
+    try {
+      const res = await base44.functions.invoke('assignRideDriver', {
+        ride_booking_id: ride.id,
+        driver_id: driver.id,
+      });
+      if (res?.data?.success) {
+        toast({
+          title: 'Driver assigned',
+          description: `${driver.full_name} is on this ride. The guest has been emailed and notified.`,
+        });
+        onAssigned();
+      } else {
+        // Server refusals are specific and actionable — show them verbatim
+        // rather than a generic failure.
+        toast({
+          title: 'Could not assign',
+          description: res?.data?.error || 'Please try another driver.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      toast({ title: 'Could not assign', description: err?.message || 'Try again.', variant: 'destructive' });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const city = ride?.pickup_location?.city;
+  const relevant = city ? drivers.filter((d) => !d.city || d.city === city) : drivers;
+
+  return (
+    <Dialog open={!!ride} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Assign a driver</DialogTitle>
+          <DialogDescription>
+            {ride && (
+              <>
+                {ride.vehicle_name} · {fmtWindow(ride.start_at, ride.end_at)}
+              </>
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+          </div>
+        ) : relevant.length === 0 ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300 py-6 text-center">
+            No approved, active drivers{city ? ` in ${city}` : ''}. Add one under Vehicles → Drivers first.
+          </p>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {relevant.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-center gap-3 border border-slate-200 dark:border-slate-800 rounded-xl p-3"
+              >
+                {d.photo ? (
+                  <img src={d.photo} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+                    <UserPlus className="w-4 h-4 text-slate-400" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{d.full_name}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {[d.city, d.years_experience ? `${d.years_experience} yrs` : null,
+                      d.trips_completed ? `${d.trips_completed} trips` : null].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                <Button
+                  size="sm" disabled={saving === d.id}
+                  onClick={() => assign(d)}
+                  className="rounded-xl flex-shrink-0"
+                >
+                  {saving === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Assign'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function RidesAdmin() {
   const { toast } = useToast();
   const [rides, setRides] = useState([]);
@@ -60,6 +192,7 @@ export default function RidesAdmin() {
   const [filter, setFilter] = useState('pending-approval');
   const [actioningId, setActioningId] = useState(null);
   const [confirm, setConfirm] = useState(null); // { ride, approve }
+  const [assigning, setAssigning] = useState(null); // ride awaiting a driver
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -133,7 +266,16 @@ export default function RidesAdmin() {
     }
   };
 
-  const shown = filter === 'all' ? rides : rides.filter((r) => r.bucket === filter);
+  // 'needs-driver' is a cross-cutting view, not a bucket the server returns:
+  // paid, not cancelled, no driver yet.
+  const shown = filter === 'all'
+    ? rides
+    : filter === 'needs-driver'
+      ? rides.filter((r) => r.payment_status === 'paid' && r.status === 'confirmed' && !r.driver_assigned)
+      : rides.filter((r) => r.bucket === filter);
+  const needsDriverCount = rides.filter(
+    (r) => r.payment_status === 'paid' && r.status === 'confirmed' && !r.driver_assigned,
+  ).length;
   const pendingCount = counts['pending-approval'] || 0;
 
   return (
@@ -146,6 +288,11 @@ export default function RidesAdmin() {
             {pendingCount > 0 && (
               <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-0">
                 {pendingCount} awaiting
+              </Badge>
+            )}
+            {needsDriverCount > 0 && (
+              <Badge className="bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-0">
+                {needsDriverCount} need a driver
               </Badge>
             )}
           </CardTitle>
@@ -249,6 +396,18 @@ export default function RidesAdmin() {
                       )}
                     </div>
 
+                    {r.payment_status === 'paid' && r.status === 'confirmed' && !r.driver_assigned && (
+                      <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
+                        <Button
+                          size="sm"
+                          onClick={() => setAssigning(r)}
+                          className="rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-950 text-white w-full sm:w-auto"
+                        >
+                          <UserPlus className="w-4 h-4 mr-2" /> Assign driver
+                        </Button>
+                      </div>
+                    )}
+
                     {isPending && (
                       <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
                         <Button
@@ -275,6 +434,12 @@ export default function RidesAdmin() {
           </div>
         )}
       </CardContent>
+
+      <AssignDriverDialog
+        ride={assigning}
+        onClose={() => setAssigning(null)}
+        onAssigned={() => { setAssigning(null); load(); }}
+      />
 
       <AlertDialog open={!!confirm} onOpenChange={(o) => { if (!o) setConfirm(null); }}>
         <AlertDialogContent>
