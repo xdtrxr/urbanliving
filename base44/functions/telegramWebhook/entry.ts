@@ -122,6 +122,23 @@ Deno.serve(async (req) => {
             });
         }
 
+        // Branch 2c: ride approve/reject.
+        // MUST sit before the generic split('_') below — that split would
+        // read "ride_approve_<id>" as action="ride", and the request would be
+        // rejected as invalid callback data.
+        const rideMatch = callbackData.match(/^ride_(approve|reject)_(.+)$/);
+        if (rideMatch) {
+            return await handleRideDecision({
+                base44,
+                approve: rideMatch[1] === 'approve',
+                rideId: rideMatch[2],
+                callbackQueryId: callbackQuery.id,
+                chatId,
+                messageId,
+                originalText: callbackQuery.message.text || callbackQuery.message.caption || '',
+            });
+        }
+
         // Branch 3: legacy availability approve/reject
         const [action, requestId] = callbackData.split('_');
 
@@ -675,4 +692,131 @@ Have a smooth trip — see you soon.
         console.error('sendArrivalEmailFromBooking failed:', err);
         return { sent: false };
     }
+}
+
+
+// === Ride decision handling ===
+// Twin of base44/functions/decideRideBooking/entry.ts, which serves the
+// in-app Admin panel. Base44 function dirs are isolated and cannot share a
+// module, so the transition is duplicated. KEEP THE TWO IN LOCKSTEP —
+// the equivalent apartment pair has already drifted.
+//
+// Unlike the apartment flow there is no AvailabilityRequest: the decision
+// lands on the RideBooking row and `approved_at` is the idempotency guard.
+
+interface RideDecisionParams {
+    base44: any;
+    approve: boolean;
+    rideId: string;
+    callbackQueryId: string;
+    chatId: number;
+    messageId: number;
+    originalText: string;
+}
+
+async function handleRideDecision(p: RideDecisionParams): Promise<Response> {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const jsonResp = (body: unknown) => new Response(JSON.stringify(body), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+
+    const RIDE_PAYMENT_WINDOW_MS = 60 * 60 * 1000;
+    const APPROVE_MSG = 'Your ride is confirmed as available — complete payment to lock it in.';
+    const REJECT_MSG = 'Sorry, this vehicle is not available for that window. Please try a different time or another vehicle.';
+
+    const ride = await p.base44.asServiceRole.entities.RideBooking.get(p.rideId);
+    if (!ride) {
+        await answerCallbackQuery(p.callbackQueryId, 'Ride not found.');
+        return jsonResp({ ok: true });
+    }
+    if (ride.status !== 'pending' || ride.approved_at) {
+        await answerCallbackQuery(p.callbackQueryId, 'This ride has already been actioned.');
+        return jsonResp({ ok: true });
+    }
+
+    const nowIso = new Date().toISOString();
+    await p.base44.asServiceRole.entities.RideBooking.update(p.rideId, p.approve
+        ? {
+            approved_at: nowIso,
+            payment_deadline: new Date(Date.now() + RIDE_PAYMENT_WINDOW_MS).toISOString(),
+            admin_response: APPROVE_MSG,
+        }
+        : {
+            status: 'cancelled',
+            cancel_reason: 'admin_rejected',
+            admin_response: REJECT_MSG,
+        });
+
+    const banner = p.approve ? '✅ *APPROVED*' : '❌ *REJECTED*';
+    // The ride card is usually sent as a photo, so its text lives in a
+    // caption and editMessageText will fail. Try text, then caption.
+    try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: p.chatId, message_id: p.messageId,
+                text: `${banner}\n\n${p.originalText}`, parse_mode: 'Markdown',
+            }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            await fetch(`https://api.telegram.org/bot${token}/editMessageCaption`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: p.chatId, message_id: p.messageId,
+                    caption: `${banner}\n\n${p.originalText}`, parse_mode: 'Markdown',
+                }),
+            });
+        }
+    } catch (err) {
+        console.warn('Ride card edit failed (non-fatal):', err);
+    }
+
+    await answerCallbackQuery(p.callbackQueryId, p.approve ? 'Ride approved.' : 'Ride rejected.');
+
+    // Guest email
+    try {
+        const when = new Date(ride.start_at).toLocaleString('en-GB', {
+            timeZone: 'Africa/Lagos', dateStyle: 'full', timeStyle: 'short',
+        });
+        const body = p.approve
+            ? `Hi ${ride.guest_name || 'there'},\n\n` +
+              `Good news — ${ride.vehicle_name} is available for your ride.\n\n` +
+              `🔖 Status: APPROVED — AWAITING PAYMENT\n` +
+              `🚗 Vehicle: ${ride.vehicle_name}\n` +
+              `🕒 Pickup: ${when}\n` +
+              `💰 Total: ₦${(Number(ride.total_price) || 0).toLocaleString()}\n\n` +
+              `👉 Pay now: ${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(ride.id)}#ride-${encodeURIComponent(ride.id)}\n\n` +
+              `You have 1 hour from opening the payment page to complete payment (3-hour cap from this approval), after which the booking is released.\n\n` +
+              `— Urban Stays`
+            : `Hi ${ride.guest_name || 'there'},\n\n` +
+              `Unfortunately ${ride.vehicle_name} isn't available for ${when}.\n\n` +
+              `🔖 Status: CANCELLED\n` +
+              `🔎 Browse other vehicles: ${APP_BASE_URL}/PlanTrip\n\n` +
+              `— Urban Stays`;
+        await p.base44.integrations.Core.SendEmail({
+            to: ride.guest_email,
+            subject: p.approve
+                ? `Approved: your ride in the ${ride.vehicle_name}`
+                : 'Update on your ride request',
+            body,
+            from_name: 'Urban Stays',
+        });
+    } catch (err) {
+        console.warn('Ride decision email failed (non-fatal):', err);
+    }
+
+    await tryPush(p.base44, {
+        user_email: ride.guest_email,
+        title: p.approve ? '✅ Ride approved' : '❌ Ride unavailable',
+        body: p.approve
+            ? `${ride.vehicle_name} is held for you — tap to pay and lock it in.`
+            : `${ride.vehicle_name} isn't free for that window. Tap to try another.`,
+        url: p.approve ? `/Bookings#ride-${ride.id}` : '/PlanTrip',
+        tag: `ride-decision-${ride.id}`,
+    });
+
+    return jsonResp({ ok: true });
 }
