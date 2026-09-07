@@ -14,10 +14,19 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 const WAT_OFFSET = '+01:00';
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-const TURNAROUND_MS = 2 * HOUR_MS;
+const MAX_HOURLY = 8;
 
-function rideDurationMs(tier: string, days?: number): number {
+// Per-vehicle turnaround — lockstep copy, see checkRideAvailability. A driver
+// needs the same clearance between jobs that a car does.
+const DEFAULT_TURNAROUND_MS = 1 * HOUR_MS;
+function turnaroundMsFor(vehicle: any): number {
+    const h = Number(vehicle?.turnaround_hours);
+    return Number.isFinite(h) && h >= 0 ? h * HOUR_MS : DEFAULT_TURNAROUND_MS;
+}
+
+function rideDurationMs(tier: string, days?: number, hours?: number): number {
     switch (tier) {
+        case 'hourly': return Math.min(MAX_HOURLY, Math.max(1, Number(hours) || 1)) * HOUR_MS;
         case '12hr': return 12 * HOUR_MS;
         case '24hr': return DAY_MS;
         case 'multi_day': return Math.max(1, Number(days) || 1) * DAY_MS;
@@ -33,14 +42,14 @@ function windowOf(r: any): { startMs: number; endMs: number } | null {
     if (Number.isNaN(startMs)) return null;
     let endMs = Date.parse(r.end_at || '');
     if (Number.isNaN(endMs)) {
-        const dur = rideDurationMs(r.duration_tier, r.duration_days);
+        const dur = rideDurationMs(r.duration_tier, r.duration_days, r.duration_hours);
         if (Number.isNaN(dur)) return null;
         endMs = startMs + dur;
     }
     return { startMs, endMs };
 }
 
-function windowsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number, buffer = TURNAROUND_MS): boolean {
+function windowsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number, buffer: number): boolean {
     return aStart < bEnd + buffer && aEnd + buffer > bStart;
 }
 
@@ -82,7 +91,7 @@ Deno.serve(async (req) => {
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
-        const { ride_booking_id, driver_id } = await req.json().catch(() => ({}));
+        const { ride_booking_id, driver_id, pickup_instructions } = await req.json().catch(() => ({}));
         if (!ride_booking_id || !driver_id) {
             return json({ success: false, error: 'ride_booking_id and driver_id are required' }, 400);
         }
@@ -132,7 +141,7 @@ Deno.serve(async (req) => {
             if (other.id === ride.id) continue;
             const ow = windowOf(other);
             if (!ow) continue;
-            if (windowsOverlap(win.startMs, win.endMs, ow.startMs, ow.endMs)) {
+            if (windowsOverlap(win.startMs, win.endMs, ow.startMs, ow.endMs, turnaroundMsFor(vehicle))) {
                 return json({
                     success: false,
                     error: `${driver.full_name} is already driving another booking in that window.`,
@@ -150,6 +159,12 @@ Deno.serve(async (req) => {
         await base44.asServiceRole.entities.RideBooking.update(ride_booking_id, {
             driver_id,
             driver_assigned_at: new Date().toISOString(),
+            // Only overwrite when something was actually typed — a reassignment
+            // that leaves the box blank must not wipe instructions already
+            // written for this pickup.
+            ...(typeof pickup_instructions === 'string' && pickup_instructions.trim()
+                ? { pickup_instructions: pickup_instructions.trim() }
+                : {}),
         });
 
         // Guest email with the driver's details — this is the moment the

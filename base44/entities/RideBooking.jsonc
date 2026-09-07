@@ -34,14 +34,22 @@
       "type": "string",
       "description": "Pickup time in HH:MM (24h)"
     },
+    "booking_reference": {
+      "type": "string",
+      "description": "Human-quotable reference (UD-XXXXXX) generated at request time. For the guest to cite in messages and for admin to search on — the row id stays the actual key."
+    },
     "duration_tier": {
       "type": "string",
-      "enum": ["12hr", "24hr", "multi_day", "weekly", "monthly"],
-      "description": "Which pricing tier was selected at checkout"
+      "enum": ["hourly", "12hr", "24hr", "multi_day", "weekly", "monthly"],
+      "description": "Which pricing tier was selected at checkout. '12hr' is presented to guests as 'Full day (12 hours)' — the value was deliberately not renamed, since renaming would orphan every existing row for the sake of a label."
+    },
+    "duration_hours": {
+      "type": "number",
+      "description": "For hourly bookings, how many hours (1-8). Ignored for every other tier."
     },
     "duration_days": {
       "type": "number",
-      "description": "For multi_day bookings, the total number of days. Always 1 for 12hr/24hr."
+      "description": "For multi_day bookings, the total number of days. Always 1 for hourly/12hr/24hr."
     },
     "start_at": {
       "type": "string",
@@ -58,7 +66,7 @@
       "properties": {
         "address": { "type": "string" },
         "area": { "type": "string", "description": "Neighborhood / district (Maitama, Lekki, etc.)" },
-        "city": { "type": "string", "enum": ["Abuja", "Lagos"] },
+        "city": { "type": "string", "description": "Always inherited from the vehicle, never entered by the guest, so pickup can't drift to a city the car isn't in. Not an enum — see Vehicle.city." },
         "coordinates": {
           "type": "object",
           "properties": {
@@ -84,9 +92,26 @@
     "special_requests": {
       "type": "string"
     },
+    "estimated_price": {
+      "type": "number",
+      "description": "What the guest was quoted when they submitted the request, computed server-side from the Vehicle. Frozen — never rewritten. total_price may diverge from it once admin confirms, and the guest is shown both."
+    },
     "total_price": {
       "type": "number",
-      "description": "Final NGN total billed"
+      "description": "The NGN amount actually charged. Starts equal to estimated_price and is the only figure payment ever reads, so admin adjusting it at approval needs no change to the payment path."
+    },
+    "price_adjustment_reason": {
+      "type": "string",
+      "description": "Why total_price differs from estimated_price (airport surcharge, extra waiting time, fuel). Mandatory whenever admin changes the figure — a silent price rise between quote and payment must be impossible."
+    },
+    "suggested_vehicle_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Set when admin rejects because the chosen vehicle is unavailable but similar cars in the same city are free. The guest sees these as alternatives instead of a dead end."
+    },
+    "pickup_instructions": {
+      "type": "string",
+      "description": "Free-text note from admin for the pickup itself ('driver waits at the Zone 4 gate, call on arrival'). Written at driver assignment and shown alongside the driver's contact details."
     },
     "status": {
       "type": "string",

@@ -17,8 +17,7 @@
     },
     "city": {
       "type": "string",
-      "enum": ["Abuja", "Lagos"],
-      "description": "Primary city the driver operates in"
+      "description": "Primary city the driver operates in. Assignment blocks a driver whose city differs from the vehicle's. Not an enum — the allowed list lives in src/config/rides.js so adding a city stays a one-line change."
     },
     "languages": {
       "type": "array",

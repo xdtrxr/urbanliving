@@ -14,8 +14,11 @@ const WAT_OFFSET = '+01:00';
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-function rideDurationMs(tier: string, days?: number): number {
+const MAX_HOURLY = 8;
+
+function rideDurationMs(tier: string, days?: number, hours?: number): number {
     switch (tier) {
+        case 'hourly': return Math.min(MAX_HOURLY, Math.max(1, Number(hours) || 1)) * HOUR_MS;
         case '12hr': return 12 * HOUR_MS;
         case '24hr': return DAY_MS;
         case 'multi_day': return Math.max(1, Number(days) || 1) * DAY_MS;
@@ -33,7 +36,7 @@ function windowOf(r: any): { startMs: number; endMs: number } | null {
     if (Number.isNaN(startMs)) return null;
     let endMs = Date.parse(r.end_at || '');
     if (Number.isNaN(endMs)) {
-        const dur = rideDurationMs(r.duration_tier, r.duration_days);
+        const dur = rideDurationMs(r.duration_tier, r.duration_days, r.duration_hours);
         if (Number.isNaN(dur)) return null;
         endMs = startMs + dur;
     }

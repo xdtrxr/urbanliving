@@ -11,10 +11,10 @@
       "type": "string",
       "description": "Vehicle brand / make (Toyota, Mercedes Benz, Lexus, Range Rover, etc.)"
     },
-    "vehicle_type": {
+    "category": {
       "type": "string",
-      "enum": ["sedan", "suv", "luxury_sedan", "luxury_suv", "executive", "van", "minibus", "coupe"],
-      "description": "Body style — drives filtering on the browse page"
+      "enum": ["economy", "comfort", "suv", "executive", "luxury"],
+      "description": "Price tier — step 2 of the browse flow (city → category → car). Replaced the old body-style vehicle_type enum: guests shop by budget, not by shape. Group size is expressed through max_passengers instead. Keep in lockstep with CATEGORIES in src/config/rides.js."
     },
     "model_year": {
       "type": "number",
@@ -36,8 +36,15 @@
     },
     "city": {
       "type": "string",
-      "enum": ["Abuja", "Lagos"],
-      "description": "City where the vehicle is based"
+      "description": "City where the vehicle is based. Deliberately not an enum — the client expects to keep adding cities, and an enum makes that a multi-schema migration each time. The allowed list lives in src/config/rides.js and every admin dropdown is bound to it."
+    },
+    "registration_number": {
+      "type": "string",
+      "description": "Number plate. Internal until the guest has paid AND a driver is assigned, at which point getRideDriverContact includes it in the handoff so the guest can identify the car on pickup."
+    },
+    "price_per_hour_ngn": {
+      "type": "number",
+      "description": "Hourly rate in NGN. Required for any booking shorter than a full day — a vehicle without one cannot take hourly bookings at all and the UI greys those durations out."
     },
     "price_12hr_ngn": {
       "type": "number",
@@ -112,11 +119,16 @@
     },
     "min_hours_per_booking": {
       "type": "number",
-      "default": 12,
-      "description": "Minimum hours a guest can book — V1 default 12 (matches the cheapest tier)"
+      "default": 1,
+      "description": "Minimum hours a guest can book. Was 12 before hourly hire existed — any row still carrying 12 will reject every hourly booking, so existing vehicles must be backfilled."
+    },
+    "turnaround_hours": {
+      "type": "number",
+      "default": 1,
+      "description": "Gap the vehicle needs between hires (cleaning, refuelling, getting across town). Replaced a hardcoded 2h constant: a 2h buffer either side of a 1h booking would cap a car at roughly three hires a day."
     }
   },
-  "required": ["name", "brand", "vehicle_type", "city", "price_12hr_ngn", "price_24hr_ngn", "images"],
+  "required": ["name", "brand", "category", "city", "price_12hr_ngn", "price_24hr_ngn", "images"],
   "rls": {
     "create": { "user_condition": { "role": "admin" } },
     "read": {},
