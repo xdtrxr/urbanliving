@@ -18,6 +18,7 @@ import {
   AlertCircle, Phone, RefreshCw,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { CITIES } from '@/config/rides';
 
 // DriversAdmin — CRUD for the driver roster.
 //
@@ -29,13 +30,11 @@ import { useToast } from '@/components/ui/use-toast';
 // Without this screen assignRideDriver has nothing to offer and the driver
 // half of Rides cannot run at all.
 
-const CITIES = ['Abuja', 'Lagos'];
-
 const EMPTY = {
   full_name: '',
   phone: '',
   photo: '',
-  city: 'Abuja',
+  city: CITIES[0],
   languages: '',          // comma-separated in the form, array on the row
   years_experience: '',
   bio: '',
@@ -94,7 +93,7 @@ export default function DriversAdmin() {
       full_name: d.full_name || '',
       phone: d.phone || '',
       photo: d.photo || '',
-      city: d.city || 'Abuja',
+      city: d.city || CITIES[0],
       languages: arrayToCsv(d.languages),
       years_experience: d.years_experience ?? '',
       bio: d.bio || '',

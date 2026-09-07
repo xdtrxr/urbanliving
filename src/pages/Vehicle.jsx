@@ -9,6 +9,9 @@ import {
   Fuel, PlayCircle, Calendar, Shield, Sparkles, CheckCircle,
 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
+import {
+  HOURLY_CHOICES, estimateRidePrice, supportsHourly, minHours, categoryLabel,
+} from '@/config/rides';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext';
 import MediaLightbox from '@/components/media/MediaLightbox';
@@ -31,8 +34,8 @@ const FUEL_POLICY_LABELS = {
 };
 
 const DURATION_TIERS = [
-  { id: '12hr', label: '12 hours', priceKey: 'price_12hr_ngn', suffix: 'per 12 hours' },
-  { id: '24hr', label: '24 hours', priceKey: 'price_24hr_ngn', suffix: 'per day' },
+  { id: '12hr', label: 'Full day', priceKey: 'price_12hr_ngn', suffix: '12 hours' },
+  { id: '24hr', label: '24 hours', priceKey: 'price_24hr_ngn', suffix: 'round the clock' },
 ];
 
 export default function VehiclePage() {
@@ -42,6 +45,7 @@ export default function VehiclePage() {
   const [media, setMedia] = useState([]);
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [selectedTier, setSelectedTier] = useState('24hr');
+  const [selectedHours, setSelectedHours] = useState(null);
   const [multiDayCount, setMultiDayCount] = useState(2);
   // Lightbox state — full-screen gallery viewer with swipe / arrow navigation.
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -100,22 +104,24 @@ export default function VehiclePage() {
   }
 
   // Pricing calc — what shows in the right-hand sticky card
-  const tier12 = vehicle.price_12hr_ngn || 0;
   const tier24 = vehicle.price_24hr_ngn || 0;
-  const extraDay = vehicle.price_per_extra_day_ngn || tier24;
-  const multiDayTotal = tier24 + (multiDayCount - 1) * extraDay;
+  const perHour = vehicle.price_per_hour_ngn || 0;
+  const hourly = supportsHourly(vehicle);
+  const floorHours = minHours(vehicle);
 
-  const computedTotal = selectedTier === '12hr'
-    ? tier12
-    : selectedTier === '24hr'
-      ? tier24
-      : selectedTier === 'multi_day'
-        ? multiDayTotal
-        : tier24;
+  // One shared estimator rather than a second copy of the price ladder. It
+  // mirrors the server's priceForTier, and scripts/check-ride-time.mjs asserts
+  // the two agree across every tier.
+  const computedTotal = estimateRidePrice(vehicle, {
+    tier: selectedTier,
+    hours: selectedHours,
+    days: multiDayCount,
+  }) || 0;
 
   const checkoutHref = `${createPageUrl('RideCheckout')}?${new URLSearchParams({
     vehicle: vehicle.id,
     tier: selectedTier,
+    ...(selectedTier === 'hourly' ? { hours: String(selectedHours || floorHours) } : {}),
     ...(selectedTier === 'multi_day' ? { days: String(multiDayCount) } : {}),
     ...(addOnBookingId ? { property_booking_id: addOnBookingId } : {}),
   })}`;
@@ -236,7 +242,7 @@ export default function VehiclePage() {
                 </CardTitle>
                 <p className="text-slate-600 dark:text-slate-300 mb-3">
                   {vehicle.brand}{vehicle.model_year ? ` · ${vehicle.model_year}` : ''}
-                  {vehicle.vehicle_type ? ` · ${vehicle.vehicle_type.replace(/_/g, ' ')}` : ''}
+                  {vehicle.category ? ` · ${categoryLabel(vehicle.category)}` : ''}
                 </p>
                 <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300 text-sm">
                   {vehicle.city && (
@@ -362,6 +368,52 @@ export default function VehiclePage() {
                     <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">
                       Choose a duration
                     </p>
+
+                    {/* By the hour. Only rendered when the owner has set an
+                        hourly rate — offering it otherwise would take the guest
+                        all the way to a 409 from the server. Individual hours
+                        below the vehicle's own minimum are disabled for the
+                        same reason. */}
+                    {hourly && (
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white">By the hour</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            ₦{perHour.toLocaleString()} / hour
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {HOURLY_CHOICES.map((h) => {
+                            const tooShort = h < floorHours;
+                            const isActive = selectedTier === 'hourly' && selectedHours === h;
+                            return (
+                              <button
+                                key={h}
+                                type="button"
+                                disabled={tooShort}
+                                title={tooShort ? `Minimum booking is ${floorHours} hours` : undefined}
+                                onClick={() => { setSelectedTier('hourly'); setSelectedHours(h); }}
+                                className={`min-w-[52px] rounded-xl border-2 px-3 py-2 text-sm font-semibold transition-all ${
+                                  tooShort
+                                    ? 'border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-700 cursor-not-allowed'
+                                    : isActive
+                                      ? 'border-slate-900 bg-slate-900 text-white'
+                                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-slate-400'
+                                }`}
+                              >
+                                {h}h
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {floorHours > 1 && (
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+                            This vehicle takes a minimum booking of {floorHours} hours.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       {DURATION_TIERS.map((tier) => {
                         const price = vehicle[tier.priceKey];

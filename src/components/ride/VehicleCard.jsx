@@ -4,6 +4,7 @@ import { createPageUrl } from '@/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Users, Car, Snowflake, MapPin } from 'lucide-react';
+import { categoryLabel } from '@/config/rides';
 
 // Small chip used inside the card body — keeps amenity / feature pills tight
 function Chip({ icon: Icon, children }) {
@@ -22,6 +23,7 @@ export default function VehicleCard({ vehicle, propertyBookingId }) {
   const hero = vehicle.images?.[0]
     || 'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=800';
   const hasAC = (vehicle.amenities || []).includes('air_conditioning');
+  const perHour = vehicle.price_per_hour_ngn;
   const price12 = vehicle.price_12hr_ngn;
   const price24 = vehicle.price_24hr_ngn;
 
@@ -42,9 +44,9 @@ export default function VehicleCard({ vehicle, propertyBookingId }) {
             loading="lazy"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
-          {vehicle.vehicle_type && (
-            <Badge className="absolute top-3 left-3 bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-100 border-0 capitalize text-[11px] font-semibold backdrop-blur-sm">
-              {vehicle.vehicle_type.replace(/_/g, ' ')}
+          {vehicle.category && (
+            <Badge className="absolute top-3 left-3 bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-100 border-0 text-[11px] font-semibold backdrop-blur-sm">
+              {categoryLabel(vehicle.category)}
             </Badge>
           )}
           {vehicle.city && (
@@ -75,21 +77,25 @@ export default function VehicleCard({ vehicle, propertyBookingId }) {
             )}
           </div>
 
-          {/* Pricing row — both 12h and 24h so the guest sees the upgrade math */}
+          {/* Lead with the hourly rate when the vehicle has one — it is the
+              cheapest way in, and the number the guest compares on. Cars
+              without an hourly rate fall back to the 12-hour figure. */}
           <div className="flex items-end justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
             <div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">From</div>
               <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-none">
-                ₦{(price12 || 0).toLocaleString()}
+                ₦{(perHour || price12 || 0).toLocaleString()}
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">/ 12 hours</div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {perHour ? '/ hour' : '/ 12 hours'}
+              </div>
             </div>
             {price24 ? (
               <div className="text-right">
                 <div className="text-sm font-semibold text-amber-700 dark:text-amber-300">
                   ₦{price24.toLocaleString()}
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">/ 24 hours</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">/ full day</div>
               </div>
             ) : null}
           </div>

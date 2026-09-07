@@ -22,21 +22,10 @@ import {
   Edit3, Save, X, AlertCircle, Loader2, CheckCircle2, Eye, EyeOff,
   Upload, PlayCircle,
 } from 'lucide-react';
+import { CITIES, CATEGORIES, categoryLabel } from '@/config/rides';
 
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 
-const VEHICLE_TYPES = [
-  { value: 'sedan', label: 'Sedan' },
-  { value: 'suv', label: 'SUV' },
-  { value: 'luxury_sedan', label: 'Luxury Sedan' },
-  { value: 'luxury_suv', label: 'Luxury SUV' },
-  { value: 'executive', label: 'Executive' },
-  { value: 'van', label: 'Van' },
-  { value: 'minibus', label: 'Minibus' },
-  { value: 'coupe', label: 'Coupe' },
-];
-
-const CITIES = ['Abuja', 'Lagos'];
 
 const FUEL_POLICIES = [
   { value: 'fuel_included', label: 'Fuel included' },
@@ -58,12 +47,14 @@ const AMENITY_OPTIONS = [
 const EMPTY_FORM = {
   name: '',
   brand: '',
-  vehicle_type: 'sedan',
+  category: 'comfort',
   model_year: new Date().getFullYear(),
   description: '',
   images: [],          // array of base44 file_urls, populated by UploadFile
   videos: [],
-  city: 'Abuja',
+  city: CITIES[0],
+  registration_number: '',
+  price_per_hour_ngn: '',
   price_12hr_ngn: '',
   price_24hr_ngn: '',
   price_per_extra_day_ngn: '',
@@ -75,7 +66,9 @@ const EMPTY_FORM = {
   service_area: '',
   active: true,
   admin_approved: true,    // admin adding a vehicle = trust that vehicle
-  min_hours_per_booking: 12,
+  // 1, not 12 — the old default silently rejected every hourly booking.
+  min_hours_per_booking: 1,
+  turnaround_hours: 1,
 };
 
 // Pull the platform's actual error text out of an upload failure so admin
@@ -138,12 +131,14 @@ export default function VehiclesAdmin() {
     setForm({
       name: vehicle.name || '',
       brand: vehicle.brand || '',
-      vehicle_type: vehicle.vehicle_type || 'sedan',
+      category: vehicle.category || 'comfort',
       model_year: vehicle.model_year || new Date().getFullYear(),
       description: vehicle.description || '',
       images: Array.isArray(vehicle.images) ? vehicle.images : [],
       videos: Array.isArray(vehicle.videos) ? vehicle.videos : [],
-      city: vehicle.city || 'Abuja',
+      city: vehicle.city || CITIES[0],
+      registration_number: vehicle.registration_number || '',
+      price_per_hour_ngn: vehicle.price_per_hour_ngn ?? '',
       price_12hr_ngn: vehicle.price_12hr_ngn ?? '',
       price_24hr_ngn: vehicle.price_24hr_ngn ?? '',
       price_per_extra_day_ngn: vehicle.price_per_extra_day_ngn ?? '',
@@ -155,7 +150,8 @@ export default function VehiclesAdmin() {
       service_area: vehicle.service_area || '',
       active: vehicle.active !== false,
       admin_approved: vehicle.admin_approved !== false,
-      min_hours_per_booking: vehicle.min_hours_per_booking ?? 12,
+      min_hours_per_booking: vehicle.min_hours_per_booking ?? 1,
+      turnaround_hours: vehicle.turnaround_hours ?? 1,
     });
     setInnerTab('add');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -179,12 +175,14 @@ export default function VehiclesAdmin() {
       const payload = {
         name: form.name.trim(),
         brand: form.brand.trim(),
-        vehicle_type: form.vehicle_type,
+        category: form.category,
         model_year: Number(form.model_year) || null,
         description: form.description.trim() || undefined,
         images,
         videos: Array.isArray(form.videos) ? form.videos : [],
         city: form.city,
+        registration_number: form.registration_number.trim() || undefined,
+        price_per_hour_ngn: form.price_per_hour_ngn === '' ? undefined : Number(form.price_per_hour_ngn),
         price_12hr_ngn: Number(form.price_12hr_ngn),
         price_24hr_ngn: Number(form.price_24hr_ngn),
         price_per_extra_day_ngn: form.price_per_extra_day_ngn
@@ -201,7 +199,8 @@ export default function VehiclesAdmin() {
         service_area: form.service_area.trim() || undefined,
         active: form.active,
         admin_approved: form.admin_approved,
-        min_hours_per_booking: Number(form.min_hours_per_booking) || 12,
+        min_hours_per_booking: Number(form.min_hours_per_booking) || 1,
+        turnaround_hours: form.turnaround_hours === '' ? 1 : Number(form.turnaround_hours),
         driver_included: true, // V1 always includes a driver
       };
 
@@ -387,18 +386,21 @@ export default function VehiclesAdmin() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="v-type">Type *</Label>
+                      <Label htmlFor="v-type">Category *</Label>
                       <Select
-                        value={form.vehicle_type}
-                        onValueChange={(value) => setForm({ ...form, vehicle_type: value })}
+                        value={form.category}
+                        onValueChange={(value) => setForm({ ...form, category: value })}
                       >
                         <SelectTrigger id="v-type"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {VEHICLE_TYPES.map((t) => (
-                            <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                          {CATEGORIES.map((c) => (
+                            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Guests browse by this after picking a city.
+                      </p>
                     </div>
                     <div>
                       <Label htmlFor="v-year">Model year</Label>
@@ -574,6 +576,22 @@ export default function VehiclesAdmin() {
                           {CITIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Guests pick a city first and only ever see cars based in it.
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="v-plate">Registration number</Label>
+                      <Input
+                        id="v-plate"
+                        value={form.registration_number}
+                        onChange={(e) => setForm({ ...form, registration_number: e.target.value })}
+                        placeholder="ABC-123-XY"
+                      />
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Internal until the guest has paid and a driver is assigned,
+                        then shown so they can identify the car.
+                      </p>
                     </div>
                     <div>
                       <Label htmlFor="v-seats">Max passengers</Label>
@@ -615,7 +633,22 @@ export default function VehiclesAdmin() {
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <Label htmlFor="v-price12">12-hour price *</Label>
+                      <Label htmlFor="v-priceHour">Hourly rate</Label>
+                      <Input
+                        id="v-priceHour"
+                        type="number"
+                        min={0}
+                        value={form.price_per_hour_ngn}
+                        onChange={(e) => setForm({ ...form, price_per_hour_ngn: e.target.value })}
+                        placeholder="15000"
+                      />
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Leave blank if this car is day-hire only — guests then
+                        see no hourly options for it at all.
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="v-price12">Full day (12h) price *</Label>
                       <Input
                         id="v-price12"
                         type="number"
@@ -648,6 +681,38 @@ export default function VehiclesAdmin() {
                         onChange={(e) => setForm({ ...form, price_per_extra_day_ngn: e.target.value })}
                         placeholder="90000"
                       />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <Label htmlFor="v-minhours">Minimum hours per booking</Label>
+                      <Input
+                        id="v-minhours"
+                        type="number"
+                        min={1}
+                        max={24}
+                        value={form.min_hours_per_booking}
+                        onChange={(e) => setForm({ ...form, min_hours_per_booking: e.target.value })}
+                      />
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Hourly options below this are greyed out for guests.
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="v-turnaround">Turnaround hours</Label>
+                      <Input
+                        id="v-turnaround"
+                        type="number"
+                        min={0}
+                        max={24}
+                        value={form.turnaround_hours}
+                        onChange={(e) => setForm({ ...form, turnaround_hours: e.target.value })}
+                      />
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Gap needed between hires. Raising this blocks more of the
+                        day around each booking.
+                      </p>
                     </div>
                   </div>
                 </section>
@@ -831,9 +896,12 @@ export default function VehiclesAdmin() {
                             )}
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                            {v.brand} · {v.vehicle_type?.replace(/_/g, ' ')} · {v.city} · {v.max_passengers || 0} seats
+                            {v.brand} · {categoryLabel(v.category)} · {v.city} · {v.max_passengers || 0} seats
                           </p>
                           <div className="flex flex-wrap gap-3 text-xs text-slate-700 dark:text-slate-200">
+                            {v.price_per_hour_ngn ? (
+                              <span>/hr: <strong>₦{v.price_per_hour_ngn.toLocaleString()}</strong></span>
+                            ) : null}
                             <span>12h: <strong>₦{(v.price_12hr_ngn || 0).toLocaleString()}</strong></span>
                             <span>24h: <strong>₦{(v.price_24hr_ngn || 0).toLocaleString()}</strong></span>
                             {v.price_per_extra_day_ngn ? (

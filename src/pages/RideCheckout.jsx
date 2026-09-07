@@ -14,6 +14,9 @@ import {
   CheckCircle, Phone, ShieldCheck,
 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
+import {
+  DURATION_OPTIONS, durationOptionId, estimateRidePrice, supportsHourly, minHours,
+} from '@/config/rides';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // RideCheckout — the ride twin of Checkout.jsx.
@@ -29,11 +32,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 //      polls forever. This stops after MAX_POLL_TICKS and tells the guest
 //      where to look instead.
 
-const TIERS = [
-  { id: '12hr', label: '12 hours', priceKey: 'price_12hr_ngn' },
-  { id: '24hr', label: '24 hours', priceKey: 'price_24hr_ngn' },
-  { id: 'multi_day', label: 'Multiple days', priceKey: 'price_24hr_ngn' },
-];
+// Durations come from src/config/rides.js so this page, the vehicle page and
+// the server all name the same set. DURATION_OPTIONS already carries the
+// hourly choices, "Full day (12 hours)", 24 hours and multi-day in order.
 
 const POLL_MS = 3000;
 const MAX_POLL_TICKS = 100; // ~5 minutes, then hand off to the Bookings page
@@ -57,6 +58,7 @@ export default function RideCheckoutPage() {
     service_date: '',
     start_time: '09:00',
     duration_tier: params.get('tier') || '24hr',
+    duration_hours: Number(params.get('hours')) || 1,
     duration_days: Number(params.get('days')) || 2,
     passengers: 1,
     pickup_address: '',
@@ -75,6 +77,11 @@ export default function RideCheckoutPage() {
   const [rideId, setRideId] = useState(null);
   const [decision, setDecision] = useState(null); // null | 'pending' | 'approved' | 'rejected'
   const [pollExhausted, setPollExhausted] = useState(false);
+  // What admin actually confirmed. Distinct from displayTotal, which is only
+  // this page's pre-submission estimate.
+  const [confirmedTotal, setConfirmedTotal] = useState(null);
+  const [priceChanged, setPriceChanged] = useState(null); // the row, when it differs
+  const [rejectionNote, setRejectionNote] = useState('');
   const tickRef = useRef(0);
 
   useEffect(() => {
@@ -119,8 +126,21 @@ export default function RideCheckoutPage() {
       try {
         const row = await base44.entities.RideBooking.get(rideId);
         if (stopped || !row) return;
-        if (row.status === 'cancelled') { setDecision('rejected'); clearInterval(id); }
-        else if (row.approved_at) { setDecision('approved'); clearInterval(id); }
+        if (row.status === 'cancelled') {
+          setDecision('rejected');
+          setRejectionNote(row.admin_response || '');
+          clearInterval(id);
+        } else if (row.approved_at) {
+          // Admin may have confirmed at a different figure than the estimate,
+          // so take the price off the row rather than trusting what this page
+          // calculated before the request went in.
+          setConfirmedTotal(Number(row.total_price) || null);
+          setPriceChanged(
+            Number(row.total_price) !== Number(row.estimated_price) ? row : null,
+          );
+          setDecision('approved');
+          clearInterval(id);
+        }
       } catch (err) {
         console.warn('Ride poll failed (will retry):', err);
       }
@@ -131,14 +151,21 @@ export default function RideCheckoutPage() {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   // Presentational only — the server prices authoritatively from the Vehicle.
-  const displayTotal = (() => {
-    if (!vehicle) return 0;
-    const p24 = vehicle.price_24hr_ngn || 0;
-    const extra = vehicle.price_per_extra_day_ngn || p24;
-    if (form.duration_tier === '12hr') return vehicle.price_12hr_ngn || 0;
-    if (form.duration_tier === 'multi_day') return p24 + (Math.max(1, form.duration_days) - 1) * extra;
-    return p24;
-  })();
+  // Shared with the vehicle page rather than recomputed, and checked against
+  // the server copy by scripts/check-ride-time.mjs.
+  const displayTotal = estimateRidePrice(vehicle, {
+    tier: form.duration_tier,
+    hours: form.duration_hours,
+    days: form.duration_days,
+  }) || 0;
+
+  // Durations this particular vehicle can actually take. Hiding the hourly
+  // options on a vehicle with no hourly rate is better than letting the guest
+  // fill in the whole form and collect a 409 at the end.
+  const availableDurations = DURATION_OPTIONS.filter((o) => {
+    if (o.tier !== 'hourly') return true;
+    return supportsHourly(vehicle) && o.hours >= minHours(vehicle);
+  });
 
   const savePhone = async () => {
     setPhoneError('');
@@ -173,6 +200,7 @@ export default function RideCheckoutPage() {
         service_date: form.service_date,
         start_time: form.start_time,
         duration_tier: form.duration_tier,
+        duration_hours: form.duration_tier === 'hourly' ? Number(form.duration_hours) : undefined,
         duration_days: form.duration_tier === 'multi_day' ? Number(form.duration_days) : 1,
         passengers: Number(form.passengers) || 1,
         pickup_location: {
@@ -294,27 +322,41 @@ export default function RideCheckoutPage() {
 
             <div>
               <Label>Duration</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
-                {TIERS.map((t) => {
-                  const active = form.duration_tier === t.id;
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
+                {availableDurations.map((o) => {
+                  const active = durationOptionId(form.duration_tier, form.duration_hours) === o.id;
+                  const price = estimateRidePrice(vehicle, {
+                    tier: o.tier,
+                    hours: o.hours,
+                    days: form.duration_days,
+                  });
                   return (
                     <button
-                      key={t.id} type="button"
-                      onClick={() => set('duration_tier', t.id)}
+                      key={o.id} type="button"
+                      onClick={() => setForm((f) => ({
+                        ...f,
+                        duration_tier: o.tier,
+                        ...(o.tier === 'hourly' ? { duration_hours: o.hours } : {}),
+                      }))}
                       className={`rounded-xl border-2 px-3 py-3 text-left transition-colors ${
                         active
                           ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40'
                           : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
                     >
-                      <p className="font-semibold text-sm text-slate-900 dark:text-white">{t.label}</p>
+                      <p className="font-semibold text-sm text-slate-900 dark:text-white">{o.label}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {vehicle[t.priceKey] ? ngn(vehicle[t.priceKey]) : '—'}
+                        {price ? ngn(price) : '—'}
                       </p>
                     </button>
                   );
                 })}
               </div>
+              {!supportsHourly(vehicle) && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  This vehicle is booked by the day rather than by the hour.
+                </p>
+              )}
             </div>
 
             {form.duration_tier === 'multi_day' && (
@@ -467,10 +509,10 @@ export default function RideCheckoutPage() {
                   {decision === 'pending' && !pollExhausted && (
                     <>
                       <Loader2 className="w-10 h-10 text-amber-500 dark:text-amber-400 mx-auto mb-3 animate-spin" />
-                      <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Request sent</h2>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Request received</h2>
                       <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
-                        We&apos;re checking the {vehicle.name} is free for your window. This is usually quick —
-                        you&apos;ll get a notification either way.
+                        We&apos;re confirming the {vehicle.name} is available for your window and will
+                        notify you shortly. Nothing has been charged.
                       </p>
                     </>
                   )}
@@ -488,11 +530,31 @@ export default function RideCheckoutPage() {
                     <>
                       <CheckCircle className="w-10 h-10 text-emerald-500 dark:text-emerald-400 mx-auto mb-3" />
                       <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">
-                        {linkedBookingId ? 'Ride added' : 'Available!'}
+                        {linkedBookingId ? 'Ride added' : 'Confirmed available'}
                       </h2>
-                      <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
-                        The {vehicle.name} is held for you. Payment opens from My Bookings.
+                      <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+                        The {vehicle.name} is held for you at {ngn(confirmedTotal ?? displayTotal)},
+                        with a driver arranged. Pay now to lock it in.
                       </p>
+                      {/* A price that moved between quote and payment has to be
+                          stated before the pay button, never discovered on the
+                          Paystack screen. */}
+                      {priceChanged && (
+                        <div className="text-left rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-3 mb-5">
+                          <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1">
+                            The price changed from your estimate
+                          </p>
+                          <p className="text-sm text-amber-900 dark:text-amber-100">
+                            Estimated {ngn(priceChanged.estimated_price)} · confirmed{' '}
+                            <span className="font-semibold">{ngn(priceChanged.total_price)}</span>
+                          </p>
+                          {priceChanged.price_adjustment_reason && (
+                            <p className="text-xs text-amber-800 dark:text-amber-200 mt-1.5">
+                              {priceChanged.price_adjustment_reason}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
                   {decision === 'rejected' && (
@@ -500,13 +562,29 @@ export default function RideCheckoutPage() {
                       <AlertCircle className="w-10 h-10 text-rose-500 dark:text-rose-400 mx-auto mb-3" />
                       <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Not available</h2>
                       <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
-                        The {vehicle.name} isn&apos;t free for that window. Try another time or vehicle.
+                        {rejectionNote
+                          || `The ${vehicle.name} isn't free for that window. Try another time or vehicle.`}
                       </p>
                     </>
                   )}
 
                   <div className="space-y-2">
+                    {/* The client asked for this button by name. Sending an
+                        approved guest to My Bookings to hunt for a pay button
+                        put a needless step between "yes it's available" and
+                        the payment that holds it. */}
+                    {decision === 'approved' && rideId && (
+                      <Button
+                        onClick={() => navigate(
+                          `${createPageUrl('PaymentPage')}?${new URLSearchParams({ ride_booking_id: rideId })}`,
+                        )}
+                        className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        Proceed to payment
+                      </Button>
+                    )}
                     <Button
+                      variant={decision === 'approved' ? 'outline' : 'default'}
                       onClick={() => navigate(createPageUrl('Bookings'))}
                       className="w-full rounded-xl"
                     >
