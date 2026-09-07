@@ -88,9 +88,28 @@ Deno.serve(async (req) => {
             if (driver[f] !== undefined && driver[f] !== null) safe[f] = driver[f];
         }
 
+        // The plate completes the handoff: a name and a number identify the
+        // person, the registration identifies the car they arrive in. It comes
+        // off the Vehicle rather than the Driver, so it is added as its own
+        // named field rather than by widening PUBLIC_DRIVER_FIELDS — that list
+        // stays strictly an allow-list over the Driver row.
+        let registration_number: string | null = null;
+        try {
+            const vehicle = await base44.asServiceRole.entities.Vehicle.get(ride.vehicle_id);
+            registration_number = vehicle?.registration_number || null;
+        } catch (err) {
+            // A missing plate is a degraded handoff, not a failed one.
+            console.warn('Could not read vehicle for plate (non-fatal):', err);
+        }
+
         return json({
             success: true,
-            data: { ...safe, assigned_at: ride.driver_assigned_at || null },
+            data: {
+                ...safe,
+                assigned_at: ride.driver_assigned_at || null,
+                registration_number,
+                pickup_instructions: ride.pickup_instructions || null,
+            },
         });
     } catch (error) {
         console.error('getRideDriverContact error:', error);

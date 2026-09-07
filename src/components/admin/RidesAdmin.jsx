@@ -3,16 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
-  Loader2, RefreshCw, Car, Clock, MapPin, Mail, Phone, Users,
+  Loader2, RefreshCw, Car, MapPin, Mail, Phone, Users,
   Check, X, CalendarClock, UserPlus, Inbox, IdCard,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
+import { categoryLabel } from '@/config/rides';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -73,6 +73,9 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(null);
+  const [instructions, setInstructions] = useState('');
+
+  useEffect(() => { setInstructions(ride?.pickup_instructions || ''); }, [ride]);
 
   useEffect(() => {
     if (!ride) return;
@@ -100,6 +103,7 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
       const res = await base44.functions.invoke('assignRideDriver', {
         ride_booking_id: ride.id,
         driver_id: driver.id,
+        pickup_instructions: instructions.trim() || undefined,
       });
       if (res?.data?.success) {
         toast({
@@ -142,6 +146,20 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
             )}
           </DialogDescription>
         </DialogHeader>
+
+        <div>
+          <Label htmlFor="ad-instructions">Pickup instructions</Label>
+          <Textarea
+            id="ad-instructions" rows={2} value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder="Driver waits at the Zone 4 gate — guest should call on arrival."
+            className="mt-1 rounded-xl"
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Sent to the guest with the driver&apos;s details. Leaving this blank on a
+            reassignment keeps whatever is already there.
+          </p>
+        </div>
 
         {loading ? (
           <div className="flex justify-center py-8">
@@ -199,6 +217,192 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
   );
 }
 
+// The approval moment, where the client's "confirm availability AND final
+// price" step actually happens. Deliberately a form rather than a yes/no:
+// approving is where admin commits to a number, and rejecting is the last
+// chance to keep the guest in the funnel by offering something else.
+function DecideDialog({ confirm, onClose, onDecide }) {
+  const ride = confirm?.ride;
+  const approve = !!confirm?.approve;
+  const estimate = Number(ride?.estimated_price ?? ride?.total_price) || 0;
+
+  const [price, setPrice] = useState('');
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [alts, setAlts] = useState([]);
+  const [picked, setPicked] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!ride) return;
+    setPrice(String(estimate));
+    setReason('');
+    setNote('');
+    setPicked([]);
+    setAlts([]);
+  }, [ride, estimate]);
+
+  // Only load the alternatives list when it can actually be used.
+  useEffect(() => {
+    if (!ride || approve) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const city = ride.pickup_location?.city;
+        const rows = await base44.entities.Vehicle.filter(
+          { active: true, admin_approved: true, ...(city ? { city } : {}) }, 'name', 50,
+        );
+        if (!cancelled) setAlts((rows || []).filter((v) => v.id !== ride.vehicle_id));
+      } catch (err) {
+        console.warn('Could not load alternative vehicles:', err);
+        if (!cancelled) setAlts([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ride, approve]);
+
+  if (!ride) return null;
+
+  const parsed = Number(price);
+  const moved = Number.isFinite(parsed) && parsed > 0 && parsed !== estimate;
+  const blocked = approve && (!Number.isFinite(parsed) || parsed <= 0 || (moved && !reason.trim()));
+
+  const submit = async () => {
+    setBusy(true);
+    await onDecide({
+      ride,
+      approve,
+      note: note.trim() || undefined,
+      final_price: approve ? parsed : undefined,
+      price_adjustment_reason: approve && moved ? reason.trim() : undefined,
+      suggested_vehicle_ids: !approve && picked.length ? picked : undefined,
+    });
+    setBusy(false);
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{approve ? 'Confirm availability' : 'Mark unavailable'}</DialogTitle>
+          <DialogDescription>
+            {ride.vehicle_name} for {ride.guest_name} · {fmtWindow(ride.start_at, ride.end_at)}
+            {ride.booking_reference ? ` · ${ride.booking_reference}` : ''}
+          </DialogDescription>
+        </DialogHeader>
+
+        {approve ? (
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rd-price">Final price (₦)</Label>
+              <Input
+                id="rd-price" type="number" min={1} value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                className="mt-1 rounded-xl"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Guest was quoted {ngn(estimate)}. Change this only if the real cost differs.
+              </p>
+            </div>
+
+            {moved && (
+              <div>
+                <Label htmlFor="rd-reason">Why the price changed *</Label>
+                <Textarea
+                  id="rd-reason" rows={2} value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Airport pickup surcharge and one extra hour of waiting."
+                  className="mt-1 rounded-xl"
+                />
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  Shown to the guest before they pay. Required — a price cannot move silently.
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-600 dark:text-slate-300">
+              Confirm a driver can realistically be arranged before approving. The
+              specific driver is assigned after payment, so nothing is held against
+              an unpaid booking.
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rd-note">Message to the guest</Label>
+              <Textarea
+                id="rd-note" rows={2} value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="The owner has it out for servicing that morning."
+                className="mt-1 rounded-xl"
+              />
+            </div>
+
+            <div>
+              <Label>Suggest alternatives{ride.pickup_location?.city ? ` in ${ride.pickup_location.city}` : ''}</Label>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-2">
+                Optional, up to 4. Turns a dead end into another shot at the booking.
+              </p>
+              {alts.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 py-2">
+                  No other bookable vehicles in that city.
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                  {alts.map((v) => {
+                    const on = picked.includes(v.id);
+                    const full = picked.length >= 4 && !on;
+                    return (
+                      <button
+                        key={v.id} type="button" disabled={full}
+                        onClick={() => setPicked((p) =>
+                          on ? p.filter((x) => x !== v.id) : [...p, v.id])}
+                        className={`w-full text-left rounded-xl border px-3 py-2 text-sm transition-colors ${
+                          on
+                            ? 'border-slate-900 dark:border-amber-500 bg-slate-50 dark:bg-slate-800'
+                            : full
+                              ? 'border-slate-200 dark:border-slate-800 opacity-50 cursor-not-allowed'
+                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-400'
+                        }`}
+                      >
+                        <span className="font-medium text-slate-900 dark:text-white">{v.name}</span>
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {' · '}{categoryLabel(v.category)}
+                          {v.price_per_hour_ngn ? ` · ${ngn(v.price_per_hour_ngn)}/hr` : ''}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
+          <Button variant="ghost" onClick={onClose} className="w-full sm:w-auto rounded-xl">
+            Cancel
+          </Button>
+          <Button
+            onClick={submit}
+            disabled={blocked || busy}
+            className={`w-full sm:flex-1 rounded-xl text-white ${
+              approve ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
+            }`}
+          >
+            {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {approve
+              ? `Confirm at ${ngn(Number.isFinite(parsed) && parsed > 0 ? parsed : estimate)}`
+              : picked.length
+                ? `Reject and suggest ${picked.length}`
+                : 'Reject'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function RideRequestsPanel() {
   const { toast } = useToast();
   const [rides, setRides] = useState([]);
@@ -243,22 +447,30 @@ function RideRequestsPanel() {
     return () => clearInterval(t);
   }, [load]);
 
-  const decide = async () => {
-    if (!confirm) return;
-    const { ride, approve } = confirm;
+  const decide = async (payload) => {
+    if (!payload?.ride) return;
+    const { ride, approve, note, final_price, price_adjustment_reason, suggested_vehicle_ids } = payload;
     setConfirm(null);
     setActioningId(ride.id);
     try {
       const res = await base44.functions.invoke('decideRideBooking', {
         ride_booking_id: ride.id,
         action: approve ? 'approve' : 'reject',
+        note,
+        final_price,
+        price_adjustment_reason,
+        suggested_vehicle_ids,
       });
       if (res?.data?.success) {
         toast({
-          title: approve ? 'Ride approved' : 'Ride rejected',
+          title: approve ? 'Availability confirmed' : 'Marked unavailable',
           description: approve
-            ? 'The guest has an hour to pay. They have been emailed and notified.'
-            : 'The guest has been told and the vehicle is free again.',
+            ? res.data.data?.price_changed
+              ? `Confirmed at ${ngn(res.data.data.total_price)} — the guest has been told the price changed and why.`
+              : 'The guest has an hour to pay. They have been emailed and notified.'
+            : suggested_vehicle_ids?.length
+              ? `The guest has been sent ${suggested_vehicle_ids.length} alternative${suggested_vehicle_ids.length === 1 ? '' : 's'}.`
+              : 'The guest has been told and the vehicle is free again.',
         });
       } else if (res?.data?.code === 'ALREADY_DECIDED') {
         // Almost always means it was actioned from Telegram in the meantime.
@@ -369,9 +581,17 @@ function RideRequestsPanel() {
                             Paid
                           </Badge>
                         )}
+                        {r.booking_reference && (
+                          <Badge variant="outline" className="text-xs font-mono">{r.booking_reference}</Badge>
+                        )}
                         {r.linked_property_booking_id && (
                           <Badge variant="outline" className="text-xs">Add-on to a stay</Badge>
                         )}
+                        {Number(r.total_price) !== Number(r.estimated_price) && r.estimated_price ? (
+                          <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-0 text-xs">
+                            Price adjusted
+                          </Badge>
+                        ) : null}
                         {r.driver_assigned && (
                           <Badge variant="outline" className="text-xs">
                             {r.driver_name ? `Driver: ${r.driver_name}` : 'Driver assigned'}
@@ -469,45 +689,11 @@ function RideRequestsPanel() {
         onAssigned={() => { setAssigning(null); load(); }}
       />
 
-      <AlertDialog open={!!confirm} onOpenChange={(o) => { if (!o) setConfirm(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {confirm?.approve ? 'Approve this ride?' : 'Reject this ride?'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirm && (
-                <span className="block">
-                  <strong>{confirm.ride.vehicle_name}</strong> for{' '}
-                  <strong>{confirm.ride.guest_name}</strong>,{' '}
-                  {fmtWindow(confirm.ride.start_at, confirm.ride.end_at)}.
-                  {confirm.approve ? (
-                    <span className="block mt-2 text-xs text-slate-500 dark:text-slate-400">
-                      The vehicle stays held and the guest gets one hour to pay. Confirm a driver
-                      is realistically available before approving — assignment happens after payment.
-                    </span>
-                  ) : (
-                    <span className="block mt-2 text-xs text-slate-500 dark:text-slate-400">
-                      The guest is emailed and notified, and the vehicle is released for that window.
-                    </span>
-                  )}
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={decide}
-              className={confirm?.approve
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-rose-600 hover:bg-rose-700 text-white'}
-            >
-              {confirm?.approve ? 'Approve' : 'Reject'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DecideDialog
+        confirm={confirm}
+        onClose={() => setConfirm(null)}
+        onDecide={decide}
+      />
     </Card>
   );
 }

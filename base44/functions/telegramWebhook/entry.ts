@@ -703,6 +703,13 @@ Have a smooth trip — see you soon.
 //
 // Unlike the apartment flow there is no AvailabilityRequest: the decision
 // lands on the RideBooking row and `approved_at` is the idempotency guard.
+//
+// ONE DELIBERATE DIVERGENCE, so it does not read as drift: decideRideBooking
+// can confirm a ride at a price different from the guest's estimate, and can
+// attach alternative vehicles to a rejection. This path can do neither — an
+// inline keyboard has nowhere to type a figure or pick a car. Approving here
+// therefore always accepts the estimate as-is, which the admin Telegram
+// message says out loud. Price changes and alternatives are Admin-panel only.
 
 interface RideDecisionParams {
     base44: any;

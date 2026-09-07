@@ -12,6 +12,7 @@ import {
   CreditCard, Phone, UserRound,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { durationLabel } from '@/config/rides';
 import { createPageUrl } from '@/utils';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -107,6 +108,68 @@ const DriverCard = React.memo(function DriverCard({ rideId }) {
           </Button>
         </a>
       </div>
+
+      {/* The plate is what actually lets the guest pick the right car out of
+          three identical black SUVs at the gate. */}
+      {driver.registration_number && (
+        <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-900 flex items-center gap-2">
+          <Car className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300 flex-shrink-0" />
+          <span className="text-xs text-emerald-900 dark:text-emerald-100">
+            Look for <span className="font-semibold font-mono">{driver.registration_number}</span>
+          </span>
+        </div>
+      )}
+
+      {driver.pickup_instructions && (
+        <div className="mt-2 flex items-start gap-2">
+          <MapPin className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300 flex-shrink-0 mt-0.5" />
+          <span className="text-xs text-emerald-900 dark:text-emerald-100">
+            {driver.pickup_instructions}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// Alternatives admin offered when turning a request down. Vehicle reads are
+// public, so this resolves names client-side rather than widening the ride
+// payload for a case most rides never hit.
+const SuggestedVehicles = React.memo(function SuggestedVehicles({ ids }) {
+  const [rows, setRows] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const found = await Promise.all(
+        ids.slice(0, 4).map((id) => base44.entities.Vehicle.get(id).catch(() => null)),
+      );
+      if (!cancelled) setRows(found.filter(Boolean));
+    })();
+    return () => { cancelled = true; };
+  }, [ids]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/40 p-3">
+      <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+        Available instead
+      </p>
+      <div className="space-y-1.5">
+        {rows.map((v) => (
+          <Link
+            key={v.id}
+            to={`${createPageUrl('Vehicle')}?${new URLSearchParams({ id: v.id }).toString()}`}
+            className="flex items-center justify-between gap-2 rounded-lg bg-white/70 dark:bg-slate-900/60 px-3 py-2 hover:bg-white dark:hover:bg-slate-900 transition-colors"
+          >
+            <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{v.name}</span>
+            <span className="text-xs text-slate-600 dark:text-slate-300 flex-shrink-0">
+              {v.price_per_hour_ngn ? `${ngn(v.price_per_hour_ngn)}/hr` : ngn(v.price_12hr_ngn)}
+            </span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 });
@@ -151,6 +214,9 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
               {ride.vehicle_name || 'Vehicle'}
             </p>
             <div className="flex flex-wrap gap-2 flex-shrink-0">
+              {ride.booking_reference && (
+                <Badge variant="outline" className="text-xs font-mono">{ride.booking_reference}</Badge>
+              )}
               {ride.payment_status === 'paid' && (
                 <Badge className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-0">
                   ✓ Paid
@@ -175,7 +241,11 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
             <span className="flex items-start gap-1.5 sm:col-span-2">
               <CalendarClock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-              <span className="break-words">{fmtWhen(ride.start_at)} · {ride.duration_tier}</span>
+              <span className="break-words">
+                {fmtWhen(ride.start_at)} · {durationLabel(ride.duration_tier, {
+                  hours: ride.duration_hours, days: ride.duration_days,
+                })}
+              </span>
             </span>
             {pickup && (
               <span className="flex items-start gap-1.5 sm:col-span-2">
@@ -189,10 +259,26 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
             <span className="font-semibold text-slate-900 dark:text-white">{ngn(ride.total_price)}</span>
           </div>
 
+          {/* Confirmed at a different figure than quoted. Shown above the pay
+              button, never left for the guest to notice on Paystack. */}
+          {ride.estimated_price && Number(ride.total_price) !== Number(ride.estimated_price) ? (
+            <div className="mt-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-3">
+              <p className="text-sm text-amber-900 dark:text-amber-100">
+                Confirmed at <span className="font-semibold">{ngn(ride.total_price)}</span>,
+                estimated {ngn(ride.estimated_price)}.
+              </p>
+              {ride.price_adjustment_reason && (
+                <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
+                  {ride.price_adjustment_reason}
+                </p>
+              )}
+            </div>
+          ) : null}
+
           {awaitingPayment && (
             <div className="mt-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3">
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-2">
-                Approved — pay to lock it in
+                Confirmed available — pay to lock it in
               </p>
               <Link to={`${createPageUrl('PaymentPage')}?${new URLSearchParams({ ride_booking_id: ride.id }).toString()}`}>
                 <Button size="sm" className="rounded-xl bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white w-full sm:w-auto">
@@ -213,9 +299,14 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
             <div className="mt-3 flex items-start gap-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
               <Loader2 className="w-4 h-4 text-amber-500 dark:text-amber-400 animate-spin flex-shrink-0 mt-0.5" />
               <p className="text-xs text-slate-600 dark:text-slate-300">
-                Checking this vehicle is free for your window. You&apos;ll get a notification either way.
+                We&apos;re confirming this vehicle is available and will notify you shortly.
+                Nothing has been charged.
               </p>
             </div>
+          )}
+
+          {Array.isArray(ride.suggested_vehicle_ids) && ride.suggested_vehicle_ids.length > 0 && (
+            <SuggestedVehicles ids={ride.suggested_vehicle_ids} />
           )}
 
           {ride.bucket === 'cancelled' && ride.admin_response && (

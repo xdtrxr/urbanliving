@@ -67,24 +67,57 @@ async function editTelegram(messageId: string | undefined, originalText: string,
     }
 }
 
-async function emailGuest(sdk: any, ride: any, approved: boolean) {
+const ngn = (n: unknown) => `₦${(Number(n) || 0).toLocaleString()}`;
+
+async function emailGuest(
+    sdk: any,
+    ride: any,
+    approved: boolean,
+    extras: { finalPrice?: number; reason?: string; alternatives?: any[] } = {},
+) {
     if (!ride.guest_email) return;
     const when = new Date(ride.start_at).toLocaleString('en-GB', {
         timeZone: 'Africa/Lagos', dateStyle: 'full', timeStyle: 'short',
     });
+
+    // The confirmed figure may differ from what the guest was quoted. Saying so
+    // in the same breath as "pay now" is the entire point of splitting
+    // estimated_price from total_price — a guest must never discover a changed
+    // price on the Paystack screen.
+    const charged = extras.finalPrice ?? Number(ride.total_price) ?? 0;
+    const estimated = Number(ride.estimated_price ?? ride.total_price) || 0;
+    const priceMoved = Number(charged) !== estimated;
+
+    const priceBlock = priceMoved
+        ? `💰 Confirmed total: ${ngn(charged)}\n` +
+          `   (your estimate was ${ngn(estimated)})\n` +
+          (extras.reason ? `   Reason: ${extras.reason}\n` : '')
+        : `💰 Total: ${ngn(charged)}\n`;
+
+    const altBlock = (extras.alternatives || []).length
+        ? `\nSimilar vehicles free in ${extras.alternatives![0]?.city || 'your city'}:\n` +
+          extras.alternatives!.map((v: any) =>
+              `• ${v.name} — from ${ngn(v.price_per_hour_ngn || v.price_12hr_ngn)}` +
+              `${v.price_per_hour_ngn ? '/hour' : ' for 12 hours'}\n` +
+              `  ${APP_BASE_URL}/Vehicle?id=${v.id}\n`).join('') + `\n`
+        : '';
+
     const body = approved
         ? `Hi ${ride.guest_name || 'there'},\n\n` +
-          `Good news — ${ride.vehicle_name} is available for your ride.\n\n` +
-          `🔖 Status: APPROVED — AWAITING PAYMENT\n` +
+          `Good news — ${ride.vehicle_name} is available for your ride, and a driver is arranged.\n\n` +
+          `🔖 Status: CONFIRMED AVAILABLE — AWAITING PAYMENT\n` +
+          (ride.booking_reference ? `🏷️ Reference: ${ride.booking_reference}\n` : '') +
           `🚗 Vehicle: ${ride.vehicle_name}\n` +
           `🕒 Pickup: ${when}\n` +
-          `💰 Total: ₦${(Number(ride.total_price) || 0).toLocaleString()}\n\n` +
+          priceBlock + `\n` +
           `👉 Pay now: ${rideLink(ride.id)}\n\n` +
           `You have 1 hour from opening the payment page to complete payment (3-hour cap from this approval), after which the booking is released.\n\n` +
           `— Urban Stays`
         : `Hi ${ride.guest_name || 'there'},\n\n` +
           `Unfortunately ${ride.vehicle_name} isn't available for ${when}.\n\n` +
           `🔖 Status: CANCELLED\n` +
+          (ride.booking_reference ? `🏷️ Reference: ${ride.booking_reference}\n` : '') +
+          altBlock +
           `🔎 Browse other vehicles: ${APP_BASE_URL}/PlanTrip\n\n` +
           `— Urban Stays`;
     try {
@@ -120,7 +153,10 @@ Deno.serve(async (req) => {
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
-        const { ride_booking_id, action, note } = await req.json().catch(() => ({}));
+        const {
+            ride_booking_id, action, note,
+            final_price, price_adjustment_reason, suggested_vehicle_ids,
+        } = await req.json().catch(() => ({}));
         if (!ride_booking_id || !['approve', 'reject'].includes(action)) {
             return json({ success: false, error: 'ride_booking_id and action (approve|reject) are required' }, 400);
         }
@@ -144,35 +180,106 @@ Deno.serve(async (req) => {
             ? note.trim()
             : (approved ? APPROVE_MSG : REJECT_MSG);
 
+        // ── Price confirmation ──────────────────────────────────────────
+        // The guest was quoted an estimate. Admin confirms a final figure,
+        // which may differ once fuel, waiting time or an airport run is
+        // accounted for. A change without a stated reason is refused: the
+        // guest has to be able to see WHY the number moved, and making that
+        // structurally impossible to skip is cheaper than trusting habit.
+        const estimated = Number(ride.estimated_price ?? ride.total_price) || 0;
+        let charged = estimated;
+        if (final_price !== undefined && final_price !== null && final_price !== '') {
+            const parsed = Number(final_price);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                return json({ success: false, error: 'final_price must be a positive number', code: 'BAD_PRICE' }, 400);
+            }
+            if (parsed !== estimated && !String(price_adjustment_reason || '').trim()) {
+                return json({
+                    success: false,
+                    error: 'Changing the price needs a reason the guest can read.',
+                    code: 'REASON_REQUIRED',
+                }, 400);
+            }
+            charged = parsed;
+        }
+        const priceMoved = charged !== estimated;
+
+        // ── Alternatives on reject ──────────────────────────────────────
+        // "Not available" is a dead end; "not available, but these three are"
+        // keeps the guest in the funnel. Only ever suggest vehicles that are
+        // bookable and in the same city as the one they asked for.
+        let alternatives: any[] = [];
+        if (!approved && Array.isArray(suggested_vehicle_ids) && suggested_vehicle_ids.length) {
+            const wanted = suggested_vehicle_ids.slice(0, 4);
+            const rows = await Promise.all(wanted.map((id: string) =>
+                base44.asServiceRole.entities.Vehicle.get(id).catch(() => null)));
+            const askedCity = ride.pickup_location?.city;
+            alternatives = rows.filter((v: any) =>
+                v && v.active !== false && v.admin_approved !== false
+                && v.id !== ride.vehicle_id
+                && (!askedCity || v.city === askedCity));
+        }
+
         await base44.asServiceRole.entities.RideBooking.update(ride_booking_id, approved
             ? {
                 approved_at: nowIso,
                 payment_deadline: new Date(Date.now() + PAYMENT_WINDOW_MS).toISOString(),
                 admin_response: adminResponse,
+                total_price: charged,
+                // Backfill for rows written before estimated_price existed, so
+                // "did the price change?" is answerable for every booking.
+                estimated_price: ride.estimated_price ?? estimated,
+                ...(priceMoved
+                    ? { price_adjustment_reason: String(price_adjustment_reason).trim() }
+                    : {}),
             }
             : {
                 status: 'cancelled',
                 cancel_reason: 'admin_rejected',
                 admin_response: adminResponse,
+                ...(alternatives.length
+                    ? { suggested_vehicle_ids: alternatives.map((v: any) => v.id) }
+                    : {}),
             });
 
         await editTelegram(
             ride.telegram_message_id,
             `🚗 Ride \`${ride.id}\` — ${ride.vehicle_name}`,
-            approved ? '✅ *APPROVED* (in-app)' : '❌ *REJECTED* (in-app)',
+            approved
+                ? `✅ *APPROVED* (in-app)${priceMoved ? ` — price set to ${ngn(charged)}` : ''}`
+                : `❌ *REJECTED* (in-app)${alternatives.length ? ` — ${alternatives.length} alternative(s) offered` : ''}`,
         );
-        await emailGuest(base44, ride, approved);
+        await emailGuest(base44, ride, approved, {
+            finalPrice: charged,
+            reason: priceMoved ? String(price_adjustment_reason).trim() : undefined,
+            alternatives,
+        });
         await tryPush(base44, {
             user_email: ride.guest_email,
-            title: approved ? '✅ Ride approved' : '❌ Ride unavailable',
+            title: approved ? '✅ Ride confirmed available' : '❌ Ride unavailable',
             body: approved
-                ? `${ride.vehicle_name} is held for you — tap to pay and lock it in.`
-                : `${ride.vehicle_name} isn't free for that window. Tap to try another.`,
+                // The push is often the only thing a guest reads before tapping
+                // through to pay, so a changed price has to appear here too.
+                ? priceMoved
+                    ? `${ride.vehicle_name} is held for you at ${ngn(charged)} (was ${ngn(estimated)}). Tap to pay.`
+                    : `${ride.vehicle_name} is held for you — tap to pay and lock it in.`
+                : alternatives.length
+                    ? `${ride.vehicle_name} isn't free, but ${alternatives.length} similar car${alternatives.length === 1 ? '' : 's'} ${alternatives.length === 1 ? 'is' : 'are'}. Tap to see.`
+                    : `${ride.vehicle_name} isn't free for that window. Tap to try another.`,
             url: approved ? `/Bookings#ride-${ride.id}` : '/PlanTrip',
             tag: `ride-decision-${ride.id}`,
         });
 
-        return json({ success: true, data: { ride_booking_id, status: approved ? 'approved' : 'rejected' } });
+        return json({
+            success: true,
+            data: {
+                ride_booking_id,
+                status: approved ? 'approved' : 'rejected',
+                total_price: approved ? charged : undefined,
+                price_changed: approved ? priceMoved : undefined,
+                suggested: alternatives.map((v: any) => ({ id: v.id, name: v.name })),
+            },
+        });
     } catch (error) {
         console.error('decideRideBooking error:', error);
         return json({ success: false, error: 'Internal server error', details: (error as Error).message }, 500);
