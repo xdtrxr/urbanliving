@@ -78,6 +78,13 @@ Deno.serve(async (req) => {
             data: {
                 ride_booking_id,
                 total_price: ride.total_price,
+                // Carried so the payment screen can restate a price that admin
+                // changed at confirmation. The guest has already been told —
+                // by email, push, checkout and My Bookings — but this is the
+                // last screen before money moves, so it says it once more.
+                estimated_price: ride.estimated_price ?? null,
+                price_adjustment_reason: ride.price_adjustment_reason ?? null,
+                booking_reference: ride.booking_reference ?? null,
                 vehicle_name: ride.vehicle_name,
                 payment_deadline: new Date(deadlineMs).toISOString(),
             },

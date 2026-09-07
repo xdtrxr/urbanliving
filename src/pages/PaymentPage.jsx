@@ -178,6 +178,9 @@ export default function PaymentPage() {
           total_price: Number(r.total_price) || 0,
           property_title: r.vehicle_name || 'Your ride',
           guest_email: user.email,
+          estimated_price: Number(r.estimated_price) || null,
+          price_adjustment_reason: r.price_adjustment_reason || null,
+          booking_reference: r.booking_reference || null,
         });
         const dl = Date.parse(r.payment_deadline || '');
         if (!Number.isNaN(dl)) setDeadlineMs(dl);
@@ -628,6 +631,23 @@ export default function PaymentPage() {
                     ₦{bookingData.total_price.toLocaleString()}
                   </span>
                 </div>
+                {/* Last screen before the charge. If admin confirmed at a
+                    different figure than the guest was quoted, it is restated
+                    here rather than left to be noticed on the bank statement. */}
+                {bookingData.estimated_price
+                  && bookingData.estimated_price !== bookingData.total_price ? (
+                  <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-3 mt-1">
+                    <p className="text-sm text-amber-900 dark:text-amber-100">
+                      Confirmed at ₦{bookingData.total_price.toLocaleString()} — your
+                      estimate was ₦{bookingData.estimated_price.toLocaleString()}.
+                    </p>
+                    {bookingData.price_adjustment_reason && (
+                      <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
+                        {bookingData.price_adjustment_reason}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
           </CardContent>
