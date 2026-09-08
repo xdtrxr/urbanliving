@@ -1,6 +1,7 @@
 {
   "name": "Trip",
   "type": "object",
+  "description": "A guest's trip plan. Owner-only in every direction, stated per operation rather than as a single legacy 'write' key. Nothing in the codebase writes this entity today.",
   "properties": {
     "name": {
       "type": "string",
@@ -55,10 +56,52 @@
   ],
   "rls": {
     "read": {
-      "created_by": "{{user.email}}"
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
     },
-    "write": {
-      "created_by": "{{user.email}}"
+    "create": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
     }
   }
 }
