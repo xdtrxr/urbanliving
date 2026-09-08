@@ -1,7 +1,7 @@
 {
   "name": "Vehicle",
   "type": "object",
-  "description": "A vehicle available for hire on UrbanStays. Vehicles are inventory; drivers are a separate pool (Driver entity) that gets assigned per booking by the admin. One driver can pilot many vehicles over time — admin doesn't need to onboard a driver for every car.",
+  "description": "A vehicle available for hire on UrbanStays. Vehicles are inventory; drivers are a separate pool (Driver entity) that gets assigned per booking by the admin. One driver can pilot many vehicles over time \u2014 admin doesn't need to onboard a driver for every car.",
   "properties": {
     "name": {
       "type": "string",
@@ -13,8 +13,14 @@
     },
     "category": {
       "type": "string",
-      "enum": ["economy", "comfort", "suv", "executive", "luxury"],
-      "description": "Price tier — step 2 of the browse flow (city → category → car). Replaced the old body-style vehicle_type enum: guests shop by budget, not by shape. Group size is expressed through max_passengers instead. Keep in lockstep with CATEGORIES in src/config/rides.js."
+      "enum": [
+        "economy",
+        "comfort",
+        "suv",
+        "executive",
+        "luxury"
+      ],
+      "description": "Price tier \u2014 step 2 of the browse flow (city \u2192 category \u2192 car). Replaced the old body-style vehicle_type enum: guests shop by budget, not by shape. Group size is expressed through max_passengers instead. Keep in lockstep with CATEGORIES in src/config/rides.js."
     },
     "model_year": {
       "type": "number",
@@ -26,17 +32,21 @@
     },
     "images": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "URLs of vehicle photos. Minimum 5 recommended."
     },
     "videos": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Optional walk-through video URLs."
     },
     "city": {
       "type": "string",
-      "description": "City where the vehicle is based. Deliberately not an enum — the client expects to keep adding cities, and an enum makes that a multi-schema migration each time. The allowed list lives in src/config/rides.js and every admin dropdown is bound to it."
+      "description": "City where the vehicle is based. Deliberately not an enum \u2014 the client expects to keep adding cities, and an enum makes that a multi-schema migration each time. The allowed list lives in src/config/rides.js and every admin dropdown is bound to it."
     },
     "registration_number": {
       "type": "string",
@@ -44,7 +54,11 @@
     },
     "price_per_hour_ngn": {
       "type": "number",
-      "description": "Hourly rate in NGN. Required for any booking shorter than a full day — a vehicle without one cannot take hourly bookings at all and the UI greys those durations out."
+      "description": "Hourly rate in NGN. Required for any booking shorter than a full day \u2014 a vehicle without one cannot take hourly bookings at all and the UI greys those durations out."
+    },
+    "price_extra_hour_ngn": {
+      "type": "number",
+      "description": "Rate for each hour the guest keeps the car beyond what they booked (3 hours booked, 4 used \u2192 one extra hour at this rate). Disclosed to the guest before they request, snapshotted onto RideBooking.extra_hour_rate_ngn at request time, and settled by admin after the trip. Falls back to price_per_hour_ngn when unset \u2014 see extraHourRate in src/config/rides.js."
     },
     "price_12hr_ngn": {
       "type": "number",
@@ -60,11 +74,11 @@
     },
     "price_per_week_ngn": {
       "type": "number",
-      "description": "Optional weekly rate — Phase 2 feature, fall back to 7x daily if unset"
+      "description": "Optional weekly rate \u2014 Phase 2 feature, fall back to 7x daily if unset"
     },
     "price_per_month_ngn": {
       "type": "number",
-      "description": "Optional monthly rate — Phase 2 feature"
+      "description": "Optional monthly rate \u2014 Phase 2 feature"
     },
     "max_passengers": {
       "type": "number",
@@ -72,17 +86,23 @@
     },
     "amenities": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Features: air_conditioning, leather_seats, wifi, child_seat, bottled_water, sound_system, tinted_windows, executive_partition"
     },
     "driver_included": {
       "type": "boolean",
       "default": true,
-      "description": "Always true for V1 — every hire comes with a driver from the Driver pool. Kept as a field for future self-drive support."
+      "description": "Always true for V1 \u2014 every hire comes with a driver from the Driver pool. Kept as a field for future self-drive support."
     },
     "fuel_policy": {
       "type": "string",
-      "enum": ["fuel_included", "guest_pays_fuel", "fuel_capped"],
+      "enum": [
+        "fuel_included",
+        "guest_pays_fuel",
+        "fuel_capped"
+      ],
       "description": "Who covers fuel"
     },
     "fuel_cap_daily_ngn": {
@@ -91,7 +111,9 @@
     },
     "pickup_locations": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Areas / neighborhoods the vehicle can pick up from (Maitama, Wuse, VI, Lekki, NAIA, MMA, etc.)"
     },
     "service_area": {
@@ -101,7 +123,7 @@
     "active": {
       "type": "boolean",
       "default": true,
-      "description": "Admin toggle — false hides from the browse page without deleting the row"
+      "description": "Admin toggle \u2014 false hides from the browse page without deleting the row"
     },
     "admin_approved": {
       "type": "boolean",
@@ -120,7 +142,7 @@
     "min_hours_per_booking": {
       "type": "number",
       "default": 1,
-      "description": "Minimum hours a guest can book. Was 12 before hourly hire existed — any row still carrying 12 will reject every hourly booking, so existing vehicles must be backfilled."
+      "description": "Minimum hours a guest can book. Was 12 before hourly hire existed \u2014 any row still carrying 12 will reject every hourly booking, so existing vehicles must be backfilled."
     },
     "turnaround_hours": {
       "type": "number",
@@ -128,11 +150,31 @@
       "description": "Gap the vehicle needs between hires (cleaning, refuelling, getting across town). Replaced a hardcoded 2h constant: a 2h buffer either side of a 1h booking would cap a car at roughly three hires a day."
     }
   },
-  "required": ["name", "brand", "category", "city", "price_12hr_ngn", "price_24hr_ngn", "images"],
+  "required": [
+    "name",
+    "brand",
+    "category",
+    "city",
+    "price_12hr_ngn",
+    "price_24hr_ngn",
+    "images"
+  ],
   "rls": {
-    "create": { "user_condition": { "role": "admin" } },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
     "read": {},
-    "update": { "user_condition": { "role": "admin" } },
-    "delete": { "user_condition": { "role": "admin" } }
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
   }
 }
