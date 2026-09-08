@@ -19,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { estimateRidePrice, HOURLY_CHOICES } from '../src/config/rides.js';
+import { estimateRidePrice, extraHourRate, markupFor, HOURLY_CHOICES } from '../src/config/rides.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = (name) => path.join(ROOT, 'base44/functions', name, 'entry.ts');
@@ -60,6 +60,7 @@ const MAX_HOURLY_PREAMBLE = 'const MAX_HOURLY = 8; const HOUR_MS = 3600000; cons
 const rideDurationMs = lift(FN('checkRideAvailability'), 'rideDurationMs', 'tier, days, hours', MAX_HOURLY_PREAMBLE);
 const priceForTier = lift(FN('checkRideAvailability'), 'priceForTier', 'vehicle, tier, days, hours', MAX_HOURLY_PREAMBLE);
 const turnaroundMsFor = lift(FN('checkRideAvailability'), 'turnaroundMsFor', 'vehicle', 'const HOUR_MS = 3600000; const DEFAULT_TURNAROUND_MS = 3600000;');
+const extraHourRateFor = lift(FN('checkRideAvailability'), 'extraHourRateFor', 'vehicle');
 const windowsOverlap = lift(FN('checkRideAvailability'), 'windowsOverlap', 'aStart, aEnd, bStart, bEnd, buffer');
 
 const rideStartAt = (d, t) => Date.parse(`${d}T${t}:00${WAT_OFFSET}`);
@@ -165,6 +166,39 @@ check('no hourly rate returns null client-side', estimateRidePrice(noHourly, { t
 check('multi_day falls back to the daily rate when no extra-day price',
   priceForTier(noHourly, 'multi_day', 3), 200000 * 3);
 check('weekly falls back to 7x daily', priceForTier(noHourly, 'weekly'), 200000 * 7);
+
+// ── Extra-hour rate: server snapshot vs client disclosure ──────────────────
+// The guest reads extraHourRate on the vehicle page; checkRideAvailability
+// snapshots extraHourRateFor onto the booking. A mismatch means the guest was
+// told one overage rate and bound to another.
+console.log('\n— extra-hour rate (server vs client mirror) —');
+const overageCases = [
+  ['explicit rate wins', { price_per_hour_ngn: 15000, price_extra_hour_ngn: 18000 }, 18000],
+  ['falls back to the hourly rate', { price_per_hour_ngn: 15000 }, 15000],
+  ['zero explicit rate is treated as unset', { price_per_hour_ngn: 15000, price_extra_hour_ngn: 0 }, 15000],
+  ['day-hire-only car has no rule', { price_12hr_ngn: 120000, price_24hr_ngn: 200000 }, null],
+  ['garbage falls through to hourly', { price_per_hour_ngn: 15000, price_extra_hour_ngn: 'call us' }, 15000],
+];
+for (const [name, v, want] of overageCases) {
+  check(`${name} (server)`, extraHourRateFor(v), want);
+  check(`${name} (client)`, extraHourRate(v), want);
+}
+
+// ── Markup: admin-only margin over VehicleCosting ──────────────────────────
+console.log('\n— markup —');
+const priced = { price_per_hour_ngn: 20000, price_24hr_ngn: 200000 };
+const costed = {
+  partner_cost_per_hour_ngn: 12000, driver_cost_per_hour_ngn: 3000,
+  partner_cost_per_day_ngn: 120000, driver_cost_per_day_ngn: 30000,
+};
+const m = markupFor(priced, costed);
+check('hourly markup is price minus partner minus driver', m.hourly.markup, 5000);
+check('hourly percentage rounds', m.hourly.pct, 25);
+check('daily markup', m.daily.markup, 50000);
+check('no costing row gives no hourly line', markupFor(priced, null).hourly, null);
+check('unpriced basis gives no line', markupFor({ price_24hr_ngn: 200000 }, costed).hourly, null);
+check('costs above price show a negative markup',
+  markupFor({ price_per_hour_ngn: 10000 }, { partner_cost_per_hour_ngn: 12000 }).hourly.markup, -2000);
 
 // ── Result ─────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

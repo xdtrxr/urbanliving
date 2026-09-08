@@ -51,13 +51,28 @@ estimated vs final price|estimated_price
 price adjustment reason|price_adjustment_reason
 registration number|registration_number
 proceed-to-payment CTA|Proceed to payment
+request-availability CTA|Request availability
+extra-hour rate|price_extra_hour_ngn
+extra-hour snapshot|extra_hour_rate_ngn
+admin-only costing|VehicleCosting
+nav says Book a Ride|Book a Ride
 MARKERS
 
 echo; echo "── stale markers (must all be GONE) ──"
 # Only strings the new source genuinely no longer contains. A marker that was
-# never there would report "gone" and read as a false pass.
-for m in "Plan a Trip"; do
+# never there would report "gone" and read as a false pass. "Check availability"
+# (lower-case a) was the ride CTA; the stays flow uses "Check Availability" and
+# grep -F is case-sensitive, so the stays string does not trip this.
+for m in "Plan a Trip" "Check availability" "/ full day"; do
   grep -qF -- "$m" "$TMP/all.js" && no "stale string still live: $m" || ok "gone: $m"
+done
+
+echo; echo "── entities reachable (401/403=exists, 404=schema NOT DEPLOYED) ──"
+# VehicleCosting is admin-only in every direction, so an unauthenticated read
+# is refused — but refused is not the same as missing.
+for e in VehicleCosting; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$API/entities/$e?limit=1")
+  [ "$code" = "404" ] && no "$e schema NOT DEPLOYED" || ok "$e (HTTP $code)"
 done
 
 echo; echo "── functions reachable (500=exists+needs auth, 404=NOT DEPLOYED) ──"

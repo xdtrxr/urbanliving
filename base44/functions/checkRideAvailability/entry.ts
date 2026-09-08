@@ -109,6 +109,13 @@ function priceForTier(vehicle: any, tier: string, days?: number, hours?: number)
     }
 }
 
+// Overage rate for hours beyond the booked window. MIRRORED client-side by
+// extraHourRate in src/config/rides.js. Falls back to the standard hourly rate
+// so every hourly-capable car has an extra-hour rule, per the client's brief.
+function extraHourRateFor(vehicle: any): number | null {
+    return Number(vehicle.price_extra_hour_ngn) || Number(vehicle.price_per_hour_ngn) || null;
+}
+
 // Base44's .filter() silently caps at 50 rows. Anything scanning for conflicts
 // must page or it will happily approve a double-booking it never saw.
 const PAGE = 500;
@@ -205,6 +212,9 @@ async function notifyAdmin(opts: {
         `• To:   ${fmt(opts.endMs)}\n\n` +
         `📌 Pickup: ${pickup}\n` +
         `💰 Estimate: ₦${(Number(opts.ride.total_price) || 0).toLocaleString()}\n` +
+        (opts.ride.extra_hour_rate_ngn
+            ? `⏱ Extra hours: ₦${Number(opts.ride.extra_hour_rate_ngn).toLocaleString()}/hr\n`
+            : '') +
         (opts.ride.special_requests ? `\n📝 ${opts.ride.special_requests}\n` : '') +
         `\n_Approving here accepts the estimate. To change the price first, use the Admin panel._\n` +
         `\n*Ride ID:* \`${opts.ride.id}\``;
@@ -427,6 +437,10 @@ Deno.serve(async (req) => {
             // one the payment path ever reads.
             estimated_price: total_price,
             total_price,
+            // Snapshotted like vehicle_name: the overage rate the guest saw
+            // when they requested is the one that applies to this trip, even
+            // if admin re-prices the car next week.
+            extra_hour_rate_ngn: extraHourRateFor(vehicle) ?? undefined,
             status: 'pending',
             payment_status: 'unpaid',
             linked_property_booking_id: linked_property_booking_id || undefined,

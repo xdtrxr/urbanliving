@@ -794,8 +794,11 @@ async function handleRideDecision(p: RideDecisionParams): Promise<Response> {
               `🔖 Status: APPROVED — AWAITING PAYMENT\n` +
               `🚗 Vehicle: ${ride.vehicle_name}\n` +
               `🕒 Pickup: ${when}\n` +
-              `💰 Total: ₦${(Number(ride.total_price) || 0).toLocaleString()}\n\n` +
-              `👉 Pay now: ${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(ride.id)}#ride-${encodeURIComponent(ride.id)}\n\n` +
+              `💰 Total: ₦${(Number(ride.total_price) || 0).toLocaleString()}\n` +
+              (ride.extra_hour_rate_ngn
+                  ? `⏱ Extra time: ₦${Number(ride.extra_hour_rate_ngn).toLocaleString()} per hour beyond your booking, settled after the trip\n`
+                  : '') +
+              `\n👉 Pay now: ${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(ride.id)}#ride-${encodeURIComponent(ride.id)}\n\n` +
               `You have 1 hour from opening the payment page to complete payment (3-hour cap from this approval), after which the booking is released.\n\n` +
               `— Urban Stays`
             : `Hi ${ride.guest_name || 'there'},\n\n` +

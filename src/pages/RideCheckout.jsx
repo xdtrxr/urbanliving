@@ -16,6 +16,7 @@ import {
 import { createPageUrl } from '@/utils';
 import {
   DURATION_OPTIONS, durationOptionId, estimateRidePrice, supportsHourly, minHours,
+  extraHourRate,
 } from '@/config/rides';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -384,26 +385,38 @@ export default function RideCheckoutPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="rc-area">Area (optional)</Label>
+                <Label htmlFor="rc-area">Area in {vehicle.city}</Label>
+                {/* The vehicle's own pickup areas are offered as suggestions
+                    so the guest lands on a district this car actually serves,
+                    without being blocked from typing somewhere else in town. */}
                 <Input
                   id="rc-area" value={form.pickup_area}
                   onChange={(e) => set('pickup_area', e.target.value)}
-                  placeholder="Maitama, Lekki…"
+                  placeholder={(vehicle.pickup_locations || []).slice(0, 2).join(', ') || 'Wuse 2, Maitama…'}
+                  list="rc-area-options"
                   className="mt-1 rounded-xl"
                 />
+                {(vehicle.pickup_locations?.length || 0) > 0 && (
+                  <datalist id="rc-area-options">
+                    {vehicle.pickup_locations.map((a) => <option key={a} value={a} />)}
+                  </datalist>
+                )}
               </div>
             </div>
 
             <div>
               <Label htmlFor="rc-pickup" className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5" /> Pickup address
+                <MapPin className="w-3.5 h-3.5" /> Pickup location
               </Label>
               <Input
                 id="rc-pickup" value={form.pickup_address}
                 onChange={(e) => set('pickup_address', e.target.value)}
-                placeholder="Where should the driver collect you?"
+                placeholder={`Street address or landmark in ${vehicle.city}`}
                 className="mt-1 rounded-xl"
               />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                This car is based in {vehicle.city}, so pickup needs to be in or around {vehicle.city}.
+              </p>
             </div>
 
             <div>
@@ -431,15 +444,21 @@ export default function RideCheckoutPage() {
         {/* Total + submit */}
         <Card className="bg-slate-50/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 rounded-2xl">
           <CardContent className="p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-2">
               <div>
-                <p className="text-sm text-slate-600 dark:text-slate-300">Estimated total</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">Estimated price</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{ngn(displayTotal)}</p>
               </div>
               <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                 <ShieldCheck className="w-4 h-4" /> Confirmed before payment
               </div>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Subject to availability confirmation.
+              {extraHourRate(vehicle)
+                ? ` Extra hours beyond your booking are ${ngn(extraHourRate(vehicle))} each, settled after the trip.`
+                : ''}
+            </p>
 
             {submitError && (
               <div className="mb-4 flex items-start gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3">
@@ -458,7 +477,7 @@ export default function RideCheckoutPage() {
               ) : linkedBookingId ? (
                 <><Car className="w-4 h-4 mr-2" /> Add this ride</>
               ) : (
-                <><Clock className="w-4 h-4 mr-2" /> Check availability</>
+                <><Clock className="w-4 h-4 mr-2" /> Request availability</>
               )}
             </Button>
             <p className="text-xs text-center text-slate-500 dark:text-slate-400 mt-2">
@@ -509,9 +528,9 @@ export default function RideCheckoutPage() {
                   {decision === 'pending' && !pollExhausted && (
                     <>
                       <Loader2 className="w-10 h-10 text-amber-500 dark:text-amber-400 mx-auto mb-3 animate-spin" />
-                      <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Request received</h2>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Your availability request has been received</h2>
                       <p className="text-sm text-slate-600 dark:text-slate-300 mb-5">
-                        We&apos;re confirming the {vehicle.name} is available for your window and will
+                        We&apos;re confirming the {vehicle.name} and a driver for your window and will
                         notify you shortly. Nothing has been charged.
                       </p>
                     </>

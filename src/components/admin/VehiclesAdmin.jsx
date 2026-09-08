@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import {
   CITIES, CATEGORIES, categoryLabel, effectiveCategory, needsCategoryMigration,
+  extraHourRate, markupFor,
 } from '@/config/rides';
 
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
@@ -57,6 +58,7 @@ const EMPTY_FORM = {
   city: CITIES[0],
   registration_number: '',
   price_per_hour_ngn: '',
+  price_extra_hour_ngn: '',
   price_12hr_ngn: '',
   price_24hr_ngn: '',
   price_per_extra_day_ngn: '',
@@ -72,6 +74,38 @@ const EMPTY_FORM = {
   min_hours_per_booking: 1,
   turnaround_hours: 1,
 };
+
+// Internal cost structure, kept on a separate admin-only entity (VehicleCosting)
+// because Vehicle rows are publicly readable and RLS is per-row: partner cost
+// on the Vehicle would expose UrbanStays' margin to anyone with the API URL.
+// The guest only ever sees the final price.
+const EMPTY_COSTING = {
+  partner_cost_per_hour_ngn: '',
+  partner_cost_per_day_ngn: '',
+  driver_cost_per_hour_ngn: '',
+  driver_cost_per_day_ngn: '',
+  notes: '',
+};
+
+const ngn = (n) => `₦${(Number(n) || 0).toLocaleString()}`;
+
+// One row of the markup readout. Module scope, not defined inline in render,
+// so React does not see a new component type on every keystroke.
+function MarkupLine({ label, row }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-xs">
+      <span className="text-slate-600 dark:text-slate-300">{label}</span>
+      {row ? (
+        <span className={`font-semibold ${row.markup < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white'}`}>
+          {ngn(row.price)} − {ngn(row.cost)} = {ngn(row.markup)}
+          <span className="font-normal text-slate-500 dark:text-slate-400"> ({row.pct}%)</span>
+        </span>
+      ) : (
+        <span className="text-slate-400">—</span>
+      )}
+    </div>
+  );
+}
 
 // Pull the platform's actual error text out of an upload failure so admin
 // sees "integration limit reached — upgrade plan" instead of a generic
@@ -93,6 +127,11 @@ const arrayToCsv = (arr) => (Array.isArray(arr) ? arr.join(', ') : '');
 export default function VehiclesAdmin() {
   const [innerTab, setInnerTab] = useState('add');
   const [form, setForm] = useState(EMPTY_FORM);
+  const [costing, setCosting] = useState(EMPTY_COSTING);
+  // Id of the VehicleCosting row for the vehicle being edited, so save can
+  // update rather than create a duplicate. Null on a fresh vehicle or when
+  // no costing has been entered yet.
+  const [costingRowId, setCostingRowId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [vehicles, setVehicles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -125,11 +164,37 @@ export default function VehiclesAdmin() {
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
+    setCosting(EMPTY_COSTING);
+    setCostingRowId(null);
     setEditingId(null);
+  };
+
+  // Costing lives on its own entity, so it is fetched separately when a
+  // vehicle is opened for editing. A read failure leaves the section blank
+  // rather than blocking the edit — the customer-facing fields matter more.
+  const loadCosting = async (vehicleId) => {
+    setCosting(EMPTY_COSTING);
+    setCostingRowId(null);
+    try {
+      const rows = await base44.entities.VehicleCosting.filter({ vehicle_id: vehicleId }, undefined, 1);
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (!row) return;
+      setCostingRowId(row.id);
+      setCosting({
+        partner_cost_per_hour_ngn: row.partner_cost_per_hour_ngn ?? '',
+        partner_cost_per_day_ngn: row.partner_cost_per_day_ngn ?? '',
+        driver_cost_per_hour_ngn: row.driver_cost_per_hour_ngn ?? '',
+        driver_cost_per_day_ngn: row.driver_cost_per_day_ngn ?? '',
+        notes: row.notes || '',
+      });
+    } catch (err) {
+      console.warn('Could not load vehicle costing (non-fatal):', err);
+    }
   };
 
   const startEdit = (vehicle) => {
     setEditingId(vehicle.id);
+    loadCosting(vehicle.id);
     setForm({
       name: vehicle.name || '',
       brand: vehicle.brand || '',
@@ -141,6 +206,7 @@ export default function VehiclesAdmin() {
       city: vehicle.city || CITIES[0],
       registration_number: vehicle.registration_number || '',
       price_per_hour_ngn: vehicle.price_per_hour_ngn ?? '',
+      price_extra_hour_ngn: vehicle.price_extra_hour_ngn ?? '',
       price_12hr_ngn: vehicle.price_12hr_ngn ?? '',
       price_24hr_ngn: vehicle.price_24hr_ngn ?? '',
       price_per_extra_day_ngn: vehicle.price_per_extra_day_ngn ?? '',
@@ -185,6 +251,7 @@ export default function VehiclesAdmin() {
         city: form.city,
         registration_number: form.registration_number.trim() || undefined,
         price_per_hour_ngn: form.price_per_hour_ngn === '' ? undefined : Number(form.price_per_hour_ngn),
+        price_extra_hour_ngn: form.price_extra_hour_ngn === '' ? undefined : Number(form.price_extra_hour_ngn),
         price_12hr_ngn: Number(form.price_12hr_ngn),
         price_24hr_ngn: Number(form.price_24hr_ngn),
         price_per_extra_day_ngn: form.price_per_extra_day_ngn
@@ -206,10 +273,44 @@ export default function VehiclesAdmin() {
         driver_included: true, // V1 always includes a driver
       };
 
+      let vehicleId = editingId;
       if (editingId) {
         await base44.entities.Vehicle.update(editingId, payload);
       } else {
-        await base44.entities.Vehicle.create(payload);
+        const created = await base44.entities.Vehicle.create(payload);
+        vehicleId = created?.id;
+        // If the costing write below fails, the retry must update this
+        // vehicle rather than create a second copy of it.
+        setEditingId(vehicleId || null);
+      }
+
+      // Upsert the costing row. Only written when something was entered or a
+      // row already exists, so vehicles with no internal costing never grow
+      // an empty companion row.
+      const num = (v) => (v === '' || v == null ? undefined : Number(v));
+      const costingPayload = {
+        vehicle_id: vehicleId,
+        partner_cost_per_hour_ngn: num(costing.partner_cost_per_hour_ngn),
+        partner_cost_per_day_ngn: num(costing.partner_cost_per_day_ngn),
+        driver_cost_per_hour_ngn: num(costing.driver_cost_per_hour_ngn),
+        driver_cost_per_day_ngn: num(costing.driver_cost_per_day_ngn),
+        notes: costing.notes.trim() || undefined,
+      };
+      const hasCosting = Object.entries(costingPayload)
+        .some(([k, v]) => k !== 'vehicle_id' && v !== undefined);
+      if (vehicleId && (hasCosting || costingRowId)) {
+        try {
+          if (costingRowId) {
+            await base44.entities.VehicleCosting.update(costingRowId, costingPayload);
+          } else {
+            await base44.entities.VehicleCosting.create(costingPayload);
+          }
+        } catch (err) {
+          // The vehicle itself is saved; say so and leave the form open so
+          // the costing can be retried without re-entering everything.
+          console.error('Failed to save vehicle costing:', err);
+          throw new Error(`Vehicle saved, but its internal costing did not: ${err?.message || 'unknown error'}. Edit it and save again.`);
+        }
       }
 
       resetForm();
@@ -650,6 +751,21 @@ export default function VehiclesAdmin() {
                       </p>
                     </div>
                     <div>
+                      <Label htmlFor="v-priceExtraHour">Extra hour rate</Label>
+                      <Input
+                        id="v-priceExtraHour"
+                        type="number"
+                        min={0}
+                        value={form.price_extra_hour_ngn}
+                        onChange={(e) => setForm({ ...form, price_extra_hour_ngn: e.target.value })}
+                        placeholder={form.price_per_hour_ngn || '18000'}
+                      />
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Charged per hour the guest keeps the car past what they
+                        booked. Blank means the standard hourly rate applies.
+                      </p>
+                    </div>
+                    <div>
                       <Label htmlFor="v-price12">Full day (12h) price *</Label>
                       <Input
                         id="v-price12"
@@ -716,6 +832,81 @@ export default function VehiclesAdmin() {
                         day around each booking.
                       </p>
                     </div>
+                  </div>
+                </section>
+
+                {/* INTERNAL COSTING — admin-only entity, never shown to guests */}
+                <section>
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Internal costing (₦ NGN)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                    What this car actually costs UrbanStays. Stored separately from the
+                    vehicle and readable by admins only — the guest sees the final price
+                    above and nothing else.
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <Label htmlFor="c-partner-hr">Partner cost / hour</Label>
+                      <Input
+                        id="c-partner-hr" type="number" min={0}
+                        value={costing.partner_cost_per_hour_ngn}
+                        onChange={(e) => setCosting({ ...costing, partner_cost_per_hour_ngn: e.target.value })}
+                        placeholder="10000"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="c-driver-hr">Driver cost / hour</Label>
+                      <Input
+                        id="c-driver-hr" type="number" min={0}
+                        value={costing.driver_cost_per_hour_ngn}
+                        onChange={(e) => setCosting({ ...costing, driver_cost_per_hour_ngn: e.target.value })}
+                        placeholder="3000"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="c-partner-day">Partner cost / 24h</Label>
+                      <Input
+                        id="c-partner-day" type="number" min={0}
+                        value={costing.partner_cost_per_day_ngn}
+                        onChange={(e) => setCosting({ ...costing, partner_cost_per_day_ngn: e.target.value })}
+                        placeholder="70000"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="c-driver-day">Driver cost / 24h</Label>
+                      <Input
+                        id="c-driver-day" type="number" min={0}
+                        value={costing.driver_cost_per_day_ngn}
+                        onChange={(e) => setCosting({ ...costing, driver_cost_per_day_ngn: e.target.value })}
+                        placeholder="15000"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Live margin readout so the admin sees the consequence of a
+                      price or cost edit before saving it. */}
+                  {(() => {
+                    const m = markupFor(form, costing);
+                    return (
+                      <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3 space-y-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          UrbanStays markup
+                        </p>
+                        <MarkupLine label="Per hour" row={m.hourly} />
+                        <MarkupLine label="Per 24 hours" row={m.daily} />
+                      </div>
+                    );
+                  })()}
+
+                  <div className="mt-3">
+                    <Label htmlFor="c-notes">Partner notes</Label>
+                    <Textarea
+                      id="c-notes" rows={2}
+                      value={costing.notes}
+                      onChange={(e) => setCosting({ ...costing, notes: e.target.value })}
+                      placeholder="Owner: Mr Bala, 0803… Supplies own driver. Invoices weekly."
+                    />
                   </div>
                 </section>
 
@@ -917,6 +1108,9 @@ export default function VehiclesAdmin() {
                           <div className="flex flex-wrap gap-3 text-xs text-slate-700 dark:text-slate-200">
                             {v.price_per_hour_ngn ? (
                               <span>/hr: <strong>₦{v.price_per_hour_ngn.toLocaleString()}</strong></span>
+                            ) : null}
+                            {extraHourRate(v) ? (
+                              <span>Extra hr: <strong>₦{extraHourRate(v).toLocaleString()}</strong></span>
                             ) : null}
                             <span>12h: <strong>₦{(v.price_12hr_ngn || 0).toLocaleString()}</strong></span>
                             <span>24h: <strong>₦{(v.price_24hr_ngn || 0).toLocaleString()}</strong></span>

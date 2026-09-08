@@ -11,7 +11,7 @@ import {
 import { createPageUrl } from '@/utils';
 import {
   HOURLY_CHOICES, estimateRidePrice, supportsHourly, minHours, categoryLabel,
-  effectiveCategory,
+  effectiveCategory, extraHourRate,
 } from '@/config/rides';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext';
@@ -491,14 +491,23 @@ export default function VehiclePage() {
 
                   <div className="border-t border-slate-200 dark:border-slate-800 pt-4 mb-5">
                     <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-sm text-slate-600 dark:text-slate-300">Total</span>
+                      <span className="text-sm text-slate-600 dark:text-slate-300">Estimated price</span>
                       <span className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
                         ₦{computedTotal.toLocaleString()}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      You won&apos;t be charged until admin confirms availability.
+                      Subject to availability confirmation. Nothing is charged until we
+                      confirm the car, the driver and the final price.
                     </p>
+                    {/* The overage rule is part of the price, so it is stated
+                        next to the number rather than found after the trip. */}
+                    {extraHourRate(vehicle) ? (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                        Keep the car longer than booked and each extra hour is
+                        ₦{extraHourRate(vehicle).toLocaleString()}, settled after the trip.
+                      </p>
+                    ) : null}
                   </div>
 
                   {!isAuthenticated ? (
@@ -511,7 +520,7 @@ export default function VehiclePage() {
                     <Link to={checkoutHref}>
                       <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
                         <Calendar className="w-4 h-4 mr-2" />
-                        Check availability
+                        Request availability
                       </Button>
                     </Link>
                   )}

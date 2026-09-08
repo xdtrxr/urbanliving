@@ -1,0 +1,38 @@
+{
+  "name": "VehicleCosting",
+  "type": "object",
+  "description": "Internal cost structure behind a Vehicle's customer price: what the vehicle partner charges UrbanStays, what the driver costs, and therefore the markup. One row per vehicle, keyed by vehicle_id. Lives in its own entity rather than on Vehicle because Vehicle is publicly readable (guests browse it) and Base44 RLS is per-row, not per-field — putting partner cost on the Vehicle row would let anyone read UrbanStays' margin off the API. This entity is admin-only in every direction. The guest only ever sees the final price on Vehicle.",
+  "properties": {
+    "vehicle_id": {
+      "type": "string",
+      "description": "FK to Vehicle. Exactly one costing row per vehicle — VehiclesAdmin upserts on save."
+    },
+    "partner_cost_per_hour_ngn": {
+      "type": "number",
+      "description": "What the vehicle owner / transport partner charges UrbanStays per hour, in NGN."
+    },
+    "partner_cost_per_day_ngn": {
+      "type": "number",
+      "description": "What the partner charges for a 24-hour day, in NGN."
+    },
+    "driver_cost_per_hour_ngn": {
+      "type": "number",
+      "description": "Driver cost per hour, in NGN. Zero when the partner supplies their own driver inside partner_cost."
+    },
+    "driver_cost_per_day_ngn": {
+      "type": "number",
+      "description": "Driver cost for a 24-hour day, in NGN."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free text: who the partner is, how they invoice, anything the next admin needs to know. Never shown to guests."
+    }
+  },
+  "required": ["vehicle_id"],
+  "rls": {
+    "create": { "user_condition": { "role": "admin" } },
+    "read": { "user_condition": { "role": "admin" } },
+    "update": { "user_condition": { "role": "admin" } },
+    "delete": { "user_condition": { "role": "admin" } }
+  }
+}

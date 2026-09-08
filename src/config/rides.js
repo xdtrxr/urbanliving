@@ -92,6 +92,47 @@ export const supportsHourly = (vehicle) => Number(vehicle?.price_per_hour_ngn) >
 
 export const minHours = (vehicle) => Math.max(1, Number(vehicle?.min_hours_per_booking) || 1);
 
+// What each hour beyond the booked window costs. The client's rule is that
+// every booking has one — "3 hours booked, 4 used, the fourth is charged" —
+// so a vehicle without an explicit overage rate falls back to its standard
+// hourly rate rather than to nothing. Null only for a day-hire-only car with
+// neither figure set, in which case overage is a conversation with admin.
+//
+// MIRROR of extraHourRateFor in checkRideAvailability, which snapshots this
+// onto the booking. Keep in lockstep; scripts/check-ride-time.mjs asserts it.
+export const extraHourRate = (vehicle) =>
+  Number(vehicle?.price_extra_hour_ngn) || Number(vehicle?.price_per_hour_ngn) || null;
+
+// The additional charges the client listed by name. Offered as one-tap
+// presets on the admin's price-adjustment reason so the wording the guest
+// reads is consistent from one booking to the next.
+export const ADJUSTMENT_REASONS = [
+  'Extra hour(s)',
+  'Out-of-city travel',
+  'Airport pickup',
+  'Toll fees',
+  'Waiting time',
+  'Overnight / multi-day arrangement',
+  'Special request',
+];
+
+// Admin-only margin arithmetic over a VehicleCosting row. Returns null for a
+// basis where either side is unknown, so the form shows "—" rather than a
+// misleading 100% margin on a car whose partner cost was never entered.
+export function markupFor(vehicle, costing) {
+  const line = (price, partner, driver) => {
+    const p = Number(price) || 0;
+    if (!p || costing == null) return null;
+    const cost = (Number(partner) || 0) + (Number(driver) || 0);
+    if (!cost) return null;
+    return { price: p, cost, markup: p - cost, pct: Math.round(((p - cost) / p) * 100) };
+  };
+  return {
+    hourly: line(vehicle?.price_per_hour_ngn, costing?.partner_cost_per_hour_ngn, costing?.driver_cost_per_hour_ngn),
+    daily: line(vehicle?.price_24hr_ngn, costing?.partner_cost_per_day_ngn, costing?.driver_cost_per_day_ngn),
+  };
+}
+
 // ── Legacy compatibility ────────────────────────────────────────────────────
 // Vehicles created before the category taxonomy landed carry the old
 // body-style `vehicle_type` and no `category`. Browse filters on category, so

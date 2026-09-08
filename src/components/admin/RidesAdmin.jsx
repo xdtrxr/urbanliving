@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
-import { categoryLabel } from '@/config/rides';
+import { categoryLabel, ADJUSTMENT_REASONS } from '@/config/rides';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -308,6 +308,24 @@ function DecideDialog({ confirm, onClose, onDecide }) {
             {moved && (
               <div>
                 <Label htmlFor="rd-reason">Why the price changed *</Label>
+                {/* The additional charges the client listed, as one-tap
+                    presets. Appends rather than replaces so two charges can
+                    be stacked ("Airport pickup, Waiting time"). */}
+                <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
+                  {ADJUSTMENT_REASONS.map((r) => (
+                    <button
+                      key={r} type="button"
+                      onClick={() => setReason((cur) => {
+                        const t = cur.trim();
+                        if (t.includes(r)) return cur;
+                        return t ? `${t.replace(/[.,]\s*$/, '')}, ${r}` : r;
+                      })}
+                      className="rounded-full border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200 hover:border-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
+                    >
+                      + {r}
+                    </button>
+                  ))}
+                </div>
                 <Textarea
                   id="rd-reason" rows={2} value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -624,6 +642,11 @@ function RideRequestsPanel() {
                         </span>
                         <span className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white">
                           {ngn(r.total_price)}
+                          {r.extra_hour_rate_ngn ? (
+                            <span className="font-normal text-xs text-slate-500 dark:text-slate-400">
+                              · extra hr {ngn(r.extra_hour_rate_ngn)}
+                            </span>
+                          ) : null}
                         </span>
                       </div>
 

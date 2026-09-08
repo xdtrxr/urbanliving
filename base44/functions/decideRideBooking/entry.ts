@@ -88,11 +88,16 @@ async function emailGuest(
     const estimated = Number(ride.estimated_price ?? ride.total_price) || 0;
     const priceMoved = Number(charged) !== estimated;
 
-    const priceBlock = priceMoved
+    const priceBlock = (priceMoved
         ? `💰 Confirmed total: ${ngn(charged)}\n` +
           `   (your estimate was ${ngn(estimated)})\n` +
           (extras.reason ? `   Reason: ${extras.reason}\n` : '')
-        : `💰 Total: ${ngn(charged)}\n`;
+        : `💰 Total: ${ngn(charged)}\n`) +
+        // The extra-hour rule is part of the price the guest is agreeing to,
+        // so it is stated in the same block as the total, not buried later.
+        (ride.extra_hour_rate_ngn
+            ? `⏱ Extra time: ${ngn(ride.extra_hour_rate_ngn)} per hour beyond your booking, settled after the trip\n`
+            : '');
 
     const altBlock = (extras.alternatives || []).length
         ? `\nSimilar vehicles free in ${extras.alternatives![0]?.city || 'your city'}:\n` +

@@ -275,6 +275,14 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
             </div>
           ) : null}
 
+          {/* The overage rule the guest agreed to at request time. Shown while
+              the booking is live so nobody is surprised by a fourth hour. */}
+          {ride.extra_hour_rate_ngn && ride.bucket !== 'cancelled' && ride.bucket !== 'past' ? (
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              Extra hours beyond your booking: {ngn(ride.extra_hour_rate_ngn)} each, settled after the trip.
+            </p>
+          ) : null}
+
           {awaitingPayment && (
             <div className="mt-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3">
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-2">

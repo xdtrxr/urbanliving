@@ -55,10 +55,10 @@ const navigationItems = [
     description: "Earn rewards & points"
   },
   {
-    title: "Plan a Trip",
+    title: "Book a Ride",
     url: createPageUrl("PlanTrip"),
     icon: Compass,
-    description: "Book a ride or chauffeur"
+    description: "A car with a driver, in your city"
   },
   {
     title: "My Bookings",

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Users, Car, Snowflake, MapPin } from 'lucide-react';
+import { Users, Car, Snowflake, MapPin, ChevronRight } from 'lucide-react';
 import { categoryLabel, effectiveCategory } from '@/config/rides';
 
 // Small chip used inside the card body — keeps amenity / feature pills tight
@@ -90,14 +90,22 @@ export default function VehicleCard({ vehicle, propertyBookingId }) {
                 {perHour ? '/ hour' : '/ 12 hours'}
               </div>
             </div>
+            {/* "Full day" means the 12-hour tier everywhere else in Drive, so
+                the 24-hour figure is labelled as exactly that. */}
             {price24 ? (
               <div className="text-right">
                 <div className="text-sm font-semibold text-amber-700 dark:text-amber-300">
                   ₦{price24.toLocaleString()}
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">/ full day</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">/ 24 hours</div>
               </div>
             ) : null}
+          </div>
+
+          {/* The whole card is the link; this just tells the guest so. */}
+          <div className="mt-3 flex items-center justify-end gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+            View details
+            <ChevronRight className="w-3.5 h-3.5" />
           </div>
         </CardContent>
       </Card>
