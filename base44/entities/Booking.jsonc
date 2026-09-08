@@ -154,6 +154,7 @@
     "guests",
     "total_price"
   ],
+  "description": "A stay reservation. The update rule is admin-only on purpose. Base44 applies an update rule to every field, so a guest-owner rule let a guest set payment_status, total_price and approved_at on their own row. Guest-side writes now go through cancelBooking, startStayPayment and submitBookingId, each of which checks ownership and writes only the fields it is for.",
   "rls": {
     "create": {
       "$or": [
@@ -180,16 +181,9 @@
       ]
     },
     "update": {
-      "$or": [
-        {
-          "data.guest_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
+      "user_condition": {
+        "role": "admin"
+      }
     },
     "delete": {
       "user_condition": {

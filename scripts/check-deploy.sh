@@ -56,6 +56,9 @@ extra-hour rate|price_extra_hour_ngn
 extra-hour snapshot|extra_hour_rate_ngn
 admin-only costing|VehicleCosting
 nav says Book a Ride|Book a Ride
+stay cancel via function|cancelBooking
+stay payment via function|startStayPayment
+id upload via function|submitBookingId
 MARKERS
 
 echo; echo "── stale markers (must all be GONE) ──"
@@ -77,7 +80,8 @@ done
 
 echo; echo "── functions reachable (500=exists+needs auth, 404=NOT DEPLOYED) ──"
 for f in checkRideAvailability decideRideBooking assignRideDriver getRideDriverContact \
-         startRidePayment verifyRidePayment cancelRideBooking getRideBookings; do
+         startRidePayment verifyRidePayment cancelRideBooking getRideBookings \
+         cancelBooking startStayPayment submitBookingId; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
          -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
   [ "$code" = "404" ] && no "$f NOT DEPLOYED" || ok "$f (HTTP $code)"

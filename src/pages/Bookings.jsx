@@ -623,16 +623,20 @@ export default function BookingsPage() {
 
     setCancellingBookingId(selectedBooking.id);
     try {
-      await base44.entities.Booking.update(selectedBooking.id, {
-        status: 'cancelled'
-      });
-      
+      // Server-side: checks ownership, the unpaid rule and the 24-hour
+      // notice, stamps cancel_reason and tells admin. Guests can no longer
+      // write to a Booking row directly.
+      const res = await base44.functions.invoke('cancelBooking', { booking_id: selectedBooking.id });
+      if (!res?.data?.success) {
+        throw new Error(res?.data?.error || 'Cancellation was refused');
+      }
+
       await loadBookings();
-      
+
       alert("Booking cancelled successfully.");
     } catch (error) {
       console.error("Error cancelling booking:", error);
-      alert("Failed to cancel booking. Please try again or contact support.");
+      alert(error?.message || "Failed to cancel booking. Please try again or contact support.");
     } finally {
       setCancellingBookingId(null);
       setShowCancelDialog(false);

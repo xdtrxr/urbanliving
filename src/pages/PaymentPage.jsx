@@ -133,17 +133,13 @@ export default function PaymentPage() {
 
       dlog('Extracted params:', { bookingId, total, propertyTitle, guestEmail });
 
-      // Validate required parameters
-      if (!bookingId) {
+      // Validate required parameters. A ride arrives with ride_booking_id
+      // only, so the stay id is required only for stays. The URL's total is
+      // no longer validated or used: both branches take the amount from the
+      // server, which is the figure the verifiers check Paystack against.
+      if (!bookingId && !isRide) {
         console.error('Missing booking_id');
         setError("Missing booking ID. Please restart the booking process.");
-        setIsPageLoading(false);
-        return;
-      }
-
-      if (!total || isNaN(parseFloat(total))) {
-        console.error('Invalid total:', total);
-        setError("Invalid payment amount. Please restart the booking process.");
         setIsPageLoading(false);
         return;
       }
@@ -189,52 +185,37 @@ export default function PaymentPage() {
         return;
       }
 
-      // Fetch the full booking record so we can compute the payment deadline
-      // and stamp payment_started_at on first visit.
-      let fullBooking = null;
-      try {
-        fullBooking = await base44.entities.Booking.get(bookingId);
-      } catch (fetchErr) {
-        console.warn('Could not fetch full booking record:', fetchErr);
+      // Stays: one server call stamps payment_started_at and returns the
+      // stored price and the deadline — the same shape as the ride branch
+      // above. The URL's total is no longer what the guest sees: the figure
+      // on screen is the one the verifiers will check Paystack against.
+      const stayRes = await base44.functions.invoke('startStayPayment', { booking_id: bookingId });
+      if (!stayRes?.data?.success) {
+        setError(stayRes?.data?.error || 'This booking is not ready for payment.');
+        setIsPageLoading(false);
+        return;
+      }
+      const stay = stayRes.data.data;
+      if (stay.already_paid) {
+        setError('This booking has already been paid for.');
+        setIsPageLoading(false);
+        return;
       }
 
-      // Set booking data
       const bookingInfo = {
         id: bookingId,
-        total_price: parseFloat(total),
-        property_title: propertyTitle || 'Your selected property',
-        guest_email: guestEmail || user.email,
-        approved_at: fullBooking?.approved_at || null,
-        payment_started_at: fullBooking?.payment_started_at || null,
+        total_price: Number(stay.total_price) || 0,
+        property_title: stay.property_title || propertyTitle || 'Your selected property',
+        guest_email: stay.guest_email || guestEmail || user.email,
+        approved_at: stay.approved_at || null,
+        payment_started_at: stay.payment_started_at || null,
       };
 
       dlog('✅ Booking data set:', bookingInfo);
       setBookingData(bookingInfo);
 
-      // Stamp payment_started_at on first arrival (one-shot)
-      if (fullBooking && !fullBooking.payment_started_at) {
-        try {
-          const nowIso = new Date().toISOString();
-          await base44.entities.Booking.update(bookingId, { payment_started_at: nowIso });
-          bookingInfo.payment_started_at = nowIso;
-          dlog('✅ payment_started_at stamped:', nowIso);
-        } catch (stampErr) {
-          console.warn('Could not stamp payment_started_at:', stampErr);
-        }
-      }
-
-      // Compute deadline: min(approved + 3hr, max(approved + 1hr, started + 1hr))
-      if (bookingInfo.approved_at) {
-        const HOUR = 60 * 60 * 1000;
-        const approved = Date.parse(bookingInfo.approved_at);
-        if (!Number.isNaN(approved)) {
-          const started = Date.parse(bookingInfo.payment_started_at || '');
-          const fromOpen = Number.isNaN(started) ? 0 : started + HOUR;
-          const fromApproval = approved + HOUR;
-          const cap = approved + 3 * HOUR;
-          setDeadlineMs(Math.min(cap, Math.max(fromApproval, fromOpen)));
-        }
-      }
+      const stayDeadline = Date.parse(stay.payment_deadline || '');
+      if (!Number.isNaN(stayDeadline)) setDeadlineMs(stayDeadline);
 
       // Pre-fill payment details
       setPaymentDetails({

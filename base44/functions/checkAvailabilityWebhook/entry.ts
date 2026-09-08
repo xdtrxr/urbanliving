@@ -30,6 +30,37 @@ function detectConflict(existing: any[], requestedIn: Date, requestedOut: Date):
 // VERBOSE LOGGING is intentional: if admin reports "no image in the Telegram
 // notification" the function logs are the only place we can see whether the
 // property was found, whether it had images, and which URL was attempted.
+// ── Stay pricing — derived from the Property row, never from the request ────
+// MIRRORED client-side by estimateStayPrice / nightsBetween in
+// src/config/stays.js, which draw the figure the guest sees before submitting.
+// Keep the two in lockstep; scripts/check-stay-price.mjs executes both.
+//
+// Until this landed the request body carried total_price and it was stored
+// as-is, so a guest could request any apartment at ₦1, pay ₦1 (the payment
+// verifiers only check Paystack's amount against the stored figure) and get a
+// confirmed booking. The body's total_price is now ignored entirely.
+const SERVICE_FEE_RATE = 0.025;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function nightsBetween(checkIn: string, checkOut: string): number {
+    const a = Date.parse(`${checkIn}T00:00:00Z`);
+    const b = Date.parse(`${checkOut}T00:00:00Z`);
+    if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+    return Math.max(0, Math.round((b - a) / DAY_MS));
+}
+
+interface StayPrice { nights: number; subtotal: number; serviceFee: number; cautionFee: number; total: number }
+
+function priceForStay(property: any, nights: number): StayPrice | null {
+    const rate = Number(property?.price_per_night) || 0;
+    const n = Number(nights) || 0;
+    if (!rate || n < 1) return null;
+    const subtotal = rate * n;
+    const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
+    const cautionFee = Number(property?.caution_fee) || 0;
+    return { nights: n, subtotal, serviceFee, cautionFee, total: subtotal + serviceFee + cautionFee };
+}
+
 async function fetchPropertyImage(base44Client: any, propertyId: string): Promise<string | null> {
     console.log(`[fetchPropertyImage] looking up property_id=${propertyId}`);
     try {
@@ -189,6 +220,9 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json().catch(() => ({}));
+        // total_price is deliberately NOT read from the body — see priceForStay.
+        // property_title / property_location are accepted only as fallbacks
+        // for the Telegram card; the Property row wins when it has them.
         const {
             property_id,
             property_title,
@@ -196,7 +230,6 @@ Deno.serve(async (req) => {
             check_in,
             check_out,
             guests,
-            total_price,
             special_requests,
         } = body;
 
@@ -215,6 +248,34 @@ Deno.serve(async (req) => {
         if (checkOutDate <= checkInDate) {
             return new Response(JSON.stringify({ success: false, error: 'check_out must be after check_in' }), { status: 400, headers });
         }
+
+        // ── Price from the Property row ─────────────────────────────────
+        const property = await base44.asServiceRole.entities.Property.get(property_id);
+        if (!property) {
+            return new Response(JSON.stringify({ success: false, error: 'Property not found' }), { status: 404, headers });
+        }
+        const nights = nightsBetween(check_in, check_out);
+        if (nights < 1) {
+            return new Response(JSON.stringify({ success: false, error: 'A stay must be at least one night' }), { status: 400, headers });
+        }
+        if (property.max_guests && Number(guests) > Number(property.max_guests)) {
+            return new Response(JSON.stringify({
+                success: false,
+                error: `This property sleeps up to ${property.max_guests} guests`,
+                code: 'TOO_MANY_GUESTS',
+            }), { status: 400, headers });
+        }
+        const pricing = priceForStay(property, nights);
+        if (!pricing) {
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'This property has no nightly rate set. Please contact support.',
+                code: 'NO_PRICE',
+            }), { status: 409, headers });
+        }
+        const total_price = pricing.total;
+        const resolvedTitle = property.title || property_title || 'Untitled property';
+        const resolvedLocation = property.location || property_location || '';
 
         // Same-user same-property guard: if this guest already has an open
         // pending booking on this property — whether still awaiting admin
@@ -258,7 +319,7 @@ Deno.serve(async (req) => {
         // Create the AvailabilityRequest (under user context — RLS lets the user own it)
         const availabilityRequest = await base44.entities.AvailabilityRequest.create({
             property_id,
-            property_title,
+            property_title: resolvedTitle,
             user_email: user.email,
             user_name: user.full_name || 'Guest User',
             check_in,
@@ -277,7 +338,9 @@ Deno.serve(async (req) => {
             check_in,
             check_out,
             guests: guests || 1,
-            total_price: total_price || 0,
+            // Server-computed. The only figure the payment verifiers ever
+            // compare Paystack's amount against.
+            total_price,
             special_requests: special_requests || '',
             status: 'pending',
             payment_status: 'unpaid',
@@ -288,9 +351,9 @@ Deno.serve(async (req) => {
         try {
             const propertyImageUrl = await fetchPropertyImage(base44, property_id);
             const tgResult = await sendAdminTelegram({
-                propertyTitle: property_title || 'Untitled property',
+                propertyTitle: resolvedTitle,
                 propertyId: property_id,
-                propertyLocation: property_location,
+                propertyLocation: resolvedLocation,
                 propertyImageUrl,
                 userName: user.full_name || 'Guest User',
                 userEmail: user.email,
@@ -298,7 +361,7 @@ Deno.serve(async (req) => {
                 guests: guests || 1,
                 checkIn: check_in,
                 checkOut: check_out,
-                totalPrice: Number(total_price) || 0,
+                totalPrice: total_price,
                 specialRequests: special_requests || '',
                 hasConflict,
                 conflicting,
@@ -324,6 +387,10 @@ Deno.serve(async (req) => {
             data: {
                 request_id: availabilityRequest.id,
                 booking_id: pendingBooking.id,
+                // Returned so the checkout page shows the figure that was
+                // actually stored, not its own pre-submit estimate.
+                total_price,
+                pricing,
                 has_conflict: hasConflict,
                 conflict_details: conflictDetails,
                 telegram_sent: telegramMessageId !== null,

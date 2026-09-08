@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar, MapPin, Users, ArrowLeft, CheckCircle, Loader2, Clock, AlertCircle, Shield, Phone } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
+import { estimateStayPrice } from '@/config/stays';
 import { createPageUrl } from '@/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -39,6 +40,9 @@ export default function CheckoutPage() {
   });
   const [totalPrice, setTotalPrice] = useState(0);
   const [nights, setNights] = useState(0);
+  // Presentational only. The server prices from the Property row and the
+  // request never carries a total — see src/config/stays.js.
+  const [breakdown, setBreakdown] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   
   // Phone number modal state
@@ -135,7 +139,6 @@ export default function CheckoutPage() {
         check_in: format(bookingDetails.checkIn, 'yyyy-MM-dd'),
         check_out: format(bookingDetails.checkOut, 'yyyy-MM-dd'),
         guests: bookingDetails.guests,
-        total_price: totalPrice,
         special_requests: bookingDetails.specialRequests || '',
       });
 
@@ -145,6 +148,8 @@ export default function CheckoutPage() {
       }
 
       const { request_id, booking_id, has_conflict } = data.data;
+      // Show the figure the server actually stored, not this page's estimate.
+      if (Number(data.data.total_price) > 0) setTotalPrice(Number(data.data.total_price));
       console.log('✅ Availability check submitted', { request_id, booking_id, has_conflict });
 
       setCreatedBookingId(booking_id);
@@ -286,16 +291,9 @@ export default function CheckoutPage() {
       const nightCount = differenceInDays(bookingDetails.checkOut, bookingDetails.checkIn);
       setNights(nightCount);
       
-      if (nightCount > 0 && property) {
-        const subtotal = property.price_per_night * nightCount;
-        const serviceFee = Math.round(subtotal * 0.025);
-        const cautionFee = property.caution_fee || 0;
-        const total = subtotal + serviceFee + cautionFee;
-        
-        setTotalPrice(total);
-      } else {
-        setTotalPrice(0);
-      }
+      const est = nightCount > 0 && property ? estimateStayPrice(property, nightCount) : null;
+      setBreakdown(est);
+      setTotalPrice(est ? est.total : 0);
       
       if (!existingBooking) {
         setAvailabilityStatus('unknown');
@@ -663,11 +661,11 @@ export default function CheckoutPage() {
                   <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl space-y-2">
                     <div className="flex justify-between">
                       <span>₦{property.price_per_night.toLocaleString()} × {nights} nights</span>
-                      <span>₦{(property.price_per_night * nights).toLocaleString()}</span>
+                      <span>₦{(breakdown?.subtotal ?? property.price_per_night * nights).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Service Fee (2.5%)</span>
-                      <span>₦{Math.round(property.price_per_night * nights * 0.025).toLocaleString()}</span>
+                      <span>₦{(breakdown?.serviceFee ?? 0).toLocaleString()}</span>
                     </div>
                     {property.caution_fee > 0 && (
                       <div className="flex justify-between items-center py-2 px-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">

@@ -59,11 +59,13 @@ export default function IdUploadGate({ bookingId, onComplete }) {
           if (!cancelled) setReusing(false);
           return;
         }
-        await base44.entities.Booking.update(bookingId, {
-          id_document_url: withId.id_document_url,
-          id_document_type: withId.id_document_type,
-          id_uploaded_at: new Date().toISOString(),
+        // Copied server-side after an ownership check on both rows — the
+        // Booking entity no longer accepts guest writes.
+        const res = await base44.functions.invoke('submitBookingId', {
+          booking_id: bookingId,
+          reuse_from_booking_id: withId.id,
         });
+        if (!res?.data?.success) throw new Error(res?.data?.error || 'Could not reuse ID');
         if (!cancelled) {
           setDone(true);
           setTimeout(() => onComplete?.(), 600);
@@ -112,11 +114,12 @@ export default function IdUploadGate({ bookingId, onComplete }) {
     try {
       const { file_url } = await UploadFile({ file });
       if (!file_url) throw new Error('Upload did not return a URL');
-      await base44.entities.Booking.update(bookingId, {
+      const res = await base44.functions.invoke('submitBookingId', {
+        booking_id: bookingId,
         id_document_url: file_url,
         id_document_type: idType,
-        id_uploaded_at: new Date().toISOString(),
       });
+      if (!res?.data?.success) throw new Error(res?.data?.error || 'Could not save your ID');
       setDone(true);
       // Brief success state so the user sees confirmation, then hand control back.
       setTimeout(() => onComplete?.(), 800);
