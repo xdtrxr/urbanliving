@@ -1,6 +1,7 @@
 {
   "name": "SupportMessage",
   "type": "object",
+  "description": "One message on a support ticket. Users create their own messages (the concierge function writes under the user's context, so created_by is the user); Nova drafts, admin replies and Telegram bookkeeping are written under the service role. Rules stated per operation rather than as a single legacy 'write' key. Update and delete are admin-only: the message body must not be editable by its author after admin has seen it.",
   "properties": {
     "ticket_id": {
       "type": "string",
@@ -76,7 +77,7 @@
         }
       ]
     },
-    "write": {
+    "create": {
       "$or": [
         {
           "created_by": "{{user.email}}"
@@ -87,6 +88,16 @@
           }
         }
       ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
     }
   }
 }
