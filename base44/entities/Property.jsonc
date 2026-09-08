@@ -1,6 +1,7 @@
 {
   "name": "Property",
   "type": "object",
+  "description": "A short-let listing. Public read; every write is admin-only (listings are managed from the Admin page and by mcpDataIngestion under the service role). Rules are stated per operation rather than as a single legacy 'write' key so the per-operation RLS model enforces them.",
   "properties": {
     "title": {
       "type": "string",
@@ -151,8 +152,18 @@
     "property_type"
   ],
   "rls": {
-    "read": null,
-    "write": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
       "user_condition": {
         "role": "admin"
       }
