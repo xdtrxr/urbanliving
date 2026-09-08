@@ -91,3 +91,35 @@ export function estimateRidePrice(vehicle, { tier, hours, days } = {}) {
 export const supportsHourly = (vehicle) => Number(vehicle?.price_per_hour_ngn) > 0;
 
 export const minHours = (vehicle) => Math.max(1, Number(vehicle?.min_hours_per_booking) || 1);
+
+// ── Legacy compatibility ────────────────────────────────────────────────────
+// Vehicles created before the category taxonomy landed carry the old
+// body-style `vehicle_type` and no `category`. Browse filters on category, so
+// without this an unmigrated row matches nothing and disappears from the site
+// entirely — the car is still bookable by direct link, but no one can find it.
+//
+// This is a READ-TIME shim, not a migration: it keeps existing stock visible
+// between the schema deploy and an admin re-saving each vehicle. Once a real
+// category is set it is used and this is bypassed.
+//
+// van and minibus have no honest home in a five-tier price taxonomy, which was
+// the accepted cost of the swap. They map to suv here purely so a group
+// vehicle stays reachable — the admin still has to make the real call.
+const LEGACY_TYPE_TO_CATEGORY = {
+  sedan: 'comfort',
+  coupe: 'comfort',
+  suv: 'suv',
+  van: 'suv',
+  minibus: 'suv',
+  executive: 'executive',
+  luxury_sedan: 'luxury',
+  luxury_suv: 'luxury',
+};
+
+export const effectiveCategory = (vehicle) =>
+  vehicle?.category || LEGACY_TYPE_TO_CATEGORY[vehicle?.vehicle_type] || null;
+
+// True when a vehicle is only visible thanks to the shim above. Admin surfaces
+// use this to show what still needs migrating.
+export const needsCategoryMigration = (vehicle) =>
+  !vehicle?.category && !!vehicle?.vehicle_type;

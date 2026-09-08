@@ -9,7 +9,7 @@ import {
   Car, MapPin, Users, ChevronDown, ChevronRight, AlertCircle, Sparkles, ArrowLeft,
 } from 'lucide-react';
 import VehicleCard from '@/components/ride/VehicleCard';
-import { CITIES, CATEGORIES, categoryLabel } from '@/config/rides';
+import { CITIES, CATEGORIES, categoryLabel, effectiveCategory } from '@/config/rides';
 
 // UrbanStays Drive — browse.
 //
@@ -140,7 +140,7 @@ export default function PlanTripPage() {
   );
 
   const filtered = useMemo(() => inCity.filter((v) => {
-    if (category && v.category !== category) return false;
+    if (category && effectiveCategory(v) !== category) return false;
     if (seats !== 'any' && (v.max_passengers || 0) < Number(seats)) return false;
     return true;
   }), [inCity, category, seats]);
@@ -153,7 +153,10 @@ export default function PlanTripPage() {
 
   const categoryCounts = useMemo(() => {
     const m = new Map(CATEGORIES.map((c) => [c.value, 0]));
-    for (const v of inCity) if (m.has(v.category)) m.set(v.category, m.get(v.category) + 1);
+    for (const v of inCity) {
+      const c = effectiveCategory(v);
+      if (m.has(c)) m.set(c, m.get(c) + 1);
+    }
     return m;
   }, [inCity]);
 

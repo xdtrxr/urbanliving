@@ -11,6 +11,7 @@ import {
 import { createPageUrl } from '@/utils';
 import {
   HOURLY_CHOICES, estimateRidePrice, supportsHourly, minHours, categoryLabel,
+  effectiveCategory,
 } from '@/config/rides';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext';
@@ -242,7 +243,7 @@ export default function VehiclePage() {
                 </CardTitle>
                 <p className="text-slate-600 dark:text-slate-300 mb-3">
                   {vehicle.brand}{vehicle.model_year ? ` · ${vehicle.model_year}` : ''}
-                  {vehicle.category ? ` · ${categoryLabel(vehicle.category)}` : ''}
+                  {effectiveCategory(vehicle) ? ` · ${categoryLabel(effectiveCategory(vehicle))}` : ''}
                 </p>
                 <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300 text-sm">
                   {vehicle.city && (

@@ -22,7 +22,9 @@ import {
   Edit3, Save, X, AlertCircle, Loader2, CheckCircle2, Eye, EyeOff,
   Upload, PlayCircle,
 } from 'lucide-react';
-import { CITIES, CATEGORIES, categoryLabel } from '@/config/rides';
+import {
+  CITIES, CATEGORIES, categoryLabel, effectiveCategory, needsCategoryMigration,
+} from '@/config/rides';
 
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
 
@@ -894,9 +896,23 @@ export default function VehiclesAdmin() {
                                 Live
                               </Badge>
                             )}
+                            {/* Only visible via the legacy-type fallback. Guests
+                                can still find it, but the category shown is a
+                                guess until someone picks a real one. */}
+                            {needsCategoryMigration(v) && (
+                              <Badge variant="outline" className="border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300">
+                                <AlertCircle className="w-3 h-3 mr-1" />
+                                Set a category
+                              </Badge>
+                            )}
+                            {!v.price_per_hour_ngn && (
+                              <Badge variant="outline" className="border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400">
+                                Day hire only
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                            {v.brand} · {categoryLabel(v.category)} · {v.city} · {v.max_passengers || 0} seats
+                            {v.brand} · {categoryLabel(effectiveCategory(v))} · {v.city} · {v.max_passengers || 0} seats
                           </p>
                           <div className="flex flex-wrap gap-3 text-xs text-slate-700 dark:text-slate-200">
                             {v.price_per_hour_ngn ? (

@@ -4,7 +4,7 @@ import { createPageUrl } from '@/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Users, Car, Snowflake, MapPin } from 'lucide-react';
-import { categoryLabel } from '@/config/rides';
+import { categoryLabel, effectiveCategory } from '@/config/rides';
 
 // Small chip used inside the card body — keeps amenity / feature pills tight
 function Chip({ icon: Icon, children }) {
@@ -44,9 +44,9 @@ export default function VehicleCard({ vehicle, propertyBookingId }) {
             loading="lazy"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
-          {vehicle.category && (
+          {effectiveCategory(vehicle) && (
             <Badge className="absolute top-3 left-3 bg-white/90 dark:bg-slate-900/90 text-slate-800 dark:text-slate-100 border-0 text-[11px] font-semibold backdrop-blur-sm">
-              {categoryLabel(vehicle.category)}
+              {categoryLabel(effectiveCategory(vehicle))}
             </Badge>
           )}
           {vehicle.city && (
