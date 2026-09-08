@@ -1,6 +1,16 @@
 import { base44 } from '@/api/base44Client';
 
-const TIER_THRESHOLDS = [
+// Loyalty points — client wrapper.
+//
+// Every award goes through the awardPoints function. The browser used to
+// compute the new balance itself and write it with auth.updateMe, and create
+// the LoyaltyTransaction row directly. That meant any logged-in user could
+// set their own points, tier and referral cash balance from the console. The
+// server now owns the arithmetic, the dedupe rules and the writes; the
+// User fields are read-only to the client. These helpers keep the old call
+// sites' signatures so the pages did not have to change.
+
+export const TIER_THRESHOLDS = [
   { name: 'Diamond', min: 50000 },
   { name: 'Platinum', min: 25000 },
   { name: 'Gold', min: 12500 },
@@ -8,180 +18,53 @@ const TIER_THRESHOLDS = [
   { name: 'Bronze', min: 0 },
 ];
 
-function calculateTier(points) {
+// Display only — the server computes the stored tier.
+export function calculateTier(points) {
   for (const tier of TIER_THRESHOLDS) {
     if (points >= tier.min) return tier.name;
   }
   return 'Bronze';
 }
 
-function startOfCalendarMonthIso(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
-}
-
-async function fetchTransactions(userEmail) {
+// Returns { points, newTotal, newTier } for a fresh award, or null when
+// nothing was awarded (already credited, not eligible, or the call failed).
+export async function awardPoints(kind, extra = {}) {
   try {
-    return await base44.entities.LoyaltyTransaction.filter({ user_email: userEmail });
-  } catch {
-    return [];
+    const res = await base44.functions.invoke('awardPoints', { kind, ...extra });
+    const d = res?.data;
+    if (!d?.success || !d.data || d.data.already || !d.data.points) return null;
+    return { points: d.data.points, newTotal: d.data.total, newTier: d.data.tier };
+  } catch (err) {
+    console.warn(`awardPoints(${kind}) failed (non-fatal):`, err);
+    return null;
   }
 }
 
-async function applyPoints({ user, points, transactionType, description, bookingId, log }) {
-  const newTotal = (user.loyalty_points || 0) + points;
-  const newTier = calculateTier(newTotal);
-  await base44.auth.updateMe({ loyalty_points: newTotal, loyalty_tier: newTier });
-  await base44.entities.LoyaltyTransaction.create({
-    user_email: user.email,
-    points_earned: points,
-    transaction_type: transactionType,
-    booking_id: bookingId,
-    description,
-  });
-  if (log) console.log(`🎁 +${points} loyalty points: ${description} (total now ${newTotal}, tier ${newTier})`);
-  return { points, newTotal, newTier };
-}
-
-const BOOKING_REWARD_POINTS = 500;
-const FIRST_BOOKING_BONUS = 1000;
-const MONTHLY_3_BOOKINGS_BONUS = 3000;
-
-/**
- * Awards all booking-time milestones at once for the current user, idempotent.
- * - Flat 500 points per booking (booking transaction)
- * - First booking ever (+1000)
- * - 3 confirmed bookings in calendar month (+3000)
- *
- * The flat-500 booking award is ALSO inlined server-side in
- * verifyPaystackPayment + paystackWebhook so guests who close their tab before
- * PaymentPage finishes still get credited. Both paths dedup on
- * transaction_type='booking' + booking_id, so re-runs are safe.
- */
+// Booking-time milestones: flat 500 per paid stay, +1000 first booking,
+// +3000 for three in a calendar month. All decided server-side against the
+// caller's own transactions.
 export async function awardBookingMilestones(bookingData) {
   if (!bookingData?.id) return [];
-  const awarded = [];
-  try {
-    let user = await base44.auth.me();
-    // Single fetch up-front; refresh ONCE between writes.
-    let tx = await fetchTransactions(user.email);
-
-    // 1. Flat 500 points per booking (idempotent on booking_id)
-    const alreadyForThisBooking = tx.some(
-      (t) => t.transaction_type === 'booking' && t.booking_id === bookingData.id,
-    );
-    if (!alreadyForThisBooking) {
-      const r = await applyPoints({
-        user,
-        points: BOOKING_REWARD_POINTS,
-        transactionType: 'booking',
-        description: `Earned ${BOOKING_REWARD_POINTS} points from a booking`,
-        bookingId: bookingData.id,
-        log: true,
-      });
-      awarded.push({ kind: 'booking', ...r });
-      user = await base44.auth.me();
-      tx = await fetchTransactions(user.email);
-    }
-
-    // 2. First booking ever bonus, idempotent on description marker
-    const alreadyFirst = tx.some(
-      (t) => t.transaction_type === 'milestone' && t.description?.includes('FIRST_BOOKING'),
-    );
-    const hasBookingTx = tx.some((t) => t.transaction_type === 'booking');
-    if (!alreadyFirst && hasBookingTx) {
-      const r = await applyPoints({
-        user,
-        points: FIRST_BOOKING_BONUS,
-        transactionType: 'milestone',
-        description: 'FIRST_BOOKING — Welcome bonus for your first booking',
-        bookingId: bookingData.id,
-        log: true,
-      });
-      awarded.push({ kind: 'first_booking', ...r });
-      user = await base44.auth.me();
-      tx = await fetchTransactions(user.email);
-    }
-
-    // 3. 3 bookings in this calendar month, once per month
-    const monthStart = startOfCalendarMonthIso();
-    const bookingTxThisMonth = tx.filter(
-      (t) => t.transaction_type === 'booking' && t.created_date && t.created_date >= monthStart,
-    );
-    const monthlyBonusKey = `MONTHLY_3_${monthStart.slice(0, 7)}`; // YYYY-MM
-    const alreadyMonthlyBonus = tx.some(
-      (t) => t.transaction_type === 'milestone' && t.description?.includes(monthlyBonusKey),
-    );
-    if (bookingTxThisMonth.length >= 3 && !alreadyMonthlyBonus) {
-      const r = await applyPoints({
-        user,
-        points: MONTHLY_3_BOOKINGS_BONUS,
-        transactionType: 'milestone',
-        description: `${monthlyBonusKey} — 3 bookings in a calendar month bonus`,
-        bookingId: bookingData.id,
-        log: true,
-      });
-      awarded.push({ kind: 'monthly_3', ...r });
-    }
-  } catch (err) {
-    console.error('awardBookingMilestones failed:', err);
-  }
-  return awarded;
+  const r = await awardPoints('booking_milestones', { booking_id: bookingData.id });
+  return r ? [r] : [];
 }
 
-/**
- * Awards +100 once when the current user has filled out core profile fields.
- * Idempotent via PROFILE_COMPLETED marker.
- */
 export async function awardProfileCompletion() {
-  try {
-    const user = await base44.auth.me();
-    const required = ['full_name', 'phone_number', 'bio', 'travel_style'];
-    const complete = required.every((k) => {
-      const v = user[k];
-      return typeof v === 'string' ? v.trim().length > 0 : Boolean(v);
-    });
-    if (!complete) return null;
-
-    const tx = await fetchTransactions(user.email);
-    const already = tx.some(
-      (t) => t.transaction_type === 'milestone' && t.description?.includes('PROFILE_COMPLETED'),
-    );
-    if (already) return null;
-
-    return await applyPoints({
-      user,
-      points: 100,
-      transactionType: 'milestone',
-      description: 'PROFILE_COMPLETED — Profile completion bonus',
-      log: true,
-    });
-  } catch (err) {
-    console.error('awardProfileCompletion failed:', err);
-    return null;
-  }
+  return awardPoints('profile_completed');
 }
 
-/**
- * Awards +50 once on the user's first wishlist add. Idempotent.
- */
 export async function awardFirstWishlistAdd() {
-  try {
-    const user = await base44.auth.me();
-    const tx = await fetchTransactions(user.email);
-    const already = tx.some(
-      (t) => t.transaction_type === 'milestone' && t.description?.includes('FIRST_WISHLIST'),
-    );
-    if (already) return null;
-    return await applyPoints({
-      user,
-      points: 50,
-      transactionType: 'milestone',
-      description: 'FIRST_WISHLIST — First wishlist add bonus',
-      log: true,
-    });
-  } catch (err) {
-    console.error('awardFirstWishlistAdd failed:', err);
-    return null;
-  }
+  return awardPoints('first_wishlist');
 }
 
+export async function awardWelcomeBonus() {
+  return awardPoints('welcome');
+}
+
+export async function awardQuest(questId) {
+  return awardPoints('quest', { quest_id: questId });
+}
+
+export async function awardDailyChat() {
+  return awardPoints('daily_chat');
+}

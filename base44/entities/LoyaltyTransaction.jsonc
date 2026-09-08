@@ -17,13 +17,19 @@
         "review",
         "referral",
         "milestone",
-        "bonus"
+        "bonus",
+        "quest",
+        "engagement"
       ],
-      "description": "Type of activity that earned points"
+      "description": "Type of activity that earned points. 'quest' and 'engagement' were being written by the browser without being in this list; they are now written by awardPoints."
     },
     "booking_id": {
       "type": "string",
       "description": "Associated booking ID if applicable"
+    },
+    "quest_id": {
+      "type": "string",
+      "description": "Associated Quest row id for quest and engagement awards"
     },
     "description": {
       "type": "string",
@@ -54,18 +60,12 @@
     "transaction_type",
     "description"
   ],
+  "description": "One row per points award. Create is admin-only: rows are written by the awardPoints function under the service role, so a user cannot mint their own history. Read stays owner-or-admin.",
   "rls": {
     "create": {
-      "$or": [
-        {
-          "data.user_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
+      "user_condition": {
+        "role": "admin"
+      }
     },
     "read": {
       "$or": [

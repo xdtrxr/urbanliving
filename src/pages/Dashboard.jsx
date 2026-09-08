@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { awardWelcomeBonus } from '@/components/utils/loyaltyService';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
@@ -91,24 +92,14 @@ export default function DashboardPage() {
         shouldUpdateUser = true;
       }
       
-      // Initialize loyalty system
-      if (userData.loyalty_points === undefined || userData.loyalty_points === null) {
-        updatePayload.loyalty_points = 100; // Welcome bonus
-        updatePayload.loyalty_tier = "Bronze";
-        shouldUpdateUser = true;
-        
-        // Create transaction record for welcome bonus
-        if (!userData.loyalty_points) {
-          try {
-            await base44.entities.LoyaltyTransaction.create({
-              user_email: userData.email,
-              points_earned: 100,
-              transaction_type: 'bonus',
-              description: 'Welcome bonus for joining Urban Stays'
-            });
-          } catch (txError) {
-            console.error('Error creating welcome bonus transaction:', txError);
-          }
+      // Welcome bonus — decided and written server-side, once per account.
+      // loyalty_points and loyalty_tier are no longer client-writable.
+      let welcomed = false;
+      if (!userData.loyalty_points) {
+        try {
+          welcomed = !!(await awardWelcomeBonus());
+        } catch (txError) {
+          console.error('Welcome bonus failed (non-fatal):', txError);
         }
       }
       
@@ -130,6 +121,8 @@ export default function DashboardPage() {
 
       if (shouldUpdateUser) {
         await base44.auth.updateMe(updatePayload);
+      }
+      if (shouldUpdateUser || welcomed) {
         userData = await base44.auth.me();
       }
       

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { base44 } from "@/api/base44Client";
+import { awardDailyChat } from "@/components/utils/loyaltyService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -264,70 +265,13 @@ export default function AIChatConciergePage() {
   const checkChatQuestCompletion = async (userData, messageCount) => {
     if (messageCount < 2) return;
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const DAILY_CHAT_POINTS = 50; // mirrors QUEST_REGISTRY.daily_chat_agent.points
-
-      // Self-healing: find OR create the daily quest, then daily-reset if stale.
-      // Previously this only awarded when the user had visited /Quests first,
-      // because that's where the Quest row was created and daily-reset. Users
-      // who only used Nova never got their 50 points.
-      let existing = await base44.entities.Quest.filter({
-        user_email: userData.email,
-        quest_id: 'daily_chat_agent',
-      });
-      let quest = existing[0];
-
-      if (!quest) {
-        quest = await base44.entities.Quest.create({
-          quest_id: 'daily_chat_agent',
-          quest_type: 'daily_engagement',
-          platform: 'chat_agent',
-          points_reward: DAILY_CHAT_POINTS,
-          verification_method: 'automatic',
-          is_daily: true,
-          user_email: userData.email,
-          status: 'available',
-        });
-      } else if (quest.status === 'claimed' && quest.last_completed_date !== today) {
-        // Daily reset
-        await base44.entities.Quest.update(quest.id, {
-          status: 'available',
-          completion_date: null,
-          last_completed_date: null,
-        });
-        quest = { ...quest, status: 'available', completion_date: null, last_completed_date: null };
-      }
-
-      if (quest.status !== 'available') return; // already claimed today
-
-      const reward = quest.points_reward || DAILY_CHAT_POINTS;
-
-      await base44.entities.Quest.update(quest.id, {
-        status: 'completed',
-        completion_date: new Date().toISOString(),
-        last_completed_date: today,
-      });
-
-      const newLoyaltyPoints = (userData.loyalty_points || 0) + reward;
-      const newTier = calculateLoyaltyTier(newLoyaltyPoints);
-
-      await base44.auth.updateMe({
-        loyalty_points: newLoyaltyPoints,
-        loyalty_tier: newTier,
-      });
-
-      await base44.entities.LoyaltyTransaction.create({
-        user_email: userData.email,
-        points_earned: reward,
-        transaction_type: 'engagement',
-        description: 'Daily chat with Agent Nova',
-        quest_id: quest.id,
-      });
-
-      await base44.entities.Quest.update(quest.id, { status: 'claimed' });
-
+      // The server finds or creates the daily quest row, resets it if stale,
+      // checks today's chat messages, claims it and credits the points. The
+      // browser no longer writes points, tiers or transactions.
+      const r = await awardDailyChat();
+      if (!r) return; // already claimed today, or not eligible
       setTimeout(() => {
-        alert(`🎉 Daily quest completed! You earned ${reward} Urban Points for chatting with Agent Nova today!`);
+        alert(`🎉 Daily quest completed! You earned ${r.points} Urban Points for chatting with Agent Nova today!`);
       }, 1500);
     } catch (error) {
       console.error('Error checking chat quest:', error);

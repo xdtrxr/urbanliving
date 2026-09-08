@@ -35,7 +35,9 @@
     },
     "loyalty_points": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Written only by the awardPoints function and the payment paths under the service role. Field-level write rule keeps auth.updateMe from setting it from the browser.",
+      "rls": { "write": { "user_condition": { "role": "admin" } } }
     },
     "loyalty_tier": {
       "type": "string",
@@ -46,7 +48,8 @@
         "Platinum",
         "Diamond"
       ],
-      "default": "Bronze"
+      "default": "Bronze",
+      "rls": { "write": { "user_condition": { "role": "admin" } } }
     },
     "wishlist": {
       "type": "array",
@@ -62,7 +65,9 @@
     },
     "referral_balance_ngn": {
       "type": "number",
-      "default": 0
+      "default": 0,
+      "description": "Cash owed to the user from referrals, in NGN. createWithdrawalRequest pays this out through Paystack, so it must never be client-writable: only processReferralReward, the Paystack webhooks and the withdrawal functions touch it, all under the service role.",
+      "rls": { "write": { "user_condition": { "role": "admin" } } }
     },
     "referral_prompt_seen": {
       "type": "boolean",

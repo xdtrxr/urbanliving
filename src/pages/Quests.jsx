@@ -25,6 +25,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
+import { awardQuest } from '@/components/utils/loyaltyService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -596,50 +597,26 @@ export default function QuestsPage() {
       // Step 3: Open social media page
       console.log('🌐 Step 2: Opening social media page...');
       window.open(config.url, '_blank');
-      
-      // Step 4: Calculate new points and tier
-      const currentPoints = user.loyalty_points || 0;
-      const newPoints = currentPoints + freshQuest.points_reward;
-      const newTier = calculateLoyaltyTier(newPoints);
-      console.log(`💰 Step 3: Points calculation: ${currentPoints} + ${freshQuest.points_reward} = ${newPoints}`);
-      console.log(`🏆 New tier: ${newTier}`);
 
-      // Step 5: Update quest status to CLAIMED
-      console.log(`📝 Step 4: Updating quest ${freshQuest.id} to CLAIMED...`);
+      // Steps 4-7 happen server-side in one call: the function claims the
+      // quest row, credits the registry's points (not the row's, which the
+      // browser could have created with any figure) and writes the
+      // transaction. The browser no longer writes points or tiers.
+      console.log('💎 Step 3: Claiming quest and crediting points server-side...');
+      const award = await awardQuest(questId);
+      if (!award) {
+        alert('✅ You have already completed this quest!\n\nOne-time quests can only be completed once.');
+        await initializeQuestSystem();
+        return;
+      }
+      const newPoints = award.newTotal;
+      const newTier = award.newTier;
       const updateData = {
         status: 'claimed',
         completion_date: new Date().toISOString(),
         last_completed_date: getTodayDateUTC(),
-        verification_data: { 
-          timestamp: Date.now(),
-          platform: config.name,
-          quest_type: 'one_time_social',
-          auto_completed: true
-        }
       };
-      
-      await base44.entities.Quest.update(freshQuest.id, updateData);
-      console.log(`✅ Quest updated successfully`);
 
-      // Step 6: Update user points and tier
-      console.log('💎 Step 5: Updating user points and tier...');
-      await base44.auth.updateMe({
-        loyalty_points: newPoints,
-        loyalty_tier: newTier
-      });
-      console.log(`✅ User updated successfully`);
-      
-      // Step 7: Create loyalty transaction
-      console.log('📋 Step 6: Creating loyalty transaction...');
-      await base44.entities.LoyaltyTransaction.create({
-        user_email: user.email,
-        points_earned: freshQuest.points_reward,
-        transaction_type: 'quest',
-        description: `Completed quest: Follow us on ${config.name}`,
-        quest_id: freshQuest.id
-      });
-      console.log(`✅ Transaction created successfully`);
-      
       console.log('🎉 ========== QUEST COMPLETED SUCCESSFULLY ==========');
       
       // Step 8: Update LOCAL state immediately
@@ -681,7 +658,7 @@ export default function QuestsPage() {
       
       console.log('✅ Local state updated and saved to localStorage');
       
-      alert(`🎉 Quest Completed!\n\nYou earned ${freshQuest.points_reward} Urban Points!\n\nNew Balance: ${newPoints} points\nNew Tier: ${newTier}`);
+      alert(`🎉 Quest Completed!\n\nYou earned ${award.points} Urban Points!\n\nNew Balance: ${newPoints} points\nNew Tier: ${newTier}`);
       
     } catch (err) {
       console.error('❌ ========== QUEST COMPLETION FAILED ==========');
