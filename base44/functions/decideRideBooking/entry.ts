@@ -28,7 +28,7 @@ const REJECT_MSG = 'Sorry, this vehicle is not available for that window. Please
 // Fire-and-forget push. Never let a push outage block the decision.
 async function tryPush(sdk: any, opts: Record<string, unknown>) {
     try {
-        await sdk.functions.invoke('sendPushNotification', opts);
+        await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
     } catch (err) {
         console.warn('tryPush failed (non-fatal):', err);
     }

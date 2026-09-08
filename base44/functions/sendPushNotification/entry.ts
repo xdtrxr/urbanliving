@@ -37,6 +37,37 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 }
 
+// ── Caller gate ─────────────────────────────────────────────────────────────
+// This function is invoked by other functions (webhooks, crons, decision
+// paths) that carry no user session, so it cannot demand a login. Until this
+// gate existed it accepted any POST, which let anyone push arbitrary text and
+// a link to any user by email — a phishing tool. Internal callers now pass
+// INTERNAL_FUNCTION_SECRET in the body; a logged-in admin may also call it
+// directly. If the secret is not configured the gate warns and allows, so an
+// unset env var degrades to the old behaviour rather than killing every push.
+const INTERNAL_SECRET = Deno.env.get('INTERNAL_FUNCTION_SECRET') || '';
+
+function safeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return diff === 0;
+}
+
+async function internalOrAdmin(sdk: any, body: any): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+    if (!INTERNAL_SECRET) {
+        console.warn('INTERNAL_FUNCTION_SECRET not configured — sendPushNotification is accepting unauthenticated calls');
+        return { ok: true };
+    }
+    const presented = typeof body?.internal_secret === 'string' ? body.internal_secret : '';
+    if (presented && safeEqual(presented, INTERNAL_SECRET)) return { ok: true };
+    try {
+        const user = await sdk.auth.me();
+        if (user?.role === 'admin') return { ok: true };
+    } catch { /* no session on this request */ }
+    return { ok: false, status: 401, error: 'Unauthorized' };
+}
+
 Deno.serve(async (req) => {
     if (req.method !== 'POST') {
         return Response.json({ error: 'Method not allowed' }, { status: 405 });
@@ -60,6 +91,9 @@ Deno.serve(async (req) => {
     }
 
     const sdk = createClientFromRequest(req);
+
+    const gate = await internalOrAdmin(sdk, body);
+    if (!gate.ok) return Response.json({ success: false, error: gate.error }, { status: gate.status });
 
     try {
         const rows = await sdk.asServiceRole.entities.User.filter({ email: user_email });

@@ -67,7 +67,7 @@ async function fetchAll(entity: any, query: Record<string, unknown>): Promise<an
 
 async function tryPush(sdk: any, opts: Record<string, unknown>) {
     try {
-        await sdk.functions.invoke('sendPushNotification', opts);
+        await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
     } catch (err) {
         console.warn('tryPush failed (non-fatal):', err);
     }

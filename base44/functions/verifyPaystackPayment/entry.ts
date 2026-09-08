@@ -140,7 +140,7 @@ async function tryPush(sdk: any, opts: {
     tag?: string;
 }) {
     try {
-        await sdk.functions.invoke('sendPushNotification', opts);
+        await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
     } catch (err) {
         console.warn('tryPush failed (non-fatal):', err);
     }
@@ -324,7 +324,10 @@ Deno.serve(async (req) => {
         const emailResult = await sendArrivalEmail({ sdk: base44, booking: bookingForEmail });
         if (!emailResult.sent && emailResult.needs_admin) {
             try {
-                await base44.functions.invoke('requestHostDetails', { booking_id: booking.id });
+                await base44.functions.invoke('requestHostDetails', {
+                    booking_id: booking.id,
+                    internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '',
+                });
             } catch (reqErr) {
                 console.warn('requestHostDetails invoke failed (non-fatal):', reqErr);
             }

@@ -11,7 +11,36 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 //
 // Body: { booking_id: string }
 
-interface Body { booking_id: string }
+interface Body { booking_id: string; internal_secret?: string }
+
+// ── Caller gate ─────────────────────────────────────────────────────────────
+// Invoked by verifyPaystackPayment and paystackWebhook, which carry no admin
+// session, so this cannot demand a login. Without a gate anyone with a
+// booking id could stamp host_details_status and spam the admin Telegram.
+// Internal callers pass INTERNAL_FUNCTION_SECRET; an admin session is also
+// accepted. Unset secret → warn and allow, so nothing breaks before it is set.
+const INTERNAL_SECRET = Deno.env.get('INTERNAL_FUNCTION_SECRET') || '';
+
+function safeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return diff === 0;
+}
+
+async function internalOrAdmin(sdk: any, body: any): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+    if (!INTERNAL_SECRET) {
+        console.warn('INTERNAL_FUNCTION_SECRET not configured — requestHostDetails is accepting unauthenticated calls');
+        return { ok: true };
+    }
+    const presented = typeof body?.internal_secret === 'string' ? body.internal_secret : '';
+    if (presented && safeEqual(presented, INTERNAL_SECRET)) return { ok: true };
+    try {
+        const user = await sdk.auth.me();
+        if (user?.role === 'admin') return { ok: true };
+    } catch { /* no session on this request */ }
+    return { ok: false, status: 401, error: 'Unauthorized' };
+}
 
 Deno.serve(async (req) => {
     const headers = {
@@ -31,6 +60,11 @@ Deno.serve(async (req) => {
         const bookingId = (body.booking_id || '').toString().trim();
         if (!bookingId) {
             return new Response(JSON.stringify({ success: false, error: 'Missing booking_id' }), { status: 400, headers });
+        }
+
+        const gate = await internalOrAdmin(base44, body);
+        if (!gate.ok) {
+            return new Response(JSON.stringify({ success: false, error: gate.error }), { status: gate.status, headers });
         }
 
         const booking = await base44.asServiceRole.entities.Booking.get(bookingId);

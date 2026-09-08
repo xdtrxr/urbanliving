@@ -7,6 +7,33 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 // posts to TELEGRAM_ADMIN_CHAT_ID, and stamps the returned message_id back
 // on the lead row.
 
+// ── Caller gate ─────────────────────────────────────────────────────────────
+// Called from the concierge page right after it creates a Lead, sometimes by
+// a visitor with no session, so a login cannot be required. Without a gate
+// anyone could re-announce any lead to the admin Telegram indefinitely.
+// Accepted callers: internal (INTERNAL_FUNCTION_SECRET), an admin session, or
+// anyone for a lead that is under ten minutes old and has never been
+// announced — which bounds abuse to one message per genuine lead.
+const INTERNAL_SECRET = Deno.env.get('INTERNAL_FUNCTION_SECRET') || '';
+const FRESH_LEAD_MS = 10 * 60 * 1000;
+
+function safeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return diff === 0;
+}
+
+async function isInternalOrAdmin(sdk: any, body: any): Promise<boolean> {
+    const presented = typeof body?.internal_secret === 'string' ? body.internal_secret : '';
+    if (INTERNAL_SECRET && presented && safeEqual(presented, INTERNAL_SECRET)) return true;
+    try {
+        const user = await sdk.auth.me();
+        if (user?.role === 'admin') return true;
+    } catch { /* no session on this request */ }
+    return false;
+}
+
 const fmtMoney = (n: number | undefined | null) => {
     if (!n || Number.isNaN(Number(n))) return null;
     return '₦' + Number(n).toLocaleString();
@@ -114,6 +141,23 @@ Deno.serve(async (req) => {
         const lead = await base44.asServiceRole.entities.Lead.get(leadId);
         if (!lead) {
             return new Response(JSON.stringify({ success: false, error: 'Lead not found' }), { status: 404, headers });
+        }
+
+        // Announce a lead once. A repeat call is a no-op for everyone, and a
+        // non-internal, non-admin caller may only trigger the first announce
+        // of a lead created in the last few minutes.
+        if (lead.telegram_message_id) {
+            return new Response(JSON.stringify({
+                success: true,
+                data: { lead_id: lead.id, telegram_sent: true, skipped: 'already_notified' },
+            }), { status: 200, headers });
+        }
+        if (!(await isInternalOrAdmin(base44, body))) {
+            const createdMs = Date.parse(lead.created_date || '');
+            const fresh = !Number.isNaN(createdMs) && Date.now() - createdMs < FRESH_LEAD_MS;
+            if (!fresh) {
+                return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
+            }
         }
 
         const tg = await sendTelegram({

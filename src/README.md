@@ -108,6 +108,7 @@ Set these in your Base44 dashboard under **Settings → Secrets**:
 | `TELEGRAM_ADMIN_CHAT_ID` | Telegram chat ID of the admin who receives booking notifications |
 | `TELEGRAM_WEBHOOK_SECRET` | Random ≥32-char string verified against the `x-telegram-bot-api-secret-token` header to reject forged callbacks. Pass the same value as `secret_token=` when calling `setWebhook` |
 | `PAYSTACK_SECRET_KEY` | Paystack secret key for payment verify + transfers |
+| `INTERNAL_FUNCTION_SECRET` | Random ≥32-char string. Functions that other functions call without a user session (`sendPushNotification`, `requestHostDetails`, `notifyLead`) accept it in the request body as `internal_secret`; without it those endpoints only accept an admin session. Generate with `openssl rand -hex 32`. Unset = the endpoints stay open (they log a warning). |
 | `PAYSTACK_PUBLIC_KEY` | Paystack public key returned by `getPaystackPublicKey` for the frontend |
 | `RAPID_API_KEY` | RapidAPI key for the Airbnb scraper (mcpDataIngestion). Optional |
 | `RAPID_API_HOST` | Override the Airbnb scraper host. Defaults to `airbnb13.p.rapidapi.com`. Optional |
