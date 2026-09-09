@@ -114,7 +114,7 @@ export default function SearchResultCard({ property, user: initialUser }) {
                 </div>
               </div>
 
-              {property.rating && property.rating > 0 && (
+              {property.rating > 0 && (
                 <div className="flex items-center gap-1">
                   <Star className="w-3 h-3 text-amber-400 fill-current" />
                   <span className="text-xs font-semibold text-slate-900 dark:text-white">{property.rating}</span>

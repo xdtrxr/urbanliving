@@ -121,7 +121,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
               </div>
             </div>
 
-            {property.rating && property.rating > 0 && (
+            {property.rating > 0 && (
               <div className="flex items-center gap-1">
                 <Star className="w-4 h-4 text-amber-400 fill-current" />
                 <span className="font-semibold text-slate-900 dark:text-white">{property.rating}</span>
