@@ -37,13 +37,7 @@
       "type": "number",
       "default": 0,
       "description": "TEMPORARY: client-writable until the client that awards points through awardPoints is published (planned 2026-09-20); the field-level admin-only write rule is staged in base44/entities-pending-publish.",
-      "rls": {
-        "write": {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      }
+      "rls": {}
     },
     "loyalty_tier": {
       "type": "string",
@@ -55,13 +49,7 @@
         "Diamond"
       ],
       "default": "Bronze",
-      "rls": {
-        "write": {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      }
+      "rls": {}
     },
     "wishlist": {
       "type": "array",
