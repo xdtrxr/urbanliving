@@ -20,7 +20,6 @@ const Support = lazy(() => import('./pages/Support'));
 const PaymentPage = lazy(() => import('./pages/PaymentPage'));
 const BankAccounts = lazy(() => import('./pages/BankAccounts'));
 const Withdrawals = lazy(() => import('./pages/Withdrawals'));
-const ReferralTest = lazy(() => import('./pages/ReferralTest'));
 const Landing = lazy(() => import('./pages/Landing'));
 const Install = lazy(() => import('./pages/Install'));
 
@@ -50,7 +49,6 @@ export const PAGES = {
     "PaymentPage": PaymentPage,
     "BankAccounts": BankAccounts,
     "Withdrawals": Withdrawals,
-    "ReferralTest": ReferralTest,
 }
 
 export const pagesConfig = {

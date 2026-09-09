@@ -1,7 +1,7 @@
 {
   "name": "Booking",
   "type": "object",
-  "description": "A stay reservation. TEMPORARY: the update rule is guest-or-admin again until the client that routes guest writes through cancelBooking, startStayPayment and submitBookingId is published; the repo file carries the admin-only rule and the next checkpoint re-applies it.",
+  "description": "A stay reservation. TEMPORARY: the update rule is guest-or-admin until the client that routes guest writes through cancelBooking, startStayPayment and submitBookingId is published (planned 2026-09-20); the admin-only rule is staged in base44/entities-pending-publish.",
   "properties": {
     "property_id": {
       "type": "string",

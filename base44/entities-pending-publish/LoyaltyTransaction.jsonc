@@ -1,0 +1,93 @@
+{
+  "name": "LoyaltyTransaction",
+  "type": "object",
+  "description": "One row per points award. Create is admin-only: rows are written by the awardPoints function under the service role, so a user cannot mint their own history. Read stays owner-or-admin.",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "User's email address"
+    },
+    "points_earned": {
+      "type": "number",
+      "description": "Points earned in this transaction"
+    },
+    "transaction_type": {
+      "type": "string",
+      "enum": [
+        "booking",
+        "review",
+        "referral",
+        "milestone",
+        "bonus",
+        "quest",
+        "engagement"
+      ],
+      "description": "Type of activity that earned points. 'quest' and 'engagement' were being written by the browser without being in this list; they are now written by awardPoints."
+    },
+    "booking_id": {
+      "type": "string",
+      "description": "Associated booking ID if applicable"
+    },
+    "quest_id": {
+      "type": "string",
+      "description": "Associated Quest row id for quest and engagement awards"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the transaction"
+    },
+    "nft_awarded": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "rarity": {
+          "type": "string"
+        }
+      },
+      "description": "NFT token awarded with this transaction"
+    }
+  },
+  "required": [
+    "user_email",
+    "points_earned",
+    "transaction_type",
+    "description"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
