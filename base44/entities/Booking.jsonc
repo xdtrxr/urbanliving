@@ -1,7 +1,7 @@
 {
   "name": "Booking",
   "type": "object",
-  "description": "A stay reservation. TEMPORARY: the update rule is guest-or-admin until the client that routes guest writes through cancelBooking, startStayPayment and submitBookingId is published (planned 2026-09-20); the admin-only rule is staged in base44/entities-pending-publish.",
+  "description": "A stay reservation. TEMPORARY: the update rule is guest-or-admin until the client that routes guest writes through cancelBooking, startStayPayment and submitBookingId is published (planned 2026-09-20); the admin-only rule is staged in docs/entity-rules-pending-publish.",
   "properties": {
     "property_id": {
       "type": "string",

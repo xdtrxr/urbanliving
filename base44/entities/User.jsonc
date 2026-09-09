@@ -36,7 +36,7 @@
     "loyalty_points": {
       "type": "number",
       "default": 0,
-      "description": "TEMPORARY: client-writable until the client that awards points through awardPoints is published (planned 2026-09-20); the field-level admin-only write rule is staged in base44/entities-pending-publish.",
+      "description": "TEMPORARY: client-writable until the client that awards points through awardPoints is published (planned 2026-09-20); the field-level admin-only write rule is staged in docs/entity-rules-pending-publish.",
       "rls": {}
     },
     "loyalty_tier": {
