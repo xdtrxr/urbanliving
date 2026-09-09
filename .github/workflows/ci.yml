@@ -1,0 +1,43 @@
+name: CI
+
+# Runs on every push and pull request. Lint, the two pricing parity scripts
+# (rides and stays: the server functions are executed off disk and compared
+# with the client mirrors) and a production build.
+#
+# The build needs BASE44_LEGACY_SDK_IMPORTS so the Base44 Vite plugin resolves
+# the legacy "@/entities/*" imports; hosted Base44 builds set it themselves.
+# The two VITE_ values are public identifiers baked into the bundle; set them
+# as repository variables to match production, or leave them unset — the
+# build still succeeds and only the runtime API base differs.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Pricing parity (rides + stays)
+        run: npm run check
+
+      - name: Build
+        env:
+          BASE44_LEGACY_SDK_IMPORTS: "true"
+          VITE_BASE44_APP_ID: ${{ vars.VITE_BASE44_APP_ID }}
+          VITE_BASE44_BACKEND_URL: ${{ vars.VITE_BASE44_BACKEND_URL }}
+        run: npm run build
