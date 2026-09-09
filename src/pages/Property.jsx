@@ -203,7 +203,11 @@ export default function PropertyPage() {
                                         }}
                                         className={`relative aspect-square rounded-lg overflow-hidden ring-2 transition-all duration-200 ${selectedMedia?.url === item.url ? 'ring-amber-500 ring-offset-2' : 'ring-transparent hover:ring-amber-300'}`}
                                     >
-                                        <img src={item.type === 'image' ? item.url : 'https://static.thenounproject.com/png/11204-200.png'} alt={`${property.title} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                                        {item.type === 'image' ? (
+                                            <img src={item.url} alt={`${property.title} thumbnail ${index + 1}`} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div aria-hidden="true" className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900" />
+                                        )}
                                         {item.type === 'video' && (
                                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                                                 <PlayCircle className="w-6 h-6 text-white" />

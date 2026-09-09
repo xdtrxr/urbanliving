@@ -218,11 +218,11 @@ export default function MediaLightbox({ media, startIndex = 0, open, onClose }) 
                   i === index ? 'ring-amber-400' : 'ring-transparent opacity-60 hover:opacity-100'
                 }`}
               >
-                <img
-                  src={m.type === 'image' ? m.url : 'https://static.thenounproject.com/png/11204-200.png'}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
+                {m.type === 'image' ? (
+                  <img src={m.url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div aria-hidden="true" className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900" />
+                )}
                 {m.type === 'video' && (
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                     <PlayCircle className="w-4 h-4 text-white" />
