@@ -1065,7 +1065,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
     return (
       <div className="h-[calc(100dvh-5rem)] sm:h-[calc(100dvh-6rem)] flex items-center justify-center bg-slate-50 dark:bg-slate-800/60">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-900 border-t-transparent mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-900 border-t-transparent mx-auto mb-4 dark:border-white"></div>
           <p className="text-slate-600 dark:text-slate-300">Loading your conversation history...</p>
         </div>
       </div>

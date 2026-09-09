@@ -102,7 +102,7 @@ export default function PropertyPage() {
     if (isLoading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent"></div>
+                <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent dark:border-white"></div>
             </div>
         );
     }

@@ -726,7 +726,7 @@ export default function AdminPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent"></div>
+        <div className="animate-spin rounded-full h-16 w-16 border-4 border-slate-900 border-t-transparent dark:border-white"></div>
       </div>
     );
   }
@@ -1384,7 +1384,7 @@ export default function AdminPage() {
                           className="flex-1 rounded-xl border-slate-200 dark:border-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-200 dark:text-slate-200 hover:file:bg-slate-200"
                         />
                         {isUploadingImages && (
-                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
+                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900 dark:border-slate-700 dark:border-t-white" />
                         )}
                       </div>
                       {propertyFormData.images.length > 0 && (
@@ -1417,7 +1417,7 @@ export default function AdminPage() {
                           className="flex-1 rounded-xl border-slate-200 dark:border-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 dark:file:bg-slate-800 file:text-slate-700 dark:file:text-slate-200 dark:text-slate-200 hover:file:bg-slate-200"
                         />
                         {isUploadingVideos && (
-                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900" />
+                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-slate-300 border-t-slate-900 dark:border-slate-700 dark:border-t-white" />
                         )}
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
