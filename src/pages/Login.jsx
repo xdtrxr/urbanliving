@@ -208,14 +208,14 @@ export default function LoginPage() {
           paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
         }}
       >
-        <Card className="w-full max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
+        <Card className="w-full max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl">
           <CardContent className="p-6 sm:p-8">
             <div className="text-center mb-6">
-              <div className="w-12 h-12 mx-auto mb-3 bg-slate-900 rounded-full flex items-center justify-center">
+              <div className="w-12 h-12 mx-auto mb-3 bg-slate-900 dark:bg-slate-800 rounded-full flex items-center justify-center">
                 <ShieldCheck className="w-6 h-6 text-amber-400" />
               </div>
-              <h1 className="text-2xl font-bold text-slate-900">Verify your email</h1>
-              <p className="text-slate-600 mt-2 text-sm">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Verify your email</h1>
+              <p className="text-slate-600 dark:text-slate-300 mt-2 text-sm">
                 {info || `We sent a 6-digit code to ${email}.`}
               </p>
             </div>
@@ -235,7 +235,7 @@ export default function LoginPage() {
                   disabled={isWorking}
                   autoFocus
                 />
-                <p className="text-xs text-slate-500 mt-2 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
                   Check your inbox (and spam folder).
                 </p>
               </div>
@@ -250,7 +250,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isWorking}
-                className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+                className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 font-semibold"
               >
                 {isWorking ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying…</>
@@ -260,14 +260,14 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className="text-center mt-6 text-sm text-slate-600 space-y-2">
+            <div className="text-center mt-6 text-sm text-slate-600 dark:text-slate-300 space-y-2">
               <div>
                 Didn&apos;t get the code?{' '}
                 <button
                   type="button"
                   onClick={handleResendOtp}
                   disabled={isWorking}
-                  className="text-slate-900 font-semibold hover:underline disabled:opacity-50"
+                  className="text-slate-900 dark:text-white font-semibold hover:underline disabled:opacity-50"
                 >
                   Resend
                 </button>
@@ -276,7 +276,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => { setMode('signup'); setError(null); setInfo(null); setOtpCode(''); }}
-                  className="text-slate-500 hover:underline text-xs"
+                  className="text-slate-500 dark:text-slate-400 hover:underline text-xs"
                 >
                   ← Use a different email
                 </button>
@@ -290,16 +290,16 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[100dvh] bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <Card className="w-full max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-slate-200 rounded-3xl shadow-xl">
+      <Card className="w-full max-w-md bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-xl">
         <CardContent className="p-6 sm:p-8">
           <div className="text-center mb-6">
             <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-lg">
               <span className="text-amber-400 font-bold text-lg">US</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
               {mode === 'signin' ? 'Welcome back' : 'Create your account'}
             </h1>
-            <p className="text-slate-600 mt-1 text-sm sm:text-base">
+            <p className="text-slate-600 dark:text-slate-300 mt-1 text-sm sm:text-base">
               {mode === 'signin'
                 ? 'Sign in to continue to UrbanStays'
                 : 'Sign up to book verified short-stays'}
@@ -316,8 +316,8 @@ export default function LoginPage() {
               onClick={() => { setMode('signin'); setError(null); }}
               className={`h-11 rounded-lg text-sm font-semibold transition-colors ${
                 mode === 'signin'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               Sign in
@@ -329,8 +329,8 @@ export default function LoginPage() {
               onClick={() => { setMode('signup'); setError(null); }}
               className={`h-11 rounded-lg text-sm font-semibold transition-colors ${
                 mode === 'signup'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
             >
               Create account
@@ -341,7 +341,7 @@ export default function LoginPage() {
             <Button
               variant="outline"
               onClick={() => handleProvider('google')}
-              className="rounded-xl h-12 font-medium border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-3"
+              className="rounded-xl h-12 font-medium border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-3"
             >
               <GoogleIcon />
               Continue with Google
@@ -349,7 +349,7 @@ export default function LoginPage() {
             <Button
               variant="outline"
               onClick={() => handleProvider('apple')}
-              className="rounded-xl h-12 font-medium border-slate-200 hover:bg-slate-50 flex items-center justify-center gap-3"
+              className="rounded-xl h-12 font-medium border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-3"
             >
               <AppleIcon />
               Continue with Apple
@@ -358,7 +358,7 @@ export default function LoginPage() {
 
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-            <span className="text-xs uppercase tracking-wide text-slate-500">or with email</span>
+            <span className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">or with email</span>
             <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
           </div>
 
@@ -480,7 +480,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               disabled={isWorking}
-              className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+              className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 font-semibold"
             >
               {isWorking ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Working...</>
