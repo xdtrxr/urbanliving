@@ -920,7 +920,7 @@ export default function VehiclesAdmin() {
                       <label
                         key={a.id}
                         htmlFor={`amenity-${a.id}`}
-                        className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 cursor-pointer"
+                        className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 cursor-pointer dark:hover:bg-slate-800"
                       >
                         <Checkbox
                           id={`amenity-${a.id}`}

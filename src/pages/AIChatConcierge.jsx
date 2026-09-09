@@ -1360,7 +1360,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                   {quickPrompts.map((prompt, index) => (
                     <Card 
                       key={index}
-                      className="p-2.5 cursor-pointer hover:bg-slate-100 transition-colors border-slate-200 dark:border-slate-800 rounded-lg"
+                      className="p-2.5 cursor-pointer hover:bg-slate-100 transition-colors border-slate-200 dark:border-slate-800 rounded-lg dark:hover:bg-slate-800"
                       onClick={() => handleQuickPrompt(prompt)}
                     >
                       <div className="flex items-center gap-1.5">

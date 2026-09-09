@@ -264,7 +264,7 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
                     <SidebarMenuButton 
                       asChild 
                       tooltip="Privacy Policy"
-                      className="hover:bg-slate-100/80 transition-all duration-300 rounded-xl"
+                      className="hover:bg-slate-100/80 transition-all duration-300 rounded-xl dark:hover:bg-slate-800"
                     >
                       <Link to={createPageUrl("PrivacyPolicy")} onClick={closeMobileSheet} className="flex items-center justify-center px-2 py-2">
                         <Shield className="w-4 h-4 text-slate-500" />
@@ -275,7 +275,7 @@ function LayoutShell({ user, menuItems, location, handleLogout, children }) {
                     <SidebarMenuButton 
                       asChild 
                       tooltip="FAQs"
-                      className="hover:bg-slate-100/80 transition-all duration-300 rounded-xl"
+                      className="hover:bg-slate-100/80 transition-all duration-300 rounded-xl dark:hover:bg-slate-800"
                     >
                       <Link to={createPageUrl("FAQ")} onClick={closeMobileSheet} className="flex items-center justify-center px-2 py-2">
                         <HelpCircle className="w-4 h-4 text-slate-500" />

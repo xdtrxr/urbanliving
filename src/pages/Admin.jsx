@@ -102,7 +102,7 @@ function InFlightBookingRow({ booking, onExpire }) {
 
   return (
     <div className={`rounded-2xl border p-4 ${
-      isUrgent ? 'border-red-200 dark:border-red-900 bg-red-50/40' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+      isUrgent ? 'border-red-200 dark:border-red-900 bg-red-50/40 dark:bg-red-950/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
     }`}>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex-1 min-w-[260px]">
@@ -892,7 +892,7 @@ export default function AdminPage() {
                   <div
                     key={req.id}
                     className={`rounded-2xl border p-4 ${
-                      req.has_conflict ? 'border-red-200 dark:border-red-900 bg-red-50/50' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                      req.has_conflict ? 'border-red-200 dark:border-red-900 bg-red-50/50 dark:bg-red-950/30' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -934,7 +934,7 @@ export default function AdminPage() {
                           variant="outline"
                           onClick={() => handleDecide(req.id, 'reject')}
                           disabled={decidingId === req.id}
-                          className="rounded-xl border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50"
+                          className="rounded-xl border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40"
                         >
                           ❌ Reject
                         </Button>
@@ -1183,7 +1183,7 @@ export default function AdminPage() {
                         setPropertyFormData({
                           title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', host_phone: '', arrival_instructions: '', instant_book: false
                         });
-                      }} className="mt-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100">
+                      }} className="mt-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/40">
                       <XCircle className="w-3 h-3 mr-1" /> Clear Edit
                     </Button>
                   </div>
@@ -1592,7 +1592,7 @@ export default function AdminPage() {
                       </thead>
                       <tbody>
                         {properties.map((property) => (
-                          <tr key={property.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 transition-colors">
+                          <tr key={property.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 transition-colors dark:hover:bg-slate-800">
                             <td className="p-3">
                               <div className="flex items-center gap-3">
                                 <img 
@@ -1643,7 +1643,7 @@ export default function AdminPage() {
                                   variant="outline"
                                   size="sm"
                                   disabled={deletingPropertyId === property.id}
-                                  className="text-red-600 dark:text-red-400 hover:bg-red-50 border-red-200 dark:border-red-900"
+                                  className="text-red-600 dark:text-red-400 hover:bg-red-50 border-red-200 dark:border-red-900 dark:hover:bg-red-950/40"
                                 >
                                   {deletingPropertyId === property.id ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -1728,7 +1728,7 @@ export default function AdminPage() {
                       <div
                         key={ticket.id}
                         onClick={() => handleSelectTicket(ticket)}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedTicket?.id === ticket.id ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900 border' : 'hover:bg-slate-50 border border-transparent'}`}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${selectedTicket?.id === ticket.id ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900 border' : 'hover:bg-slate-50 border border-transparent dark:hover:bg-slate-800'}`}
                       >
                         <p className="font-semibold text-sm truncate">{ticket.subject}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{ticket.user_email}</p>
@@ -1803,7 +1803,7 @@ export default function AdminPage() {
         </Card>
 
         {/* Danger Zone Card */}
-        <Card className="bg-red-50/90 border-red-200 dark:border-red-900 rounded-3xl shadow-lg mb-8">
+        <Card className="bg-red-50/90 dark:bg-red-950/30 border-red-200 dark:border-red-900 rounded-3xl shadow-lg mb-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-800 dark:text-red-200">
               <AlertTriangle className="w-5 h-5" />
