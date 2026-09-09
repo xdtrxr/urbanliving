@@ -379,7 +379,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                         <div className="flex-1">
                           <p className="text-slate-900 dark:text-white">{fullAddress}</p>
                           {mapsLink && (
-                            <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:text-emerald-200 inline-flex items-center gap-1 mt-1">
+                            <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-200 inline-flex items-center gap-1 mt-1">
                               <Map className="w-3 h-3" /> Open in Google Maps
                             </a>
                           )}
@@ -393,7 +393,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                           <p className="text-slate-900 dark:text-white">
                             Call <span className="font-semibold">{property.host_name || 'your host'}</span> on arrival
                           </p>
-                          <a href={`tel:${property.host_phone}`} className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hover:text-emerald-900 dark:text-emerald-200">
+                          <a href={`tel:${property.host_phone}`} className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 hover:text-emerald-900 dark:hover:text-emerald-200">
                             {property.host_phone}
                           </a>
                         </div>
@@ -438,7 +438,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                       size="sm"
                       onClick={() => onCancelClick(booking)}
                       disabled={cancellingBookingId === booking.id}
-                      className="rounded-xl border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40"
+                      className="rounded-xl border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                     >
                       <X className="w-4 h-4 mr-2" />
                       {cancellingBookingId === booking.id ? 'Cancelling...' : 'Cancel'}

@@ -1091,7 +1091,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                 variant="ghost"
                 size="sm"
                 onClick={startFreshConversation}
-                className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200"
+                className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
                 <RotateCcw className="w-4 h-4 mr-1" />
                 Start Fresh
@@ -1393,7 +1393,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
               <span className="flex-1">{speechError}</span>
               <button
                 onClick={resetSpeech}
-                className="text-red-700 dark:text-red-300 hover:text-red-900 dark:text-red-200 underline flex-shrink-0"
+                className="text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-200 underline flex-shrink-0"
               >
                 Dismiss
               </button>

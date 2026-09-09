@@ -271,7 +271,7 @@ export default function BankAccountsPage() {
                           size="icon"
                           onClick={() => handleDeleteClick(account)}
                           disabled={isDeleting === account.id}
-                          className="text-red-600 dark:text-red-400 hover:text-red-700 dark:text-red-300 hover:bg-red-50 dark:bg-red-950/40"
+                          className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40"
                         >
                           {isDeleting === account.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />

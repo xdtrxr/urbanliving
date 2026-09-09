@@ -91,13 +91,13 @@ export default function LoyaltyCard({ user }) {
             <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-gold-600 group-hover:to-amber-600 group-hover:bg-clip-text transition-all duration-300">
               {points.toLocaleString()}
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-700 dark:text-slate-200 transition-colors duration-300">Urban Points</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors duration-300">Urban Points</p>
           </div>
 
           {tierInfo.nextTier && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-300 group-hover:text-slate-700 dark:text-slate-200 transition-colors duration-300">Progress to {tierInfo.nextTier}</span>
+                <span className="text-slate-600 dark:text-slate-300 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors duration-300">Progress to {tierInfo.nextTier}</span>
                 <span className="font-semibold text-slate-900 dark:text-white group-hover:text-amber-600 transition-colors duration-300">
                   {getPointsToNextTier().toLocaleString()} points to go
                 </span>
@@ -115,7 +115,7 @@ export default function LoyaltyCard({ user }) {
             </div>
           )}
 
-          <div className="text-xs text-slate-500 dark:text-slate-400 text-center group-hover:text-slate-600 dark:text-slate-300 transition-colors duration-300">
+          <div className="text-xs text-slate-500 dark:text-slate-400 text-center group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors duration-300">
             Earn points through bookings, reviews, and referrals
           </div>
         </CardContent>

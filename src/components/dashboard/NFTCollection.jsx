@@ -68,7 +68,7 @@ export default function NFTCollection({ user }) {
               <Gift className="w-16 h-16 text-slate-400 dark:text-slate-500 mx-auto mb-4 group-hover:text-purple-400 transition-colors duration-300" />
             </div>
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-purple-600 transition-colors duration-300">Start Your Collection</h3>
-            <p className="text-slate-600 dark:text-slate-300 mb-4 group-hover:text-slate-700 dark:text-slate-200 transition-colors duration-300">
+            <p className="text-slate-600 dark:text-slate-300 mb-4 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-colors duration-300">
               Complete bookings and milestones to earn exclusive NFT travel tokens!
             </p>
             <Button variant="outline" className="transform transition-all duration-300 group-hover:scale-105">Learn More</Button>

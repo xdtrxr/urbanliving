@@ -1146,7 +1146,7 @@ export default function VehiclesAdmin() {
                             size="sm"
                             onClick={() => setVehicleToDelete(v)}
                             disabled={deletingId === v.id}
-                            className="flex-1 sm:w-24 border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:bg-red-950/40"
+                            className="flex-1 sm:w-24 border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                           >
                             <Trash2 className="w-3.5 h-3.5 mr-1" />
                             Delete

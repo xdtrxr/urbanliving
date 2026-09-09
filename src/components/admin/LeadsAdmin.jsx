@@ -159,7 +159,7 @@ export default function LeadsAdmin() {
                     </Select>
                     <a
                       href={`tel:${lead.phone}`}
-                      className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-200"
+                      className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                     >
                       Call
                     </a>
