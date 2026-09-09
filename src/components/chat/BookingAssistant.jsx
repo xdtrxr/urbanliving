@@ -233,7 +233,7 @@ export default function BookingAssistant({ initialParams, onSearch, onCancel }) 
           <Button variant="outline" onClick={onCancel} className="rounded-xl">
             Cancel
           </Button>
-          <Button onClick={handleSearch} className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-6">
+          <Button onClick={handleSearch} className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-6 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">
             <Search className="w-4 h-4 mr-2" />
             Search Properties
           </Button>

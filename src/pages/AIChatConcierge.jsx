@@ -1311,7 +1311,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
                     ) : (
                       <div className={`p-3 rounded-xl shadow-sm ${
                         message.role === 'user' 
-                          ? 'bg-slate-900 text-white rounded-br-lg'
+                          ? 'bg-slate-900 text-white rounded-br-lg dark:bg-white dark:text-slate-900'
                           : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-bl-lg'
                       }`}>
                         <ReactMarkdown 
@@ -1427,7 +1427,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
             <Button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              className="bg-slate-900 hover:bg-slate-800 text-white p-2.5 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md disabled:opacity-50"
+              className="bg-slate-900 hover:bg-slate-800 text-white p-2.5 rounded-lg shadow-sm transition-all duration-200 hover:shadow-md disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
             >
               <Send className="w-4 h-4" />
             </Button>

@@ -998,7 +998,7 @@ export default function VehiclesAdmin() {
                   <Button
                     type="submit"
                     disabled={isSaving}
-                    className="bg-slate-900 hover:bg-slate-800 text-white"
+                    className="bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
                   >
                     {isSaving ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>

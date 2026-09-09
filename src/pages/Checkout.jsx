@@ -455,7 +455,7 @@ export default function CheckoutPage() {
                 <div className="flex flex-col gap-2.5">
                   <Button
                     onClick={() => navigate(createPageUrl('Bookings'))}
-                    className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-base"
+                    className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-base dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
                   >
                     Check my bookings
                   </Button>

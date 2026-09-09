@@ -195,7 +195,7 @@ export default function IdUploadGate({ bookingId, onComplete }) {
             accept="image/*,application/pdf"
             onChange={handleFileChange}
             disabled={uploading}
-            className="block w-full mt-1 text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-900 file:text-white file:text-sm file:font-medium hover:file:bg-slate-800 file:cursor-pointer"
+            className="block w-full mt-1 text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-900 file:text-white file:text-sm file:font-medium hover:file:bg-slate-800 file:cursor-pointer dark:file:bg-white dark:file:text-slate-900"
           />
           {file && (
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">

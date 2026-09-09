@@ -228,7 +228,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
         <Button
           onClick={handleSubmit}
           disabled={status === 'submitting'}
-          className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-6 text-base font-semibold"
+          className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-6 text-base font-semibold dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
         >
           {status === 'submitting' ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</>

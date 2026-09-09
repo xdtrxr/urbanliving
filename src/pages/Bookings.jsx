@@ -716,19 +716,19 @@ export default function BookingsPage() {
 
         <Tabs defaultValue="pending-approval" className="space-y-6">
           <TabsList className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm p-1 rounded-xl shadow-sm w-full overflow-x-auto flex justify-start sm:justify-center scrollbar-thin">
-            <TabsTrigger value="pending-approval" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
+            <TabsTrigger value="pending-approval" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
               Pending Approval {pendingApproval.length > 0 && `(${pendingApproval.length})`}
             </TabsTrigger>
-            <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
+            <TabsTrigger value="upcoming" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
               Upcoming {upcoming.length > 0 && `(${upcoming.length})`}
             </TabsTrigger>
-            <TabsTrigger value="current" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
+            <TabsTrigger value="current" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
               Current {current.length > 0 && `(${current.length})`}
             </TabsTrigger>
-            <TabsTrigger value="past" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
+            <TabsTrigger value="past" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
               Past {past.length > 0 && `(${past.length})`}
             </TabsTrigger>
-            <TabsTrigger value="cancelled" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap">
+            <TabsTrigger value="cancelled" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white text-xs sm:text-sm whitespace-nowrap dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
               Cancelled {cancelledBookings.length > 0 && `(${cancelledBookings.length})`}
             </TabsTrigger>
           </TabsList>
@@ -753,7 +753,7 @@ export default function BookingsPage() {
                     When you request to book a property, it will appear here while the admin reviews availability.
                   </p>
                   <Link to={createPageUrl("Search")}>
-                    <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold">
+                    <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold dark:from-white dark:to-slate-200 dark:text-slate-900">
                       Discover Properties
                     </Button>
                   </Link>
@@ -772,7 +772,7 @@ export default function BookingsPage() {
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Upcoming Bookings</h3>
                   <p className="text-slate-600 dark:text-slate-300 mb-6">Start planning your next adventure!</p>
                   <Link to={createPageUrl("Search")}>
-                    <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold">
+                    <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold dark:from-white dark:to-slate-200 dark:text-slate-900">
                       Discover Properties
                     </Button>
                   </Link>

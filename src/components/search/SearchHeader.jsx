@@ -160,7 +160,7 @@ export default function SearchHeader({
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
           <Button
             onClick={onSearch}
-            className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold text-base sm:text-lg shadow-lg transition-all duration-300 hover:shadow-xl"
+            className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-xl font-semibold text-base sm:text-lg shadow-lg transition-all duration-300 hover:shadow-xl dark:from-white dark:to-slate-200 dark:text-slate-900"
           >
             <SlidersHorizontal className="mr-2 h-5 w-5" />
             Search Properties

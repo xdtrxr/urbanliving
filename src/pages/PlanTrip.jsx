@@ -45,7 +45,7 @@ function FilterChip({ icon: Icon, label, isActive, children }) {
           size="sm"
           className={`h-10 rounded-full px-4 gap-2 font-medium transition-colors whitespace-nowrap ${
             isActive
-              ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800'
+              ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 dark:border-white'
               : 'bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-amber-400'
           }`}
         >
@@ -360,7 +360,7 @@ export default function PlanTripPage() {
                     onClick={() => setSeats(s.value)}
                     className={`text-sm rounded-lg px-3 py-2 border transition-colors text-left ${
                       seats === s.value
-                        ? 'bg-slate-900 text-white border-slate-900'
+                        ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
                         : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:border-amber-400'
                     }`}
                   >

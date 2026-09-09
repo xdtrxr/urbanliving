@@ -196,7 +196,7 @@ export default function WithdrawalsPage() {
               You need to add a verified bank account before you can withdraw funds
             </p>
             <Link to={createPageUrl('BankAccounts')}>
-              <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold">
+              <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold dark:from-white dark:to-slate-200 dark:text-slate-900">
                 <Plus className="w-5 h-5 mr-2" />
                 Add Bank Account
               </Button>

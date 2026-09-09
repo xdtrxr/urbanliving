@@ -470,7 +470,7 @@ export default function RideCheckoutPage() {
             <Button
               onClick={submit}
               disabled={submitting || !!rideId}
-              className="w-full rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-6 text-base"
+              className="w-full rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-6 text-base dark:from-white dark:to-slate-200 dark:text-slate-900"
             >
               {submitting ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting…</>

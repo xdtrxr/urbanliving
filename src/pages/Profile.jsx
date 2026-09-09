@@ -268,7 +268,7 @@ export default function ProfilePage() {
               <Button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl text-lg shadow-lg transition-all duration-300 hover:shadow-xl"
+                className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl text-lg shadow-lg transition-all duration-300 hover:shadow-xl dark:from-white dark:to-slate-200 dark:text-slate-900"
               >
                 {isSaving ? (
                   <>

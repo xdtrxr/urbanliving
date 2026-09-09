@@ -122,7 +122,7 @@ export default function WishlistPage() {
                 Start browsing and save properties you love by clicking the heart icon.
               </p>
               <Link to={createPageUrl("Search")}>
-                <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold">
+                <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold dark:from-white dark:to-slate-200 dark:text-slate-900">
                   <Search className="w-4 h-4 mr-2" />
                   Explore Properties
                 </Button>

@@ -155,13 +155,13 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
             
             {isAuthenticated ? (
               <Link to={createPageUrl(`Checkout?property=${property.id}&checkIn=2024-02-15&checkOut=2024-02-18&guests=2`)}>
-                <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg">
+                <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg dark:from-white dark:to-slate-200 dark:text-slate-900">
                   Book Now
                 </Button>
               </Link>
             ) : (
               <Link to={`/login?from_url=${encodeURIComponent(window.location.origin + createPageUrl(`Property?id=${property.id}`))}`}>
-                <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg">
+                <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg dark:from-white dark:to-slate-200 dark:text-slate-900">
                   Sign in to Book
                 </Button>
               </Link>

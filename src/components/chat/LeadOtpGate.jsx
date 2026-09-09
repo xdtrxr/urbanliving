@@ -151,7 +151,7 @@ export default function LeadOtpGate({ lead, onVerified, onCancel }) {
             <Button
               onClick={sendCode}
               disabled={working}
-              className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-5"
+              className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-5 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
             >
               {working ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send code'}
             </Button>
@@ -203,7 +203,7 @@ export default function LeadOtpGate({ lead, onVerified, onCancel }) {
               <Button
                 onClick={verify}
                 disabled={working}
-                className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-5"
+                className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl px-5 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
               >
                 {working ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify & continue'}
               </Button>

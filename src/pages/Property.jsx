@@ -325,7 +325,7 @@ export default function PropertyPage() {
 
                                     {!isAuthenticated ? (
                                         <Link to={`/login?from_url=${encodeURIComponent(window.location.href)}`}>
-                                            <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
+                                            <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                                                 Sign in to Book
                                             </Button>
                                         </Link>
@@ -348,7 +348,7 @@ export default function PropertyPage() {
                                         </Link>
                                     ) : (
                                         <Link to={createPageUrl(`Checkout?property=${property.id}`)}>
-                                            <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
+                                            <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                                                 Book Now
                                             </Button>
                                         </Link>

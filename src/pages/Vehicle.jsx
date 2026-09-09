@@ -402,7 +402,7 @@ export default function VehiclePage() {
                                   tooShort
                                     ? 'border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-700 cursor-not-allowed'
                                     : isActive
-                                      ? 'border-slate-900 bg-slate-900 text-white'
+                                      ? 'border-slate-900 bg-slate-900 text-white dark:bg-white dark:text-slate-900 dark:border-white'
                                       : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-slate-400'
                                 }`}
                               >
@@ -516,13 +516,13 @@ export default function VehiclePage() {
 
                   {!isAuthenticated ? (
                     <Link to={`/login?from_url=${encodeURIComponent(window.location.href)}`}>
-                      <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
+                      <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                         Sign in to book
                       </Button>
                     </Link>
                   ) : (
                     <Link to={checkoutHref}>
-                      <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl">
+                      <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                         <Calendar className="w-4 h-4 mr-2" />
                         Request availability
                       </Button>
