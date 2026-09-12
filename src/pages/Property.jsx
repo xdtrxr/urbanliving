@@ -21,6 +21,24 @@ const amenityIcons = {
   kitchen: Utensils,
 };
 
+// Hosts type amenities as free text, so an entry is often one long string
+// with items separated by double spaces, bullets, dashes, full stops or
+// slashes. Split those into individual chips; whatever cannot be split
+// stays as one chip rather than being dropped.
+const AMENITY_SEPARATORS = /\s{2,}|\s*[•·▪]\s*|\s+-\s+|\.\s+|[,;\n]|\s*\/\s+/;
+function splitAmenities(list) {
+  const seen = new Set();
+  return (list || [])
+    .flatMap((raw) => String(raw).replace(/[\u2060\u200b]/g, '').split(AMENITY_SEPARATORS))
+    .map((item) => item.replace(/^[\s\-•·.]+|[\s\-•·.]+$/g, '').replace(/\s+/g, ' '))
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (item.length < 2 || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 // App is NGN-only — every entry resolves to ₦ so guests never see $/€/£.
 const currencySymbols = {
   NGN: '₦',
@@ -260,13 +278,19 @@ export default function PropertyPage() {
 
                                 <div className="mt-8">
                                     <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">What this place offers</h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {property.amenities?.map((amenity) => (
-                                            <div key={amenity} className="flex items-center gap-3">
-                                                {React.createElement(amenityIcons[amenity] || Star, { className: "w-5 h-5 text-slate-600 dark:text-slate-300" })}
-                                                <span className="text-slate-700 dark:text-slate-200 capitalize">{amenity.replace(/_/g, ' ')}</span>
-                                            </div>
-                                        ))}
+                                    <div className="flex flex-wrap gap-2">
+                                        {splitAmenities(property.amenities).map((amenity) => {
+                                            const Icon = amenityIcons[amenity.toLowerCase()] || Star;
+                                            return (
+                                                <span
+                                                    key={amenity}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 capitalize"
+                                                >
+                                                    <Icon className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 flex-shrink-0" />
+                                                    {amenity.replace(/_/g, ' ')}
+                                                </span>
+                                            );
+                                        })}
                                     </div>
                                 </div>
 
