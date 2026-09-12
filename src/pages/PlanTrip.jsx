@@ -222,7 +222,7 @@ export default function PlanTripPage() {
                         {isLoading
                           ? 'Checking availability…'
                           : count === 0
-                            ? 'No vehicles yet'
+                            ? 'Coming soon'
                             : `${count} vehicle${count === 1 ? '' : 's'} available`}
                       </p>
                     </div>
