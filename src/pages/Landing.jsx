@@ -179,17 +179,17 @@ export default function LandingPage() {
           <p className="text-slate-500 dark:text-slate-400">
             © {new Date().getFullYear()} HOMESHARES LTD. UrbanStays.io
           </p>
-          <div className="flex items-center gap-5">
-            <Link to={createPageUrl('Install')} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+          <div className="flex items-center gap-6">
+            <Link to={createPageUrl('Install')} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors py-2 -my-2">
               Install
             </Link>
-            <Link to={createPageUrl('Search')} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+            <Link to={createPageUrl('Search')} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors py-2 -my-2">
               Browse
             </Link>
-            <Link to={createPageUrl('FAQ')} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+            <Link to={createPageUrl('FAQ')} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors py-2 -my-2">
               FAQs
             </Link>
-            <Link to={createPageUrl('PrivacyPolicy')} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors">
+            <Link to={createPageUrl('PrivacyPolicy')} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors py-2 -my-2">
               Privacy
             </Link>
           </div>
