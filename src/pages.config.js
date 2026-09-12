@@ -27,6 +27,14 @@ const Install = lazy(() => import('./pages/Install'));
 // (no sidebar, no floating header). Marketing/install pages only.
 export const BARE_PAGES = new Set(["Landing", "Install"]);
 
+// Pages a signed-out visitor may open. Everything else needs a session and
+// is redirected to /login (with a return URL) instead of rendering a
+// half-empty page whose every request 401s.
+export const PUBLIC_PAGES = new Set([
+    "Landing", "Install", "Search", "Property", "PlanTrip", "Vehicle",
+    "FAQ", "PrivacyPolicy", "Support", "AIChatConcierge",
+]);
+
 export const PAGES = {
     "Landing": Landing,
     "Install": Install,
@@ -56,4 +64,5 @@ export const pagesConfig = {
     Pages: PAGES,
     Layout: __Layout,
     barePages: BARE_PAGES,
+    publicPages: PUBLIC_PAGES,
 };

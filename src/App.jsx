@@ -1,5 +1,5 @@
 import './App.css'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
@@ -21,13 +21,26 @@ const PageFallback = () => (
   </div>
 );
 
-const { Pages, Layout, mainPage, barePages } = pagesConfig;
+const { Pages, Layout, mainPage, barePages, publicPages } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 
 // Marketing/install pages render edge-to-edge with no sidebar/header.
 // Anything in barePages bypasses the Layout shell entirely.
 const isBarePage = (name) => !!barePages && barePages.has(name);
+
+// Signed-out visitors on a members-only page go to /login with a return
+// URL. While auth is still resolving we show the same fallback as a lazy
+// page so there is no flash of the empty page before the redirect.
+const RequireAuth = ({ pageName, children }) => {
+  const { isAuthenticated, isLoadingAuth, navigateToLogin } = useAuth();
+  const needsAuth = !publicPages?.has(pageName);
+  useEffect(() => {
+    if (needsAuth && !isLoadingAuth && !isAuthenticated) navigateToLogin();
+  }, [needsAuth, isLoadingAuth, isAuthenticated, navigateToLogin]);
+  if (needsAuth && (isLoadingAuth || !isAuthenticated)) return <PageFallback />;
+  return children;
+};
 
 const LayoutWrapper = ({ children, currentPageName }) => {
   if (!Layout || isBarePage(currentPageName)) {
@@ -89,7 +102,9 @@ const AuthenticatedApp = () => {
             path={`/${path}`}
             element={
               <LayoutWrapper currentPageName={path}>
-                <Page />
+                <RequireAuth pageName={path}>
+                  <Page />
+                </RequireAuth>
               </LayoutWrapper>
             }
           />
