@@ -32,7 +32,7 @@ export const BARE_PAGES = new Set(["Landing", "Install"]);
 // half-empty page whose every request 401s.
 export const PUBLIC_PAGES = new Set([
     "Landing", "Install", "Search", "Property", "PlanTrip", "Vehicle",
-    "FAQ", "PrivacyPolicy", "Support", "AIChatConcierge",
+    "FAQ", "PrivacyPolicy", "AIChatConcierge",
 ]);
 
 export const PAGES = {
