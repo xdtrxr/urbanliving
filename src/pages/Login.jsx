@@ -369,7 +369,7 @@ export default function LoginPage() {
                   <div>
                     <Label htmlFor="firstName">First name <span className="text-red-500 dark:text-red-400">*</span></Label>
                     <div className="relative mt-1">
-                      <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                       <Input
                         id="firstName"
                         autoComplete="given-name"
@@ -397,7 +397,7 @@ export default function LoginPage() {
                 <div>
                   <Label htmlFor="phoneNumber">Phone number <span className="text-red-500 dark:text-red-400">*</span></Label>
                   <div className="relative mt-1">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                     <Input
                       id="phoneNumber"
                       type="tel"
@@ -415,7 +415,7 @@ export default function LoginPage() {
             <div>
               <Label htmlFor="email">Email <span className="text-red-500 dark:text-red-400">*</span></Label>
               <div className="relative mt-1">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                 <Input
                   id="email"
                   type="email"
@@ -431,7 +431,7 @@ export default function LoginPage() {
             <div>
               <Label htmlFor="password">Password <span className="text-red-500 dark:text-red-400">*</span></Label>
               <div className="relative mt-1">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                 <Input
                   id="password"
                   type="password"
@@ -449,7 +449,7 @@ export default function LoginPage() {
               <div>
                 <Label htmlFor="confirmPassword">Confirm password <span className="text-red-500 dark:text-red-400">*</span></Label>
                 <div className="relative mt-1">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
                   <Input
                     id="confirmPassword"
                     type="password"
