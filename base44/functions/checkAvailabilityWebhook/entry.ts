@@ -200,6 +200,75 @@ async function sendAdminTelegram(opts: {
     return { sent: true, message_id: String(msgResp.result.message_id) };
 }
 
+// ── Booking options and seasonal rates ──────────────────────────────────────
+// One property can be booked several ways (1 bedroom, 2 bedrooms, the whole
+// house), each with its own nightly price and guest limit, and any of those
+// prices can be different for a named stretch of dates. A property with no
+// options listed has exactly one: the whole place at price_per_night.
+
+// The ways a property can be booked, smallest first. Bad rows are dropped,
+// and a bedroom count listed twice counts once.
+function bookingOptionsOf(property: any) {
+    const listed = property && Array.isArray(property.booking_options) ? property.booking_options : [];
+    const out = [];
+    for (const o of listed) {
+        const bedrooms = Math.round(Number(o && o.bedrooms));
+        const price = Math.round(Number(o && o.price_per_night));
+        const guests = Math.round(Number(o && o.max_guests));
+        if (!(bedrooms >= 1) || !(price > 0) || out.some((x) => x.bedrooms === bedrooms)) continue;
+        out.push({ bedrooms, price_per_night: price, max_guests: guests >= 1 ? guests : 0 });
+    }
+    if (out.length === 0) {
+        const price = Math.round(Number(property && property.price_per_night) || 0);
+        if (price > 0) {
+            out.push({
+                bedrooms: Math.round(Number(property.bedrooms) || 0),
+                price_per_night: price,
+                max_guests: Math.round(Number(property.max_guests) || 0),
+            });
+        }
+    }
+    return out.sort((a, b) => a.bedrooms - b.bedrooms);
+}
+
+// What one night costs for one option. `night` is YYYY-MM-DD. A season covers
+// its start and end dates inclusive, and only changes an option it prices.
+function nightlyRate(property: any, option: any, night: string) {
+    const seasons = property && Array.isArray(property.seasonal_rates) ? property.seasonal_rates : [];
+    for (const s of seasons) {
+        if (!s || !(String(s.start_date) <= night && night <= String(s.end_date))) continue;
+        const row = (Array.isArray(s.prices) ? s.prices : []).find((p) => !!p && Math.round(Number(p.bedrooms)) === option.bedrooms);
+        const price = Math.round(Number(row && row.price_per_night));
+        if (price > 0) return { rate: price, season: String(s.name || 'Seasonal rate') };
+    }
+    return { rate: option.price_per_night, season: '' };
+}
+
+// The price of a stay, night by night, or null when it cannot be priced.
+// `bedrooms` picks the option; it may be left out when there is only one.
+// lines groups consecutive nights at the same rate, for the guest to read.
+function priceStay(property: any, checkIn: string, checkOut: string, bedrooms: unknown) {
+    const options = bookingOptionsOf(property);
+    const wanted = Math.round(Number(bedrooms));
+    const option = options.length === 1 && !(wanted >= 1) ? options[0] : options.find((o) => o.bedrooms === wanted);
+    const nights = nightsBetween(checkIn, checkOut);
+    if (!option || nights < 1) return null;
+    const first = Date.parse(`${checkIn}T00:00:00Z`);
+    const lines = [];
+    let subtotal = 0;
+    for (let i = 0; i < nights; i += 1) {
+        const night = new Date(first + i * DAY_MS).toISOString().slice(0, 10);
+        const r = nightlyRate(property, option, night);
+        const last = lines[lines.length - 1];
+        if (last && last.rate === r.rate && last.season === r.season) last.nights += 1;
+        else lines.push({ season: r.season, rate: r.rate, nights: 1, from: night });
+        subtotal += r.rate;
+    }
+    const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
+    const cautionFee = Number(property && property.caution_fee) || 0;
+    return { nights, option, lines, subtotal, serviceFee, cautionFee, total: subtotal + serviceFee + cautionFee };
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
