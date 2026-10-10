@@ -50,6 +50,9 @@ cat "$TMP"/c_* >> "$TMP/all.js" 2>/dev/null
 printf "  fetched %s bytes of live JS\n" "$(wc -c < "$TMP/all.js" | tr -d ' ')"
 
 echo; echo "── revision markers (must all be present) ──"
+# Every marker is text a person reads or a field name sent over the wire. A
+# function or variable name is no good: the minifier renames it, and the
+# marker then reads as missing on a build that has the feature.
 while IFS='|' read -r label marker; do
   grep -qF -- "$marker" "$TMP/all.js" && ok "$label" || no "$label  (missing: $marker)"
 done <<'MARKERS'
@@ -57,7 +60,7 @@ hourly pricing|price_per_hour_ngn
 per-vehicle turnaround|turnaround_hours
 city-first browse|Where do you need a ride
 Port Harcourt|Port Harcourt
-category taxonomy|effectiveCategory
+category taxonomy|Air-conditioned saloon cars
 booking reference|booking_reference
 estimated vs final price|estimated_price
 price adjustment reason|price_adjustment_reason
@@ -74,6 +77,11 @@ driver pages|getDriverRides
 driver wallet|getDriverWallet
 readable function refusals|Could not reach the server. Check your connection and try again.
 ride report dialog|Report a problem with this driver
+payout retry (hardening)|Paystack never confirmed this one
+record driver pay (hardening)|No pay recorded
+driver told when no pay is on record (hardening)|Confirm it with the team before you set off
+ride payment refusals shown (hardening)|This ride has already been paid for.
+report photos from the file store only (hardening)|[a-f0-9]{24}\/files\/
 id upload via function|submitBookingId
 points via function|awardPoints
 MARKERS
@@ -87,10 +95,12 @@ for m in "Plan a Trip" "Check availability" "/ full day"; do
   grep -qF -- "$m" "$TMP/all.js" && no "stale string still live: $m" || ok "gone: $m"
 done
 
-echo; echo "── entities reachable (401/403=exists, 404=schema NOT DEPLOYED) ──"
-# VehicleCosting is admin-only in every direction, so an unauthenticated read
-# is refused — but refused is not the same as missing.
-for e in VehicleCosting DriverEarning RideReport; do
+echo; echo "── entities reachable (200/401/403=exists, 404=schema NOT DEPLOYED) ──"
+# These three are admin-only in every direction. An unauthenticated read of
+# one that exists is answered with HTTP 200 and an empty list (the access rule
+# filters every row out), or refused. Either proves the schema is deployed;
+# only 404 means it is not.
+for e in VehicleCosting DriverEarning RideReport WithdrawalLedger; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$API/entities/$e?limit=1")
   [ "$code" = "404" ] && no "$e schema NOT DEPLOYED" || ok "$e (HTTP $code)"
 done
@@ -100,7 +110,8 @@ for f in checkRideAvailability decideRideBooking assignRideDriver getRideDriverC
          startRidePayment verifyRidePayment cancelRideBooking getRideBookings \
          cancelBooking startStayPayment submitBookingId awardPoints \
          getDriverProfile getDriverRides getDriverWallet getDriverEarningsAdmin \
-         settleDriverEarning completeRide createRideReport resolveRideReport; do
+         settleDriverEarning completeRide createRideReport resolveRideReport \
+         createWithdrawalRequest processWithdrawal; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
          -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
   # 402 is the platform refusing to run ANY function for this workspace (the

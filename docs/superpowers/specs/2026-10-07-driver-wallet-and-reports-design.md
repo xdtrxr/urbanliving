@@ -34,6 +34,19 @@ Found while reading the code the feature has to live in. None changes what a dri
 9. **Refusals from the server are shown as written.** The SDK throws on any 4xx, so every screen that looked for the reason in a normal response was showing "Request failed with status code 409" instead. A small helper (`invokeFn`) now returns the server's sentence; the new screens and the ones this feature touches use it.
 10. **A multi-day booking is 1 to 30 whole days on the server too.** The booking form already stopped at 30; the server accepted any number, and that number multiplies into the guest's price, the driver's pay and how long the vehicle is blocked. A hand-made request for a billion days created an unpayable ride that blocked the car until admin rejected it. The computed driver pay also has a ceiling of ₦50,000,000 per ride; past it, admin has to type the figure.
 
+## Amendments from review (2026-10-10)
+
+Three independent reviewers read the finished work and found seventeen ways for it to go wrong. All are fixed; the plan is `docs/superpowers/plans/2026-10-10-review-hardening.md`. What changed in the design:
+
+11. **A payout is sent once, and no answer never means refund.** Pressing Process twice, or two admins pressing it together, sent two bank transfers: the Paystack reference was built from the clock, so each call was a new transfer. The reference is now `wd-<row id>`, fixed per withdrawal and stored on the row (`transfer_reference`) before Paystack is asked to send. The function asks Paystack what it already holds for that reference before sending and again after any refusal. A withdrawal is marked failed, and a referral refunded, only when Paystack refused it for a stated reason and holds no transfer for it. A timeout, a rate limit or a fault on Paystack's side leaves the row as processing with a **Retry** button, which cannot send it twice. A transfer the bank reverses after it had succeeded now stops counting as paid.
+12. **Two assignments at once leave one pay row.** Assignment used to hold the new driver's pay, write the ride, then reverse everyone else's. Two calls doing that together reversed each other's row, and the driver who ended up on the ride had none. Nothing on the platform can lock a ride, so the fix is not an order of writes. After the ride row is written the function loops: read who the ride says is driving, reverse pay held for anyone else, make sure that driver has a standing row, and go round again if anything was written. The call that lost is told so and its guest is not notified.
+13. **The same driver again records pay.** A ride assigned before its driver had a login had no way to get a pay row. Submitting the driver who is already on the ride now does exactly that: the checks on whether to send this driver are skipped, the guest is not told a second time, and a standing row is never repriced. The admin rides list marks such rides "No pay recorded" for a week after they end.
+14. **A reversal always wins.** A release that had already read a row as held could land on top of a reversal made a moment earlier and leave the row saying released. `reversed_at` is never cleared, so it is the one mark that survives: the wallet arithmetic counts no row that carries it, and every write of "released" reads the row again and puts "reversed" back.
+15. **A finished ride still counts when checking for clashes.** The sweep marks a ride completed the moment its window ends, and completed rides were left out of the overlap checks, so the turnaround after a ride protected neither its driver nor its car. A completed ride now keeps them busy until it was completed (earlier than its booked end if admin marked it done early), plus the turnaround. A completed ride with no driver stays in the needs-a-driver queue so who drove it can be recorded.
+16. **Ride rows are created by the server.** `checkRideAvailability` created the ride as the signed-in guest, which is why the create rule has to let any signed-in user create one, and that rule only pins the guest's email: a row could be made by hand already marked confirmed and paid. The function now creates under the service role, and a rule that only the server may create a RideBooking is staged beside the WithdrawalRequest one. Until it is applied the hole is still open. A guest blocked from rides is now also stopped when they open the payment page and when admin tries to send them a driver, not only when they request a ride.
+17. **A report is filed under the ride's own id, holds only the driver it names, and carries only uploaded photos.** The "already reported" check used the id as it arrived in the request, so `<id>#2` fetched the same ride and counted as a new one: reports could be stacked without limit. A guest's complaint held the pay of whoever was on the ride, so after a handover it held the wrong driver's. And a report "photo" could be any https link, which admin's browser then fetched from a server the reporter chose. The ride row's own id is now used throughout, the hold is matched on `reported_driver_id`, and a photo must be a link to this platform's file store.
+18. **An id from a request is a plain id.** `entity.get(id)` is a GET on `…/<id>`, so `abc#x` fetches row `abc` while every equality check sees a different string. That is how a hand-made driver-wallet withdrawal carrying the driver's real id plus `#` skipped its own ledger check. Every function that takes an id now refuses anything but letters, digits, `_` and `-`, and checks that the row it got back is the row it asked for.
+
 ## Non-goals
 
 - No partner (car owner) wallet, no partner login.
@@ -75,7 +88,7 @@ New entity **`RideReport`** (`base44/entities/RideReport.jsonc`):
 | `reported_email` (guest) or `reported_driver_id` (driver) | exactly one is set |
 | `category` | `rude \| abusive \| threatening \| unsafe \| no_show \| damage \| other` |
 | `description` | required, 10–2000 chars |
-| `evidence_urls` | array, max 3, https only, from the existing `UploadFile` integration |
+| `evidence_urls` | array, max 3, each a link to a file uploaded through the platform's file store (the existing `UploadFile` integration); any other link is refused |
 | `status` | `open \| reviewing \| resolved \| dismissed` |
 | `action_taken` | `none \| warning \| blocked` |
 | `admin_notes`, `resolved_at`, `resolved_by` | |
@@ -86,11 +99,11 @@ Additive fields on existing entities:
 
 - `RideBooking`: `completed_at`, `completed_by` (`system | admin`).
 - `User`: `ride_blocked` (bool, default false, field-level write admin-only, same shape as `referral_balance_ngn`).
-- `WithdrawalRequest`: `wallet` enum `referral | driver` (default `referral`), `driver_id`.
+- `WithdrawalRequest`: `wallet` enum `referral | driver` (default `referral`), `driver_id`, `transfer_reference` (the reference sent to Paystack, `wd-<row id>`).
 - `Driver`: `user_email`, `previous_user_emails`.
 - `UserBankAccount`: admin read.
 
-All of these are additive and safe to checkpoint before the client publishes: no live client reads them, and the admin-only rules only restrict things that did not exist.
+All of these are additive and safe to checkpoint before the client publishes: no live client reads them, and the admin-only rules only restrict things that did not exist. Two stricter rules are staged in `docs/entity-rules-pending-publish/` and applied after Publish: only the server may create a `WithdrawalRequest`, and only the server may create a `RideBooking`.
 
 ## 3. How a driver's pay is computed
 
@@ -112,7 +125,8 @@ If the needed rate is zero or the costing row is missing, the computed amount is
 
 ```
 assignRideDriver (paid ride, linked driver) -> DriverEarning held, release_at = end_at + 2h
-   reassignment                             -> new driver's row held, then the old driver's row reversed
+   reassignment                             -> new driver's row held, the ride written, then the ledger made to agree with the ride row
+   same driver submitted again              -> pay recorded if none stands; nothing else changes
    admin cancels a paid ride                -> held rows reversed (cancelRideBooking)
 sweep pass 4 (end_at passed)                -> RideBooking status completed, completed_by system
 sweep pass 5 (release_at passed)            -> not on_hold, no open complaint from the guest, ride still theirs and paid:
@@ -124,23 +138,23 @@ driver: Withdraw (wallet = driver)          -> existing WithdrawalRequest flow
 
 **Balance.** For one driver: `held` = sum of held rows; `available` = `max(0, released − paid out − in flight)` where paid out is their completed driver-wallet withdrawals and in flight is pending or processing ones. Nothing is stored; `getDriverWallet`, `createWithdrawalRequest`, `processWithdrawal` and the admin overview all run the same `walletTotals` helper, and the check script fails if any copy differs.
 
-**Self-healing.** Assignment writes the new driver's row, then the ride, then reverses the old driver's row. If it stops halfway, the release pass sees an earning whose ride belongs to another driver, or was cancelled, and reverses it rather than paying it.
+**Two assignments at once.** Assignment holds the new driver's row, writes the ride, then loops: read who the ride says is driving, reverse pay held for anyone else, make sure that driver has a standing row, repeat if anything was written. However two calls interleave, the driver on the ride ends with one held row and nobody else with any. If a call stops halfway, the release pass sees an earning whose ride belongs to another driver, or was cancelled, and reverses it rather than paying it.
 
-**A guest's open complaint blocks release.** A `RideReport` filed by the guest, in `open` or `reviewing`, keeps the row held past `release_at`. Resolving or dismissing it lets the next sweep release it, and the driver's wallet shows "Under review" instead of a release date meanwhile. A report the driver files about the guest never holds the driver's own pay.
+**A guest's open complaint blocks release, for the driver it is about.** A `RideReport` filed by the guest, in `open` or `reviewing`, keeps the pay row of the driver it names (`reported_driver_id`) held past `release_at`. Resolving or dismissing it lets the next sweep release it, and that driver's wallet shows "Under review" instead of a release date meanwhile. If the ride was handed to another driver, the complaint is about the first one and the second is paid on time. A report the driver files about the guest never holds the driver's own pay.
 
-**Reversal after release.** The row flips to `reversed` and the driver's available balance drops by that amount. If they had already withdrawn it, the shortfall shows in the admin Earnings tab and is netted against their next released pay.
+**Reversal after release.** The row flips to `reversed` and the driver's available balance drops by that amount. If they had already withdrawn it, the shortfall shows in the admin Earnings tab and is netted against their next released pay. **A reversal always wins:** a row that carries `reversed_at` counts nowhere in the arithmetic whatever its status says, and every release reads the row again after writing and restores `reversed` if a reversal got in first.
 
-**Withdrawals.** `createWithdrawalRequest` takes `wallet` (`referral` default, `driver`). A driver-wallet request is checked against `walletTotals` and reserves by existing as a pending row; nothing is debited. `processWithdrawal` re-runs the same check before calling Paystack and refuses a request the ledger does not cover. A failed or reversed transfer simply stops counting. Referral withdrawals keep their existing debit-and-refund behaviour, and the two refund paths skip driver-wallet rows so a failed driver payout can never credit referral cash. Same ₦10,000 threshold and one-in-flight rule for both wallets. The Withdrawals page shows a wallet switch only for users who have a driver profile.
+**Withdrawals.** `createWithdrawalRequest` takes `wallet` (`referral` default, `driver`). A driver-wallet request is checked against `walletTotals` and reserves by existing as a pending row; nothing is debited. `processWithdrawal` re-runs the same check before calling Paystack and refuses a request the ledger does not cover. A failed or reversed transfer simply stops counting. Referral withdrawals keep their existing debit-and-refund behaviour, and the two refund paths skip driver-wallet rows so a failed driver payout can never credit referral cash. Same ₦10,000 threshold and one-in-flight rule for both wallets. The Withdrawals page shows a wallet switch only for users who have a driver profile. The transfer reference is `wd-<row id>`. `processWithdrawal` asks Paystack what it holds for that reference before sending and after any refusal, so a second press finds the first transfer instead of making another; a row left as processing with no transfer code can be retried.
 
 ## 5. Reports
 
-**Who, when.** A driver can report the guest on any paid ride assigned to them from `start_at` until 7 days after `end_at`. A guest can report the driver on any paid ride with a driver assigned, over the same window. One report per reporter per ride (`createRideReport` returns 409 `ALREADY_REPORTED`).
+**Who, when.** A driver can report the guest on any paid ride assigned to them from `start_at` until 7 days after `end_at`. A guest can report the driver on any paid ride with a driver assigned, over the same window. One report per reporter per ride (`createRideReport` returns 409 `ALREADY_REPORTED`). The check uses the ride row's own id, never the string that arrived in the request.
 
-**Form** (`src/components/rides/RideReportDialog.jsx`, shared): category chips, description, up to 3 photos via `UploadFile` (10 MB each, images only), submit. Copy for drivers: "Report this customer". Copy for guests: "Report a problem with this driver".
+**Form** (`src/components/rides/RideReportDialog.jsx`, shared): category chips, description, up to 3 photos via `UploadFile` (10 MB each, images only), submit. Copy for drivers: "Report this customer". Copy for guests: "Report a problem with this driver". A photo that is not a link to the platform's file store is refused, at upload and again by the server.
 
 **Admin inbox.** New inner tab **Reports** in `RidesAdmin` (`src/components/admin/RideReportsAdmin.jsx`): open first, each card shows ride reference, who reported whom, category, text, evidence thumbnails, and three actions: **Dismiss**, **Warn** (records `action_taken: warning`, no other effect), **Block from rides** (a report against a guest sets `User.ride_blocked`; a report against a driver sets `Driver.active = false`). Changing the action on a guest report away from blocked clears the block. Status changes and notes go through `resolveRideReport`.
 
-**Effect of a block.** `checkRideAvailability` refuses a blocked guest with 403 `RIDE_BLOCKED` and the message "Ride bookings are not available on this account. Please contact support." The Book a Ride request screen already shows the server's sentence.
+**Effect of a block.** `checkRideAvailability` refuses a blocked guest with 403 `RIDE_BLOCKED` and the message "Ride bookings are not available on this account. Please contact support." `startRidePayment` refuses the same way, so a guest blocked after requesting a ride cannot pay for it, and `assignRideDriver` refuses to send a driver to one (`GUEST_BLOCKED`) until the ride is cancelled or the block lifted. Both screens show the server's sentence.
 
 **Notifications.** New report → plain-text Telegram card to the admin group (plain text because the description is free text and would break Markdown parsing; actions live in the admin tab). Resolution → push to the reporter ("Your report on ride UD-XXXXXX was reviewed").
 
@@ -154,7 +168,7 @@ New:
 | `getDriverRides` | driver | rides where `driver_id` is mine, bucketed by the same `computeBucket` as `getRideBookings`, with guest name, guest phone while the ride is upcoming or in progress, pickup, instructions, and the earning row for each |
 | `getDriverWallet` | driver | `available`, `held`, `paid_out`, any withdrawal in flight, ledger rows newest first (no admin notes) |
 | `getDriverEarningsAdmin` | admin | the pay ledger across all drivers, plus one summary line per driver (held, available, paid out, shortfall) computed with the same arithmetic as the driver's own wallet |
-| `settleDriverEarning` | admin | `action: release \| hold \| unhold \| adjust \| reverse` with `reason`; all transitions guarded by current status |
+| `settleDriverEarning` | admin | `action: release \| hold \| unhold \| adjust \| reverse` with `reason`; all transitions guarded by current status; a reversal made at the same moment as another change wins |
 | `completeRide` | admin | marks a started, paid ride completed now (`completed_by: admin`); does not release money |
 | `createRideReport` | party to the ride | validates window and role, creates the row, Telegram notify |
 | `resolveRideReport` | admin | status, `action_taken`, notes; applies or clears the block; push to reporter |
@@ -163,14 +177,15 @@ Changed:
 
 | function | change |
 |---|---|
-| `assignRideDriver` | compute or accept `driver_payout_ngn`; create the held `DriverEarning`; on reassignment reverse the previous driver's row; push both drivers |
+| `assignRideDriver` | compute or accept `driver_payout_ngn`; hold the `DriverEarning`, write the ride, then make the ledger agree with the ride row (safe under two calls at once); the same driver again records pay; refuses a blocked guest; push both drivers |
 | `cancelRideBooking` | cancelling a ride reverses its held earnings and tells the driver |
 | `autoCancelExpiredBookings` | pass 4 completes rides past `end_at`; pass 5 releases rows past `release_at` |
 | `verifyRidePayment`, `paystackWebhook` | "already paid" keys on payment status alone |
 | `getRideDriverContact` | also serves completed rides |
-| `checkRideAvailability` | refuse `ride_blocked` users |
-| `getRideBookings` | tells the guest whether they can still report a ride |
-| `createWithdrawalRequest`, `processWithdrawal`, `paystackTransferWebhook` | wallet-aware as described in section 4 |
+| `startRidePayment` | refuse `ride_blocked` users |
+| `checkRideAvailability` | refuse `ride_blocked` users; create the ride row under the service role; completed rides count in the vehicle conflict check |
+| `getRideBookings` | tells the guest whether they can still report a ride; tells admin which assigned drivers have a login and no pay recorded |
+| `createWithdrawalRequest`, `processWithdrawal`, `paystackTransferWebhook` | wallet-aware as described in section 4; fixed transfer reference, ask-before-send, retry of a stuck row; the webhook finds the row from the reference and acts on a reversal after success |
 | `getDashboardStats` | `liabilities.driverHeldNGN` and `driverAvailableNGN` for the admin overview |
 
 ## 7. Client
@@ -179,10 +194,11 @@ Changed:
 - `src/pages/DriverWallet.jsx`: three tiles (Available, Held, Paid out), ledger list, **Withdraw** (links to Withdrawals with `?wallet=driver`), **Bank accounts** link, empty state explaining when money appears.
 - `src/pages/Withdrawals.jsx`: wallet switch for drivers; passes `wallet` to `createWithdrawalRequest`; history rows show a wallet badge.
 - `src/components/booking/RideBookingsSection.jsx`: **Report a problem with this driver** on the driver card once the ride has started.
-- `src/components/admin/DriversAdmin.jsx`: login email field with the hint "The driver signs in with this email to see rides and pay".
-- `src/components/admin/RidesAdmin.jsx`: Assign dialog gets the Driver pay input; Requests panel gets **Mark completed** on rides in progress or past; two new inner tabs **Earnings** (`DriverEarningsAdmin.jsx`) and **Reports** (`RideReportsAdmin.jsx`).
-- `src/components/admin/WithdrawalsAdmin.jsx`: wallet badge per row.
+- `src/components/admin/DriversAdmin.jsx`: login email field with the hint "The driver signs in with this email to see rides and pay". A driver with earnings or withdrawals on record cannot be deleted, only switched to inactive.
+- `src/components/admin/RidesAdmin.jsx`: Assign dialog gets the Driver pay input; Requests panel gets **Mark completed** on rides in progress or past; two new inner tabs **Earnings** (`DriverEarningsAdmin.jsx`) and **Reports** (`RideReportsAdmin.jsx`). A ride whose driver has a login and no pay on record shows "No pay recorded" and **Record pay**; every Assign button waits while one assignment is being saved.
+- `src/components/admin/WithdrawalsAdmin.jsx`: wallet badge per row; **Retry** on a row left as processing with no transfer code.
 - `src/components/admin/PlatformStatsAdmin.jsx`: driver pay owed, under Referrals and payouts.
+- `src/pages/PaymentPage.jsx`: a refusal from `startRidePayment` is shown as the server wrote it.
 - `src/Layout.jsx`: driver nav items; `src/pages.config.js`: register `DriverRides`, `DriverWallet`.
 
 All new UI follows the dark-mode rules from the September design review (every `bg-`/`text-` on a surface carries a `dark:` twin; primaries invert).
@@ -194,21 +210,24 @@ All new UI follows the dark-mode rules from the September design review (every `
 - `getDriverRides` and `getDriverWallet` resolve the driver from `user.email` server-side; a `driver_id` from the client is never trusted.
 - A withdrawal row only counts against a driver's balance when it carries that driver's id AND was created by a login that is, or was, linked to that driver. A row forged by another account is ignored.
 - Guest phone is shown to the driver only for rides assigned to that driver, and only until the ride is over. Driver licence fields stay admin-only, as today.
-- Report evidence URLs must be https, are stored as strings, and the admin tab renders them as images, never as HTML.
+- Report evidence must be links to the platform's own file store. They are stored as strings and the admin tab renders them as images, never as HTML. Any other link would make admin's browser fetch from a server the reporter chose.
+- An id that arrives in a request is used only if it is a plain id, and the row that comes back must carry that id.
+- Until the two staged create rules are applied, a signed-in user can still create a `RideBooking` or `WithdrawalRequest` row by hand. Driver-wallet withdrawals are re-checked against the ledger regardless; a hand-made ride marked paid is not detectable by the server, which is why those rules go on straight after Publish.
 
 ## 9. Rollout
 
 1. Entity changes are additive; checkpoint them first (safe under the live client).
 2. Functions and client ship together on the next Publish. Until then the live app behaves as today.
-3. After Publish, apply the staged rule in `docs/entity-rules-pending-publish/WithdrawalRequest.jsonc`.
+3. After Publish, apply the staged rules in `docs/entity-rules-pending-publish/` (`WithdrawalRequest` and `RideBooking` create become admin-only; the README there is the runbook).
 4. Dashboard schedule for `autoCancelExpiredBookings` keeps its cadence; passes 4 and 5 ride along.
-5. Admin sets the login email on each driver and, for cars whose costing row is empty, enters the driver cost once.
+5. Admin sets the login email on each driver and, for cars whose costing row is empty, enters the driver cost once. Rides already assigned to a driver before they had a login show "No pay recorded": open each and press **Record pay**.
 
 ## 10. Verification
 
-- `npm run lint`, `npm run check` (includes `check-driver-wallet`, `check-ride-reports`, `check-entities`), `npm run build`.
+- `npm run lint`, `npm run check` (includes `check-driver-wallet`, `check-ride-reports`, `check-entities`), `npm run build`. The wallet check runs the shipped payout, assignment and release code against itself in every order two calls' requests could arrive.
 - Sandbox walk-through with a test driver linked to a test email: request → approve → pay (Paystack test) → assign (pay figure correct, held row created) → run the sweep by HTTP as admin after `end_at + 2h` passes (use a short booking) → ride completed, row released, driver push received → withdraw from the driver wallet → bank transfer initiated.
 - Reassignment reverses the first driver's row and holds a new one. Admin cancel of a paid ride reverses it.
 - Driver files a report on a current ride → Telegram card arrives → admin blocks the guest → guest's next ride request fails with the contact-support message. Resolve the report → the held row releases on the next sweep.
 - Guest files a report from the driver card; admin dismisses it; no block applied.
+- The sandbox checklist at the end of each task in the review-hardening plan. The first one (press Process in two tabs) is the only check that Paystack really refuses a second transfer with the same reference.
 - Dark-mode sweep of the two driver pages and the three new admin panels with the scanner from the design review.
