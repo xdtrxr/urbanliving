@@ -29,6 +29,8 @@
 
 As in the wallet plan: **Create `path`:**, **Replace `path` with:** and **Edit `path`** — find: … replace with: … each followed by exact content; a find-block occurs exactly once in its file. Functions are parsed with `node_modules/.bin/esbuild <file> --format=esm --target=esnext --outfile=/dev/null`; a local build needs `set -a; . ./.env; set +a; npm run build`.
 
+**Verified by replay (2026-10-10):** every Create, Replace and Edit below was applied mechanically, in order, to a clean checkout of commit `e3e890a` (the wallet plan first, then the reports plan). All 195 operations found their text exactly once, the result passed `npm run check`, and it matched the implementation on `feat/driver-wallet` file for file. If a find-block does not match when you run it, the file has changed since; stop and read the diff.
+
 ## Review Focus
 
 Five things the spec implies, that a person will hit, and that are easy to get wrong. Each has a pinned check in the task that owns the code.

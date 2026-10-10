@@ -246,7 +246,8 @@ check('the string "false" does not block', isRideBlocked({ ride_blocked: 'false'
 check('a missing account row does not block', isRideBlocked(undefined), false);
 
 // ── Reports and money ──────────────────────────────────────────────────────
-// Review focus 5: pay that falls due while a report on its ride is open.
+// Review focus 5: pay that falls due while a report on its ride is open, and
+// who filed that report.
 console.log('\n— reports and money —');
 identical('hasOpenGuestReport', 'sr, rideBookingId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
 for (const dir of ['getDriverRides', 'getRideBookings']) {

@@ -36,6 +36,8 @@ File changes are written as one of three operations, each followed by the exact 
 
 Commands that are not available here: there is no Deno locally, so a function is checked with `node_modules/.bin/esbuild <file> --format=esm --target=esnext --outfile=/dev/null` (exit 0 means it parses) and its pure helpers are executed by the check script. A local build needs the env file: `set -a; . ./.env; set +a; npm run build`.
 
+**Verified by replay (2026-10-10):** every Create, Replace and Edit below was applied mechanically, in order, to a clean checkout of commit `e3e890a` (the wallet plan first, then the reports plan). All 195 operations found their text exactly once, the result passed `npm run check`, and it matched the implementation on `feat/driver-wallet` file for file. If a find-block does not match when you run it, the file has changed since; stop and read the diff.
+
 ## Review Focus
 
 Five things the spec implies, that a person will hit, and that are easy to get wrong. Each has a pinned check in the task that owns the code.
