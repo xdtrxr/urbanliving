@@ -823,6 +823,23 @@ check('an already completed ride says so', completionProblem({ ...live, status: 
 check('a cancelled ride cannot be completed', completionProblem({ ...live, status: 'cancelled' }, FAR), 'CANCELLED');
 check('an unpaid ride cannot be completed', completionProblem({ ...live, status: 'pending', payment_status: 'unpaid' }, FAR), 'NOT_PAID');
 
+// ── The pay box in the Assign driver dialog ────────────────────────────────
+// Decides what the dialog sends. An empty box sends nothing, so the server
+// computes the figure and records its real basis rather than "manual".
+console.log('\n— assign dialog pay —');
+const NOT_SENT = { ok: true, value: undefined };
+same('a driver with no login: nothing is sent, whatever is typed', rides.typedDriverPay(false, '15000', 15000), NOT_SENT);
+same('empty box with a costing figure: nothing is sent, the server computes it', rides.typedDriverPay(true, '', 15000), NOT_SENT);
+same('spaces count as empty', rides.typedDriverPay(true, '   ', 15000), NOT_SENT);
+check('empty box and no costing figure: admin is stopped', rides.typedDriverPay(true, '', null).ok, false);
+same('a typed figure is sent', rides.typedDriverPay(true, ' 20000 ', 15000), { ok: true, value: 20000 });
+same('zero is a real answer', rides.typedDriverPay(true, '0', null), { ok: true, value: 0 });
+same('kobo are rounded', rides.typedDriverPay(true, '20000.4', null), { ok: true, value: 20000 });
+for (const bad of ['25,000', '-5', '1e3', 'abc', '99999999999', '50000001']) {
+  check(`"${bad}" is stopped before it is sent`, rides.typedDriverPay(true, bad, 15000).ok, false);
+}
+check('the ceiling itself can be typed', rides.typedDriverPay(true, '50000000', null).value, 50000000);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

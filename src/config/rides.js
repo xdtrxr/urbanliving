@@ -243,3 +243,30 @@ export function driverLoginPatch(driver, typedEmail) {
     : previous;
   return { user_email: next, previous_user_emails: history };
 }
+
+// What the Assign driver dialog sends as the pay figure.
+//   { ok: true, value: undefined }  send nothing: either this driver has no
+//                                    login (pay is not tracked), or the box is
+//                                    empty and the vehicle's costing decides
+//   { ok: true, value: 20000 }      admin typed a figure
+//   { ok: false, message }          nothing to go on, or not a usable number
+// The server checks all of this again; this exists so admin is told before
+// the round trip, in the dialog, next to the box.
+export function typedDriverPay(hasLogin, typed, computedAmount) {
+  if (!hasLogin) return { ok: true, value: undefined };
+  const text = String(typed ?? '').trim();
+  if (text === '') {
+    if (computedAmount == null) {
+      return { ok: false, message: 'Enter the driver pay for this ride. No driver cost is set for this vehicle.' };
+    }
+    return { ok: true, value: undefined };
+  }
+  if (!/^\d{1,9}(\.\d+)?$/.test(text)) {
+    return { ok: false, message: 'Driver pay must be a naira amount in digits only, for example 15000.' };
+  }
+  const value = Math.round(Number(text));
+  if (value > MAX_PAYOUT_NGN) {
+    return { ok: false, message: `Driver pay cannot be more than ₦${MAX_PAYOUT_NGN.toLocaleString()}.` };
+  }
+  return { ok: true, value };
+}

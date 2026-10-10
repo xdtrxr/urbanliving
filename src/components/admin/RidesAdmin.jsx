@@ -8,11 +8,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Loader2, RefreshCw, Car, MapPin, Mail, Phone, Users,
-  Check, X, CalendarClock, UserPlus, Inbox, IdCard,
+  Check, X, CalendarClock, UserPlus, Inbox, IdCard, Banknote,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { invokeFn } from '@/lib/invokeFn';
 import { useToast } from '@/components/ui/use-toast';
-import { categoryLabel, ADJUSTMENT_REASONS } from '@/config/rides';
+import {
+  categoryLabel, ADJUSTMENT_REASONS, driverPayoutFor, typedDriverPay, RELEASE_BUFFER_HOURS,
+} from '@/config/rides';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -74,8 +77,39 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(null);
   const [instructions, setInstructions] = useState('');
+  // Driver pay. `suggested` is what the vehicle's costing row works out to for
+  // this booking; `pay` is what admin typed. An empty box means "use the
+  // suggestion", and the server computes that same figure for itself.
+  const [pay, setPay] = useState('');
+  const [suggested, setSuggested] = useState(null);
 
   useEffect(() => { setInstructions(ride?.pickup_instructions || ''); }, [ride]);
+
+  useEffect(() => {
+    setPay('');
+    setSuggested(null);
+    if (!ride) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Both entities are admin-only at the API, like the Driver roster below.
+        const [costings, held] = await Promise.all([
+          base44.entities.VehicleCosting.filter({ vehicle_id: ride.vehicle_id }),
+          base44.entities.DriverEarning.filter({ ride_booking_id: ride.id, status: 'held' }),
+        ]);
+        if (cancelled) return;
+        setSuggested(driverPayoutFor(costings?.[0] || null, ride.duration_tier, {
+          hours: ride.duration_hours, days: ride.duration_days,
+        }));
+        // Changing the driver: start from the figure the outgoing driver was promised.
+        const current = Array.isArray(held) && held.length > 0 ? held[0] : null;
+        if (current) setPay(String(Math.round(Number(current.amount_ngn) || 0)));
+      } catch (err) {
+        console.error('Could not load the driver pay context:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ride]);
 
   useEffect(() => {
     if (!ride) return;
@@ -98,33 +132,43 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
   }, [ride]);
 
   const assign = async (driver) => {
-    setSaving(driver.id);
-    try {
-      const res = await base44.functions.invoke('assignRideDriver', {
-        ride_booking_id: ride.id,
-        driver_id: driver.id,
-        pickup_instructions: instructions.trim() || undefined,
-      });
-      if (res?.data?.success) {
-        toast({
-          title: ride?.driver_id ? 'Driver changed' : 'Driver assigned',
-          description: `${driver.full_name} is on this ride. The guest has been emailed and notified.`,
-        });
-        onAssigned();
-      } else {
-        // Server refusals are specific and actionable — show them verbatim
-        // rather than a generic failure.
-        toast({
-          title: 'Could not assign',
-          description: res?.data?.error || 'Please try another driver.',
-          variant: 'destructive',
-        });
-      }
-    } catch (err) {
-      toast({ title: 'Could not assign', description: err?.message || 'Try again.', variant: 'destructive' });
-    } finally {
-      setSaving(null);
+    const typed = typedDriverPay(!!driver.user_email, pay, suggested ? suggested.amount : null);
+    if (!typed.ok) {
+      toast({ title: 'Driver pay needed', description: typed.message, variant: 'destructive' });
+      return;
     }
+    setSaving(driver.id);
+    // invokeFn never throws. A refusal comes back as r.error, which is the
+    // sentence the server wrote: specific and actionable, so it is shown as is.
+    const r = await invokeFn('assignRideDriver', {
+      ride_booking_id: ride.id,
+      driver_id: driver.id,
+      pickup_instructions: instructions.trim() || undefined,
+      driver_payout_ngn: typed.value,
+    });
+    setSaving(null);
+    if (!r.ok) {
+      toast({ title: 'Could not assign', description: r.error, variant: 'destructive' });
+      return;
+    }
+    const d = r.data || {};
+    const payNote = !d.pay_tracked
+      ? `${driver.full_name} has no login, so their pay is not tracked in the app.`
+      : d.driver_payout_ngn > 0
+        ? `${ngn(d.driver_payout_ngn)} is held for them and released ${RELEASE_BUFFER_HOURS} hours after the ride ends.`
+        : 'No pay was recorded for this ride.';
+    toast({
+      title: ride?.driver_id ? 'Driver changed' : 'Driver assigned',
+      description: `${driver.full_name} is on this ride. The guest has been emailed and notified. ${payNote}`,
+    });
+    if (d.previous_earning_released) {
+      toast({
+        title: 'Check the previous driver',
+        description: 'Their pay for this ride had already been released and was not taken back. Review it under Earnings.',
+        variant: 'destructive',
+      });
+    }
+    onAssigned();
   };
 
   const city = ride?.pickup_location?.city;
@@ -161,6 +205,29 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
           </p>
         </div>
 
+        <div>
+          <Label htmlFor="ad-pay" className="flex items-center gap-1.5">
+            <Banknote className="w-3.5 h-3.5" /> Driver pay (₦)
+          </Label>
+          <Input
+            id="ad-pay" type="text" inputMode="numeric" autoComplete="off" value={pay}
+            onChange={(e) => setPay(e.target.value)}
+            placeholder={suggested ? String(suggested.amount) : 'for example 15000'}
+            className="mt-1 rounded-xl"
+          />
+          {suggested ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Leave empty to use {ngn(suggested.amount)} from this vehicle&apos;s costing
+              ({suggested.units} × {ngn(suggested.rate)} per {suggested.basis === 'hourly' ? 'hour' : 'day'}).
+              It is held for the driver and released {RELEASE_BUFFER_HOURS} hours after the ride ends.
+            </p>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+              No driver cost set for this vehicle. Enter the pay here or set it under Vehicles → Internal costing.
+            </p>
+          )}
+        </div>
+
         {loading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
@@ -194,7 +261,8 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                     {[d.city, d.years_experience ? `${d.years_experience} yrs` : null,
-                      d.trips_completed ? `${d.trips_completed} trips` : null].filter(Boolean).join(' · ')}
+                      d.trips_completed ? `${d.trips_completed} trips` : null,
+                      d.user_email ? null : 'no login, pay not tracked'].filter(Boolean).join(' · ')}
                   </p>
                 </div>
                 <Button
@@ -431,6 +499,7 @@ function RideRequestsPanel() {
   const [actioningId, setActioningId] = useState(null);
   const [confirm, setConfirm] = useState(null); // { ride, approve }
   const [assigning, setAssigning] = useState(null); // ride awaiting a driver
+  const [completingId, setCompletingId] = useState(null);
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -510,6 +579,24 @@ function RideRequestsPanel() {
       setActioningId(null);
       await load();
     }
+  };
+
+  // The sweep completes a ride when its booked window ends. This is for the
+  // two cases it cannot handle: the guest finished early, or the ride's time
+  // cannot be read. Completing never releases the driver's pay.
+  const complete = async (ride) => {
+    setCompletingId(ride.id);
+    const r = await invokeFn('completeRide', { ride_booking_id: ride.id });
+    setCompletingId(null);
+    if (r.ok) {
+      toast({
+        title: 'Ride marked completed',
+        description: `The driver's pay is released ${RELEASE_BUFFER_HOURS} hours after the booked end, or sooner from Earnings.`,
+      });
+    } else {
+      toast({ title: 'Could not complete this ride', description: r.error, variant: 'destructive' });
+    }
+    await load();
   };
 
   // 'needs-driver' is a cross-cutting view, not a bucket the server returns:
@@ -675,6 +762,22 @@ function RideRequestsPanel() {
                         >
                           <UserPlus className="w-4 h-4 mr-2" />
                           {r.driver_assigned ? 'Change driver' : 'Assign driver'}
+                        </Button>
+                      </div>
+                    )}
+
+                    {r.payment_status === 'paid' && r.status === 'confirmed'
+                      && (r.bucket === 'current' || r.bucket === 'past') && (
+                      <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
+                        <Button
+                          size="sm" variant="outline" disabled={completingId === r.id}
+                          onClick={() => complete(r)}
+                          className="rounded-xl w-full sm:w-auto"
+                        >
+                          {completingId === r.id
+                            ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            : <Check className="w-4 h-4 mr-2" />}
+                          Mark completed
                         </Button>
                       </div>
                     )}

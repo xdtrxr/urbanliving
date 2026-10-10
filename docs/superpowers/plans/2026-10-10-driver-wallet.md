@@ -6065,3 +6065,421 @@ git add scripts/check-driver-wallet.mjs base44/functions/settleDriverEarning/ent
 git commit -m "feat(rides): admin can release, hold, adjust or reverse a driver's pay and complete a ride" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A12: Admin screens — the pay figure when assigning, and Mark completed
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (typed pay in the dialog, above `// ---- result ----`)
+- Modify: `src/config/rides.js` (one helper, appended)
+- Modify: `src/components/admin/RidesAdmin.jsx` (`AssignDriverDialog` and `RideRequestsPanel`)
+
+**Interfaces:**
+- Consumes: `driverPayoutFor(costing, tier, { hours, days })`, `MAX_PAYOUT_NGN`, `RELEASE_BUFFER_HOURS` (Task A02); `assignRideDriver` with `driver_payout_ngn` and its `pay_tracked`, `driver_payout_ngn`, `previous_earning_released` answer (Task A03); `completeRide` (Task A11); `invokeFn` (Task A10); `Driver.user_email` (Task A01). The dialog reads `VehicleCosting` and `DriverEarning` directly, which works because both are admin-only at the API and this screen only renders for an admin.
+- Produces: `typedDriverPay(hasLogin, typed, computedAmount) → { ok: true, value: number | undefined } | { ok: false, message }` in `src/config/rides.js` (`value: undefined` means "send nothing, the server decides").
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── The pay box in the Assign driver dialog ────────────────────────────────
+// Decides what the dialog sends. An empty box sends nothing, so the server
+// computes the figure and records its real basis rather than "manual".
+console.log('\n— assign dialog pay —');
+const NOT_SENT = { ok: true, value: undefined };
+same('a driver with no login: nothing is sent, whatever is typed', rides.typedDriverPay(false, '15000', 15000), NOT_SENT);
+same('empty box with a costing figure: nothing is sent, the server computes it', rides.typedDriverPay(true, '', 15000), NOT_SENT);
+same('spaces count as empty', rides.typedDriverPay(true, '   ', 15000), NOT_SENT);
+check('empty box and no costing figure: admin is stopped', rides.typedDriverPay(true, '', null).ok, false);
+same('a typed figure is sent', rides.typedDriverPay(true, ' 20000 ', 15000), { ok: true, value: 20000 });
+same('zero is a real answer', rides.typedDriverPay(true, '0', null), { ok: true, value: 0 });
+same('kobo are rounded', rides.typedDriverPay(true, '20000.4', null), { ok: true, value: 20000 });
+for (const bad of ['25,000', '-5', '1e3', 'abc', '99999999999', '50000001']) {
+  check(`"${bad}" is stopped before it is sent`, rides.typedDriverPay(true, bad, 15000).ok, false);
+}
+check('the ceiling itself can be typed', rides.typedDriverPay(true, '50000000', null).value, 50000000);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `TypeError: rides.typedDriverPay is not a function`.
+
+- [ ] **Step 3: Add the helper**
+
+**Edit `src/config/rides.js`** — find:
+
+```js
+  return { user_email: next, previous_user_emails: history };
+}
+```
+
+replace with:
+
+```js
+  return { user_email: next, previous_user_emails: history };
+}
+
+// What the Assign driver dialog sends as the pay figure.
+//   { ok: true, value: undefined }  send nothing: either this driver has no
+//                                    login (pay is not tracked), or the box is
+//                                    empty and the vehicle's costing decides
+//   { ok: true, value: 20000 }      admin typed a figure
+//   { ok: false, message }          nothing to go on, or not a usable number
+// The server checks all of this again; this exists so admin is told before
+// the round trip, in the dialog, next to the box.
+export function typedDriverPay(hasLogin, typed, computedAmount) {
+  if (!hasLogin) return { ok: true, value: undefined };
+  const text = String(typed ?? '').trim();
+  if (text === '') {
+    if (computedAmount == null) {
+      return { ok: false, message: 'Enter the driver pay for this ride. No driver cost is set for this vehicle.' };
+    }
+    return { ok: true, value: undefined };
+  }
+  if (!/^\d{1,9}(\.\d+)?$/.test(text)) {
+    return { ok: false, message: 'Driver pay must be a naira amount in digits only, for example 15000.' };
+  }
+  const value = Math.round(Number(text));
+  if (value > MAX_PAYOUT_NGN) {
+    return { ok: false, message: `Driver pay cannot be more than ₦${MAX_PAYOUT_NGN.toLocaleString()}.` };
+  }
+  return { ok: true, value };
+}
+```
+
+- [ ] **Step 4: Run the check and watch it pass**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, including every line under `— assign dialog pay —`.
+
+- [ ] **Step 5: Imports for the admin screen**
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+  Check, X, CalendarClock, UserPlus, Inbox, IdCard,
+} from 'lucide-react';
+import { base44 } from '@/api/base44Client';
+import { useToast } from '@/components/ui/use-toast';
+import { categoryLabel, ADJUSTMENT_REASONS } from '@/config/rides';
+```
+
+replace with:
+
+```jsx
+  Check, X, CalendarClock, UserPlus, Inbox, IdCard, Banknote,
+} from 'lucide-react';
+import { base44 } from '@/api/base44Client';
+import { invokeFn } from '@/lib/invokeFn';
+import { useToast } from '@/components/ui/use-toast';
+import {
+  categoryLabel, ADJUSTMENT_REASONS, driverPayoutFor, typedDriverPay, RELEASE_BUFFER_HOURS,
+} from '@/config/rides';
+```
+
+- [ ] **Step 6: The dialog works out a suggested pay figure**
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+  const [instructions, setInstructions] = useState('');
+
+  useEffect(() => { setInstructions(ride?.pickup_instructions || ''); }, [ride]);
+```
+
+replace with:
+
+```jsx
+  const [instructions, setInstructions] = useState('');
+  // Driver pay. `suggested` is what the vehicle's costing row works out to for
+  // this booking; `pay` is what admin typed. An empty box means "use the
+  // suggestion", and the server computes that same figure for itself.
+  const [pay, setPay] = useState('');
+  const [suggested, setSuggested] = useState(null);
+
+  useEffect(() => { setInstructions(ride?.pickup_instructions || ''); }, [ride]);
+
+  useEffect(() => {
+    setPay('');
+    setSuggested(null);
+    if (!ride) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Both entities are admin-only at the API, like the Driver roster below.
+        const [costings, held] = await Promise.all([
+          base44.entities.VehicleCosting.filter({ vehicle_id: ride.vehicle_id }),
+          base44.entities.DriverEarning.filter({ ride_booking_id: ride.id, status: 'held' }),
+        ]);
+        if (cancelled) return;
+        setSuggested(driverPayoutFor(costings?.[0] || null, ride.duration_tier, {
+          hours: ride.duration_hours, days: ride.duration_days,
+        }));
+        // Changing the driver: start from the figure the outgoing driver was promised.
+        const current = Array.isArray(held) && held.length > 0 ? held[0] : null;
+        if (current) setPay(String(Math.round(Number(current.amount_ngn) || 0)));
+      } catch (err) {
+        console.error('Could not load the driver pay context:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ride]);
+```
+
+- [ ] **Step 7: Send the figure, and show the server's reason when it refuses**
+
+The old version called `base44.functions.invoke` and looked for `res.data.error` in an `else` branch. A refusal is a 4xx, which axios throws, so that branch never ran and admin saw "Request failed with status code 409" for a double-booked driver. `invokeFn` returns the sentence.
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+  const assign = async (driver) => {
+    setSaving(driver.id);
+    try {
+      const res = await base44.functions.invoke('assignRideDriver', {
+        ride_booking_id: ride.id,
+        driver_id: driver.id,
+        pickup_instructions: instructions.trim() || undefined,
+      });
+      if (res?.data?.success) {
+        toast({
+          title: ride?.driver_id ? 'Driver changed' : 'Driver assigned',
+          description: `${driver.full_name} is on this ride. The guest has been emailed and notified.`,
+        });
+        onAssigned();
+      } else {
+        // Server refusals are specific and actionable — show them verbatim
+        // rather than a generic failure.
+        toast({
+          title: 'Could not assign',
+          description: res?.data?.error || 'Please try another driver.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      toast({ title: 'Could not assign', description: err?.message || 'Try again.', variant: 'destructive' });
+    } finally {
+      setSaving(null);
+    }
+  };
+```
+
+replace with:
+
+```jsx
+  const assign = async (driver) => {
+    const typed = typedDriverPay(!!driver.user_email, pay, suggested ? suggested.amount : null);
+    if (!typed.ok) {
+      toast({ title: 'Driver pay needed', description: typed.message, variant: 'destructive' });
+      return;
+    }
+    setSaving(driver.id);
+    // invokeFn never throws. A refusal comes back as r.error, which is the
+    // sentence the server wrote: specific and actionable, so it is shown as is.
+    const r = await invokeFn('assignRideDriver', {
+      ride_booking_id: ride.id,
+      driver_id: driver.id,
+      pickup_instructions: instructions.trim() || undefined,
+      driver_payout_ngn: typed.value,
+    });
+    setSaving(null);
+    if (!r.ok) {
+      toast({ title: 'Could not assign', description: r.error, variant: 'destructive' });
+      return;
+    }
+    const d = r.data || {};
+    const payNote = !d.pay_tracked
+      ? `${driver.full_name} has no login, so their pay is not tracked in the app.`
+      : d.driver_payout_ngn > 0
+        ? `${ngn(d.driver_payout_ngn)} is held for them and released ${RELEASE_BUFFER_HOURS} hours after the ride ends.`
+        : 'No pay was recorded for this ride.';
+    toast({
+      title: ride?.driver_id ? 'Driver changed' : 'Driver assigned',
+      description: `${driver.full_name} is on this ride. The guest has been emailed and notified. ${payNote}`,
+    });
+    if (d.previous_earning_released) {
+      toast({
+        title: 'Check the previous driver',
+        description: 'Their pay for this ride had already been released and was not taken back. Review it under Earnings.',
+        variant: 'destructive',
+      });
+    }
+    onAssigned();
+  };
+```
+
+- [ ] **Step 8: The pay box, and a note on drivers whose pay is not tracked**
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+            Sent to the guest with the driver&apos;s details. Leaving this blank on a
+            reassignment keeps whatever is already there.
+          </p>
+        </div>
+```
+
+replace with:
+
+```jsx
+            Sent to the guest with the driver&apos;s details. Leaving this blank on a
+            reassignment keeps whatever is already there.
+          </p>
+        </div>
+
+        <div>
+          <Label htmlFor="ad-pay" className="flex items-center gap-1.5">
+            <Banknote className="w-3.5 h-3.5" /> Driver pay (₦)
+          </Label>
+          <Input
+            id="ad-pay" type="text" inputMode="numeric" autoComplete="off" value={pay}
+            onChange={(e) => setPay(e.target.value)}
+            placeholder={suggested ? String(suggested.amount) : 'for example 15000'}
+            className="mt-1 rounded-xl"
+          />
+          {suggested ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Leave empty to use {ngn(suggested.amount)} from this vehicle&apos;s costing
+              ({suggested.units} × {ngn(suggested.rate)} per {suggested.basis === 'hourly' ? 'hour' : 'day'}).
+              It is held for the driver and released {RELEASE_BUFFER_HOURS} hours after the ride ends.
+            </p>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+              No driver cost set for this vehicle. Enter the pay here or set it under Vehicles → Internal costing.
+            </p>
+          )}
+        </div>
+```
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+                    {[d.city, d.years_experience ? `${d.years_experience} yrs` : null,
+                      d.trips_completed ? `${d.trips_completed} trips` : null].filter(Boolean).join(' · ')}
+```
+
+replace with:
+
+```jsx
+                    {[d.city, d.years_experience ? `${d.years_experience} yrs` : null,
+                      d.trips_completed ? `${d.trips_completed} trips` : null,
+                      d.user_email ? null : 'no login, pay not tracked'].filter(Boolean).join(' · ')}
+```
+
+- [ ] **Step 9: Mark completed**
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+  const [assigning, setAssigning] = useState(null); // ride awaiting a driver
+```
+
+replace with:
+
+```jsx
+  const [assigning, setAssigning] = useState(null); // ride awaiting a driver
+  const [completingId, setCompletingId] = useState(null);
+```
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+  // 'needs-driver' is a cross-cutting view, not a bucket the server returns:
+```
+
+replace with:
+
+```jsx
+  // The sweep completes a ride when its booked window ends. This is for the
+  // two cases it cannot handle: the guest finished early, or the ride's time
+  // cannot be read. Completing never releases the driver's pay.
+  const complete = async (ride) => {
+    setCompletingId(ride.id);
+    const r = await invokeFn('completeRide', { ride_booking_id: ride.id });
+    setCompletingId(null);
+    if (r.ok) {
+      toast({
+        title: 'Ride marked completed',
+        description: `The driver's pay is released ${RELEASE_BUFFER_HOURS} hours after the booked end, or sooner from Earnings.`,
+      });
+    } else {
+      toast({ title: 'Could not complete this ride', description: r.error, variant: 'destructive' });
+    }
+    await load();
+  };
+
+  // 'needs-driver' is a cross-cutting view, not a bucket the server returns:
+```
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          {r.driver_assigned ? 'Change driver' : 'Assign driver'}
+                        </Button>
+                      </div>
+                    )}
+```
+
+replace with:
+
+```jsx
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          {r.driver_assigned ? 'Change driver' : 'Assign driver'}
+                        </Button>
+                      </div>
+                    )}
+
+                    {r.payment_status === 'paid' && r.status === 'confirmed'
+                      && (r.bucket === 'current' || r.bucket === 'past') && (
+                      <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
+                        <Button
+                          size="sm" variant="outline" disabled={completingId === r.id}
+                          onClick={() => complete(r)}
+                          className="rounded-xl w-full sm:w-auto"
+                        >
+                          {completingId === r.id
+                            ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            : <Check className="w-4 h-4 mr-2" />}
+                          Mark completed
+                        </Button>
+                      </div>
+                    )}
+```
+
+- [ ] **Step 10: Lint and build**
+
+Run: `npm run lint`
+
+Expected: no output, exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`.
+
+- [ ] **Step 11: Look at it (sandbox, after the next publish)**
+
+1. Admin → Rides → a paid ride → Assign driver, on a vehicle with a costing row. Expected: the pay box is empty with the costing figure as its placeholder, and the line under it reads "Leave empty to use ₦… (… × ₦… per day)".
+2. Assign a linked driver without typing anything. Expected: "Driver assigned … ₦… is held for them and released 2 hours after the ride ends."
+3. On a vehicle with no costing row, try to assign a linked driver with the box empty. Expected: stopped in the dialog with "Enter the driver pay for this ride…".
+4. Assign a driver who is already on an overlapping ride. Expected: the toast reads "<name> is already driving another booking in that window.", not a status code.
+5. On a ride in progress: Mark completed. Expected: the ride moves to Past; its earning is still held.
+6. Both the dialog and the list in dark mode: the pay box, its helper text and the amber warning are readable.
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs src/config/rides.js src/components/admin/RidesAdmin.jsx
+git commit -m "feat(rides): set the driver's pay when assigning, and mark a ride completed" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
