@@ -271,7 +271,8 @@ check('no reports at all', await hasOpenGuestReport(reportsOf([]), 'ride1'), fal
 
 const settleDueEarning = make('settleDueEarning',
   liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),
-  liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
+  liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'keepReversed', 'sr, earningId'),
+  liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
 const DUE = at('2026-08-10T12:00:00.000Z');
 const dueEarning = { id: 'e1', ride_booking_id: 'ride1', driver_id: 'drvA', amount_ngn: 15000, status: 'held', on_hold: false, release_at: '2026-08-10T12:00:00.000Z' };
 const drivenRide = { id: 'ride1', driver_id: 'drvA', status: 'completed', payment_status: 'paid' };

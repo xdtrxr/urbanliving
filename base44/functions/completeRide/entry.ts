@@ -60,6 +60,15 @@ const REFUSALS: Record<string, string> = {
     NOT_STARTED: 'This ride has not started yet.',
 };
 
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copy, see processWithdrawal.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -78,12 +87,15 @@ Deno.serve(async (req) => {
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
-        const { ride_booking_id } = await req.json().catch(() => ({}));
-        if (!ride_booking_id) return json({ success: false, error: 'ride_booking_id is required' }, 400);
+        const body = await req.json().catch(() => null);
+        const ride_booking_id = body?.ride_booking_id;
+        if (!isId(ride_booking_id)) return json({ success: false, error: 'ride_booking_id is required' }, 400);
 
         const sr = base44.asServiceRole.entities;
         const ride = await sr.RideBooking.get(ride_booking_id);
-        if (!ride) return json({ success: false, error: 'Ride booking not found', code: 'NOT_FOUND' }, 404);
+        if (!ride || ride.id !== ride_booking_id) {
+            return json({ success: false, error: 'Ride booking not found', code: 'NOT_FOUND' }, 404);
+        }
 
         const problem = completionProblem(ride, Date.now());
         if (problem === 'ALREADY') {

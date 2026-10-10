@@ -382,7 +382,8 @@ check('a refunded ride is put on hold for admin', releaseDecision(due(), drivenR
 
 const settleDueEarning = make('settleDueEarning',
   sweepSrc('isReleasable', 'earning, nowMs'), sweepSrc('releaseDecision', 'earning, ride'),
-  sweepSrc('hasOpenGuestReport', 'sr, rideBookingId'), sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
+  sweepSrc('hasOpenGuestReport', 'sr, rideBookingId'), sweepSrc('keepReversed', 'sr, earningId'),
+  sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
 // No reports on any ride here; scripts/check-ride-reports.mjs covers the cases with one.
 const world = (earning, ride) => ({
   DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []), RideReport: fakeEntity([]),
@@ -1649,6 +1650,128 @@ check('a driver with nothing on record may be deleted', rides.mayDeleteDriver([]
 check('a driver with an earning may not', rides.mayDeleteDriver([{ id: 'e1' }], []), false);
 check('a driver with a withdrawal may not', rides.mayDeleteDriver([], [{ id: 'w1' }]), false);
 check('a lookup that did not answer is not "nothing on record"', rides.mayDeleteDriver(undefined, []), false);
+
+// ── A reversal always wins ─────────────────────────────────────────────────
+console.log('\n— a reversal always wins —');
+const SE = 'settleDriverEarning';
+identical('isId', 'value', [PW, SE]);
+identical('isId', 'value', [PW, 'completeRide']);
+identical('keepReversed', 'sr, earningId', ['autoCancelExpiredBookings', SE]);
+
+// The arithmetic first: it is what stands between a lost race and money. A
+// release that landed on top of a reversal leaves this row behind.
+const overwritten = { id: 'e1', status: 'released', amount_ngn: 20000, released_at: AT, reversed_at: AT };
+same('a released row that carries a reversal time counts nowhere', walletTotals([overwritten], []), ZERO);
+same('…nor a held one', walletTotals([{ ...overwritten, status: 'held' }], []), ZERO);
+same('…and it covers nothing already paid out: that is a shortfall',
+  walletTotals([overwritten], [wd('a', { amount: 20000 })]), { ...ZERO, paid_out: 20000, shortfall: 20000 });
+same('a row that was never reversed counts as before',
+  walletTotals([{ ...overwritten, reversed_at: undefined }], []), { ...ZERO, released: 20000, available: 20000 });
+
+check('a row that carries a reversal time is never releasable', isReleasable(due({ reversed_at: AT }), DUE), false);
+same('a release on a row that carries a reversal time is refused',
+  nextEarningState('release', { ...heldE, reversed_at: AT }, {}, AT), refusal('ALREADY_REVERSED'));
+same('…and so is an adjustment',
+  nextEarningState('adjust', { ...heldE, reversed_at: AT }, { reason: 'extra hour', amount_ngn: 18000 }, AT), refusal('ALREADY_REVERSED'));
+check('…but reversing it again is allowed, which puts its status right',
+  nextEarningState('reverse', overwritten, { reason: 'guest never showed' }, AT).patch.status, 'reversed');
+
+const keepReversed = make('keepReversed', liftSrc(SE, 'keepReversed', 'sr, earningId'));
+{
+  const sr = { DriverEarning: fakeEntity([overwritten]) };
+  const row = await keepReversed(sr, 'e1');
+  check('a release that landed on a reversal is put back', `${sr.DriverEarning.rows[0].status}/${row.status}`, 'reversed/reversed');
+  check('…keeping the time it was reversed', sr.DriverEarning.rows[0].reversed_at, AT);
+}
+{
+  const sr = { DriverEarning: fakeEntity([{ ...overwritten, reversed_at: undefined }]) };
+  let writes = 0;
+  const realUpdate = sr.DriverEarning.update;
+  sr.DriverEarning.update = async (...args) => { writes += 1; return realUpdate(...args); };
+  const row = await keepReversed(sr, 'e1');
+  check('an ordinary released row is left alone', `${row.status}/${writes}`, 'released/0');
+}
+{
+  const sr = { DriverEarning: fakeEntity([]) };
+  check('a row that no longer exists is not an error', await keepReversed(sr, 'gone'), null);
+}
+
+// The race itself, in every order. Each actor is shipped code: the sweep's
+// settleDueEarning, and what settleDriverEarning does for one action (read
+// the row, decide with nextEarningState, write with writeEarningChange).
+const writeEarningChange = make('writeEarningChange',
+  liftSrc(SE, 'keepReversed', 'sr, earningId'), liftSrc(SE, 'writeEarningChange', 'sr, earning, patch'));
+const adminMove = (w, action, input = {}) => async (gate) => {
+  const sr = gatedWorld(w, gate);
+  const e = await sr.DriverEarning.get('e1');
+  const next = nextEarningState(action, e, input, AT);
+  if (!next.ok) return next.code;
+  const row = await writeEarningChange(sr, e, next.patch);
+  return row.status;
+};
+const sweepRelease = (w) => (gate) => settleDueEarning(gatedWorld(w, gate), 'e1', DUE);
+const reversalStands = (w) => {
+  const row = w.DriverEarning.rows[0];
+  if (row.status !== 'reversed' || !row.reversed_at) return `the row ended ${row.status}`;
+  if (walletTotals([row], []).available !== 0) return 'reversed pay is still available';
+  return '';
+};
+const WHY = { reason: 'guest never showed' };
+{
+  const out = await everySchedule(() => {
+    const w = world(due(), drivenRide());
+    return { world: w, actors: [sweepRelease(w), adminMove(w, 'reverse', WHY)] };
+  }, reversalStands);
+  check(`the sweep releases while admin reverses, every order (${out.runs}): the pay ends reversed`, `${out.problem}${out.schedule}`, '');
+  check('…and that was more than one order', out.runs > 10, true);
+}
+{
+  const out = await everySchedule(() => {
+    const w = world(due(), drivenRide());
+    return { world: w, actors: [adminMove(w, 'release'), adminMove(w, 'reverse', WHY)] };
+  }, reversalStands);
+  check(`one admin releases while another reverses, every order (${out.runs})`, `${out.problem}${out.schedule}`, '');
+}
+{
+  const out = await everySchedule(() => {
+    const w = world(due(), drivenRide());
+    return { world: w, actors: [sweepRelease(w), adminMove(w, 'release'), adminMove(w, 'reverse', WHY)] };
+  }, reversalStands, 4);
+  check(`the sweep and an admin both release while another admin reverses (${out.runs})`, `${out.problem}${out.schedule}`, '');
+}
+{
+  // A release that was told the truth: when the sweep says "released", the
+  // row was not reversed underneath it at that moment, and when a reversal
+  // did get in first the sweep says so and sends the driver no "available" push.
+  const out = await everySchedule(() => {
+    const w = world(due(), drivenRide());
+    return { world: w, actors: [sweepRelease(w), adminMove(w, 'reverse', WHY)] };
+  }, (w, results) => (['released', 'reversed', 'skipped'].includes(results[0]) ? '' : `the sweep answered ${results[0]}`));
+  check('…and the sweep only ever answers released, reversed or skipped', `${out.problem}${out.schedule}`, '');
+}
+{
+  // The ride is handed to another driver while the sweep is releasing the
+  // first driver's pay. Either the reassignment reversed the row and it stays
+  // reversed, or the release got there first and the reassignment reports
+  // pay that was already released. Never both.
+  const out = await everySchedule(() => {
+    const w = world(due(), drivenRide());
+    const reassign = async (gate) => {
+      const sr = gatedWorld(w, gate);
+      await sr.RideBooking.update('ride1', { driver_id: 'drvB' });
+      return reverseHeldEarnings(sr, 'ride1', 'drvB', 'Reassigned to drvB', AT);
+    };
+    return { world: w, actors: [sweepRelease(w), reassign] };
+  }, (w, results) => {
+    const row = w.DriverEarning.rows[0];
+    const moved = results[1];
+    if (row.reversed_at && row.status !== 'reversed') return `reversed, then overwritten as ${row.status}`;
+    if (row.status === 'released' && moved.reversed_ngn > 0) return 'the reassignment believes it reversed pay that ended released';
+    if (row.status === 'held') return 'the pay was neither released nor reversed';
+    return '';
+  });
+  check(`the sweep releases while the ride is reassigned, every order (${out.runs})`, `${out.problem}${out.schedule}`, '');
+}
 
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

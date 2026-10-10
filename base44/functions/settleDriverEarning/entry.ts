@@ -28,7 +28,17 @@ const REFUSALS: Record<string, { status: number; error: string }> = {
     INVALID_AMOUNT: { status: 400, error: 'The new pay must be a whole naira amount between 0 and 50,000,000.' },
     NOT_HELD: { status: 409, error: 'Only pay that is still held can be changed this way.' },
     ALREADY_REVERSED: { status: 409, error: 'This pay has already been reversed.' },
+    REVERSED_MEANWHILE: { status: 409, error: 'This pay was reversed while that change was being saved. It stays reversed.' },
 };
+
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copy, see processWithdrawal.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
 
 // What the earning becomes. Plain JavaScript body: the check script lifts it.
 function nextEarningState(action: string, earning: any, input: any, nowIso: string) {
@@ -37,6 +47,10 @@ function nextEarningState(action: string, earning: any, input: any, nowIso: stri
     const known = ['release', 'hold', 'unhold', 'adjust', 'reverse'];
     if (!known.includes(action)) return { ok: false, code: 'INVALID_ACTION' };
     if (status === 'reversed') return { ok: false, code: 'ALREADY_REVERSED' };
+    // A row that carries a reversal time is reversed, even if a release that
+    // landed at the same moment left its status saying otherwise. The one
+    // move still allowed is to reverse it again, which puts the status right.
+    if (earning && earning.reversed_at && action !== 'reverse') return { ok: false, code: 'ALREADY_REVERSED' };
 
     if (action === 'reverse') {
         if (!reason) return { ok: false, code: 'REASON_REQUIRED' };
@@ -107,6 +121,28 @@ async function hasOpenGuestReport(sr: any, rideBookingId: string) {
     return Array.isArray(open) && open.length > 0;
 }
 
+// A reversal always wins. Nothing here can lock a row, so a release can land
+// on top of a reversal made a moment earlier and leave the row saying
+// "released". reversed_at is never cleared, so after any write that sets a
+// status other than reversed the row is read again, and put back if it
+// carries one. Returns the row as it now stands. Lockstep copy, see
+// autoCancelExpiredBookings.
+async function keepReversed(sr: any, earningId: string) {
+    const fresh = await sr.DriverEarning.get(earningId);
+    if (!fresh || !fresh.reversed_at || fresh.status === 'reversed') return fresh;
+    await sr.DriverEarning.update(earningId, { status: 'reversed', on_hold: false });
+    return { ...fresh, status: 'reversed', on_hold: false };
+}
+
+// Write a decided change and hand back the row as it now stands. A change
+// that is not itself a reversal is followed by keepReversed, so a reversal
+// made while this one was being decided is not overwritten.
+async function writeEarningChange(sr: any, earning: any, patch: any) {
+    await sr.DriverEarning.update(earning.id, patch);
+    if (patch && patch.status === 'reversed') return sr.DriverEarning.get(earning.id);
+    return keepReversed(sr, earning.id);
+}
+
 async function tryPush(sdk: any, opts: Record<string, unknown>) {
     try {
         await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
@@ -133,14 +169,17 @@ Deno.serve(async (req) => {
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
-        const { earning_id, action, reason, amount_ngn } = await req.json().catch(() => ({}));
-        if (!earning_id || typeof action !== 'string') {
+        const body = await req.json().catch(() => null);
+        const { earning_id, action, reason, amount_ngn } = body || {};
+        if (!isId(earning_id) || typeof action !== 'string') {
             return json({ success: false, error: 'earning_id and action are required' }, 400);
         }
 
         const sr = base44.asServiceRole.entities;
         const earning = await sr.DriverEarning.get(earning_id);
-        if (!earning) return json({ success: false, error: 'That pay record no longer exists.', code: 'NOT_FOUND' }, 404);
+        if (!earning || earning.id !== earning_id) {
+            return json({ success: false, error: 'That pay record no longer exists.', code: 'NOT_FOUND' }, 404);
+        }
 
         const nowIso = new Date().toISOString();
         const next = nextEarningState(action, earning, { reason, amount_ngn }, nowIso);
@@ -151,7 +190,7 @@ Deno.serve(async (req) => {
 
         // Releasing by hand must not pay for a ride the sweep would refuse.
         if (action === 'release') {
-            const ride = await sr.RideBooking.get(earning.ride_booking_id);
+            const ride = isId(earning.ride_booking_id) ? await sr.RideBooking.get(earning.ride_booking_id) : null;
             const verdict = releaseDecision(earning, ride);
             if (verdict !== 'release') {
                 return json({
@@ -171,8 +210,14 @@ Deno.serve(async (req) => {
             }
         }
 
-        await sr.DriverEarning.update(earning.id, next.patch);
-        const updated = await sr.DriverEarning.get(earning.id);
+        const updated = await writeEarningChange(sr, earning, next.patch);
+        // Somebody reversed this pay while the change above was being decided.
+        // The reversal stands, and admin is told that, not that the change
+        // was saved. No "your pay is available" push goes out either.
+        if (action !== 'reverse' && updated && updated.status === 'reversed') {
+            const refusal = REFUSALS.REVERSED_MEANWHILE;
+            return json({ success: false, error: refusal.error, code: 'REVERSED_MEANWHILE' }, refusal.status);
+        }
 
         if (action === 'release') {
             try {

@@ -92,7 +92,11 @@ function walletTotals(earnings: any[], withdrawals: any[]) {
     let held = 0;
     let released = 0;
     for (const e of earnings || []) {
-        if (!e) continue;
+        // A row that has ever been reversed counts nowhere, whatever its
+        // status says. Nothing here can lock a row, so a release can land on
+        // top of a reversal made a moment earlier; reversed_at is never
+        // cleared, which makes it the one mark that cannot be lost that way.
+        if (!e || e.reversed_at) continue;
         if (e.status === 'held') held += naira(e.amount_ngn);
         else if (e.status === 'released') released += naira(e.amount_ngn);
     }

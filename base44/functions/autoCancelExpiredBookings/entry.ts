@@ -146,7 +146,7 @@ function rideEnded(ride: any, nowMs: number) {
 
 // A held earning that has waited out its two hours and is not paused.
 function isReleasable(earning: any, nowMs: number) {
-    if (!earning || earning.status !== 'held' || earning.on_hold) return false;
+    if (!earning || earning.status !== 'held' || earning.on_hold || earning.reversed_at) return false;
     const t = Date.parse(earning.release_at || '');
     return !Number.isNaN(t) && t <= nowMs;
 }
@@ -172,6 +172,19 @@ async function hasOpenGuestReport(sr: any, rideBookingId: string) {
         ride_booking_id: rideBookingId, reporter_role: 'guest', status: { $in: ['open', 'reviewing'] },
     });
     return Array.isArray(open) && open.length > 0;
+}
+
+// A reversal always wins. Nothing here can lock a row, so a release can land
+// on top of a reversal made a moment earlier and leave the row saying
+// "released". reversed_at is never cleared, so after any write that sets a
+// status other than reversed the row is read again, and put back if it
+// carries one. Returns the row as it now stands. Lockstep copy in
+// settleDriverEarning.
+async function keepReversed(sr: any, earningId: string) {
+    const fresh = await sr.DriverEarning.get(earningId);
+    if (!fresh || !fresh.reversed_at || fresh.status === 'reversed') return fresh;
+    await sr.DriverEarning.update(earningId, { status: 'reversed', on_hold: false });
+    return { ...fresh, status: 'reversed', on_hold: false };
 }
 
 // Settle one due earning: 'released' | 'reversed' | 'held' | 'skipped'.
@@ -212,7 +225,11 @@ async function settleDueEarning(sr: any, earningId: string, nowMs: number) {
     await sr.DriverEarning.update(e.id, {
         status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
     });
-    return 'released';
+    // Admin, a reassignment or a cancellation may have reversed this row
+    // while the ride was being read. If so it stays reversed, and the caller
+    // does not tell the driver it was released.
+    const after = await keepReversed(sr, e.id);
+    return after && after.status === 'reversed' ? 'reversed' : 'released';
 }
 
 // One plain-text line to the admin group. Plain text on purpose: these
