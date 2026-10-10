@@ -61,6 +61,7 @@ stay payment via function|startStayPayment
 driver pages|getDriverRides
 driver wallet|getDriverWallet
 readable function refusals|Could not reach the server. Check your connection and try again.
+ride report dialog|Report a problem with this driver
 id upload via function|submitBookingId
 points via function|awardPoints
 MARKERS
@@ -77,7 +78,7 @@ done
 echo; echo "── entities reachable (401/403=exists, 404=schema NOT DEPLOYED) ──"
 # VehicleCosting is admin-only in every direction, so an unauthenticated read
 # is refused — but refused is not the same as missing.
-for e in VehicleCosting DriverEarning; do
+for e in VehicleCosting DriverEarning RideReport; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$API/entities/$e?limit=1")
   [ "$code" = "404" ] && no "$e schema NOT DEPLOYED" || ok "$e (HTTP $code)"
 done
@@ -87,7 +88,7 @@ for f in checkRideAvailability decideRideBooking assignRideDriver getRideDriverC
          startRidePayment verifyRidePayment cancelRideBooking getRideBookings \
          cancelBooking startStayPayment submitBookingId awardPoints \
          getDriverProfile getDriverRides getDriverWallet getDriverEarningsAdmin \
-         settleDriverEarning completeRide; do
+         settleDriverEarning completeRide createRideReport resolveRideReport; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
          -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
   # 402 is the platform refusing to run ANY function for this workspace (the
