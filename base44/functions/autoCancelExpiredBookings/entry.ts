@@ -1,10 +1,12 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
-// The platform's 5-minute sweep. Despite the name it now covers three things:
+// The platform's 5-minute sweep. Despite the name it now covers five things:
 //
 //   1. Stays  — auto-cancel past the payment deadline, plus a 5-minute warning.
 //   2. Rides  — the same two passes against RideBooking.
 //   3. Rides  — a driver-arriving-soon push ~30 minutes before pickup.
+//   4. Rides  — a paid ride whose booked window is over is marked completed.
+//   5. Rides  — driver pay held on a ride is released two hours after its end.
 //
 // The name is kept deliberately. It is the identifier the Base44 dashboard
 // schedule points at, and renaming it would silently detach the cron — which
@@ -99,6 +101,162 @@ async function fetchAll(entity: any, query: Record<string, unknown> = {}): Promi
 // 6-minute payment warning band above.
 const ARRIVAL_WINDOW_MS = 35 * 60 * 1000;
 
+// ── Ride time model — lockstep copy, see checkRideAvailability ──────────────
+const WAT_OFFSET = '+01:00';
+const DAY_MS = 24 * HOUR_MS;
+const MAX_HOURLY = 8;
+
+function rideDurationMs(tier: string, days?: number, hours?: number): number {
+    switch (tier) {
+        case 'hourly': return Math.min(MAX_HOURLY, Math.max(1, Number(hours) || 1)) * HOUR_MS;
+        case '12hr': return 12 * HOUR_MS;
+        case '24hr': return DAY_MS;
+        case 'multi_day': return Math.max(1, Number(days) || 1) * DAY_MS;
+        case 'weekly': return 7 * DAY_MS;
+        case 'monthly': return 30 * DAY_MS;
+        default: return NaN;
+    }
+}
+
+// Prefer the stored instants. Fall back to deriving them for any row written
+// before start_at existed, so a legacy ride still completes on time.
+function windowOf(r: any): { startMs: number; endMs: number } | null {
+    let startMs = Date.parse(r.start_at || '');
+    if (Number.isNaN(startMs)) startMs = Date.parse(`${r.service_date}T${r.start_time}:00${WAT_OFFSET}`);
+    if (Number.isNaN(startMs)) return null;
+    let endMs = Date.parse(r.end_at || '');
+    if (Number.isNaN(endMs)) {
+        const dur = rideDurationMs(r.duration_tier, r.duration_days, r.duration_hours);
+        if (Number.isNaN(dur)) return null;
+        endMs = startMs + dur;
+    }
+    return { startMs, endMs };
+}
+
+// ── Completion and driver pay release ───────────────────────────────────────
+// The decisions are separate functions with plain JavaScript bodies so that
+// scripts/check-driver-wallet.mjs can lift them off disk and run them.
+
+// The booked window is over. A row with no readable time is never "over":
+// it waits for admin rather than completing on a guess.
+function rideEnded(ride: any, nowMs: number) {
+    const w = windowOf(ride);
+    return !!w && Number.isFinite(w.endMs) && w.endMs <= nowMs;
+}
+
+// A held earning that has waited out its two hours and is not paused.
+function isReleasable(earning: any, nowMs: number) {
+    if (!earning || earning.status !== 'held' || earning.on_hold || earning.reversed_at) return false;
+    const t = Date.parse(earning.release_at || '');
+    return !Number.isNaN(t) && t <= nowMs;
+}
+
+// What to do with a due earning, given the ride it is for. This is the net
+// under assignRideDriver and cancelRideBooking: if either stopped halfway, the
+// pay they should have reversed is reversed here instead of being released.
+function releaseDecision(earning: any, ride: any) {
+    if (!ride) return 'reverse:ride no longer exists';
+    if (ride.status === 'cancelled') return 'reverse:ride cancelled';
+    if (ride.driver_id !== earning.driver_id) return 'reverse:ride reassigned';
+    if (ride.payment_status !== 'paid') return 'hold:ride is not paid';
+    return 'release';
+}
+
+// True while admin has not closed a complaint the GUEST made about THIS
+// DRIVER on this ride. That is a dispute about the service the driver is
+// being paid for, so the pay waits. It is matched on the driver the report
+// names: if the ride was handed to someone else after the complaint, the
+// complaint is about the first driver, and the second is paid on time. A
+// report the DRIVER filed about the guest never holds the driver's own pay:
+// that would punish them for speaking up. Lockstep copy in
+// settleDriverEarning.
+async function hasOpenGuestReport(sr: any, rideBookingId: string, driverId: string) {
+    if (!driverId) return false;
+    const open = await sr.RideReport.filter({
+        ride_booking_id: rideBookingId,
+        reporter_role: 'guest',
+        reported_driver_id: driverId,
+        status: { $in: ['open', 'reviewing'] },
+    });
+    return Array.isArray(open) && open.length > 0;
+}
+
+// A reversal always wins. Nothing here can lock a row, so a release can land
+// on top of a reversal made a moment earlier and leave the row saying
+// "released". reversed_at is never cleared, so after any write that sets a
+// status other than reversed the row is read again, and put back if it
+// carries one. Returns the row as it now stands. Lockstep copy in
+// settleDriverEarning.
+async function keepReversed(sr: any, earningId: string) {
+    const fresh = await sr.DriverEarning.get(earningId);
+    if (!fresh || !fresh.reversed_at || fresh.status === 'reversed') return fresh;
+    await sr.DriverEarning.update(earningId, { status: 'reversed', on_hold: false });
+    return { ...fresh, status: 'reversed', on_hold: false };
+}
+
+// Settle one due earning: 'released' | 'reversed' | 'held' | 'skipped'.
+// Re-reads the row first, because admin may have paused, adjusted or reversed
+// it since the page was fetched. Releasing is a status flip and nothing else:
+// the driver's balance is derived from the ledger, so running this twice for
+// the same row cannot pay twice.
+async function settleDueEarning(sr: any, earningId: string, nowMs: number) {
+    const e = await sr.DriverEarning.get(earningId);
+    if (!isReleasable(e, nowMs)) return 'skipped';
+    let ride;
+    try {
+        ride = await sr.RideBooking.get(e.ride_booking_id);
+    } catch (err) {
+        // A read that failed is not a ride that is gone. Never reverse on it.
+        console.warn(`Could not read ride ${e.ride_booking_id} for earning ${e.id}; trying again next tick`, err);
+        return 'skipped';
+    }
+    const nowIso = new Date(nowMs).toISOString();
+    const parts = releaseDecision(e, ride).split(':');
+    if (parts[0] === 'reverse') {
+        const note = `Sweep: ${parts[1]}`;
+        await sr.DriverEarning.update(e.id, {
+            status: 'reversed',
+            reversed_at: nowIso,
+            on_hold: false,
+            admin_notes: e.admin_notes ? `${e.admin_notes} | ${note}` : note,
+        });
+        return 'reversed';
+    }
+    if (parts[0] === 'hold') {
+        await sr.DriverEarning.update(e.id, { on_hold: true, hold_reason: parts[1] });
+        return 'held';
+    }
+    // The guest has complained about this ride and admin has not closed it
+    // yet. The pay waits; the next tick after the report is closed releases it.
+    if (await hasOpenGuestReport(sr, e.ride_booking_id, e.driver_id)) return 'skipped';
+    await sr.DriverEarning.update(e.id, {
+        status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
+    });
+    // Admin, a reassignment or a cancellation may have reversed this row
+    // while the ride was being read. If so it stays reversed, and the caller
+    // does not tell the driver it was released.
+    const after = await keepReversed(sr, e.id);
+    return after && after.status === 'reversed' ? 'reversed' : 'released';
+}
+
+// One plain-text line to the admin group. Plain text on purpose: these
+// messages carry vehicle names and reasons that were never escaped for
+// Markdown, and Telegram drops a message it cannot parse.
+async function notifyAdminLine(text: string) {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
+    if (!token || !chatId) return;
+    try {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text }),
+        });
+    } catch (err) {
+        console.error('Telegram notify failed:', err);
+    }
+}
+
 async function notifyAdminRideExpired(ride: any) {
     const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
     const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
@@ -120,11 +278,14 @@ async function notifyAdminRideExpired(ride: any) {
     }
 }
 
-async function runRideSweep(sdk: any): Promise<{ scanned: number; cancelled: number; warned: number; arriving: number }> {
+async function runRideSweep(sdk: any): Promise<Record<string, number>> {
     const now = Date.now();
     let cancelled = 0;
     let warned = 0;
     let arriving = 0;
+    let completed = 0;
+    let released = 0;
+    let payReversed = 0;
 
     // Pass 1 + 2 — unpaid rides that have been approved are on the clock.
     const pending = await fetchAll(sdk.asServiceRole.entities.RideBooking, { status: 'pending' });
@@ -205,7 +366,66 @@ async function runRideSweep(sdk: any): Promise<{ scanned: number; cancelled: num
         }
     }
 
-    return { scanned: pending.length + confirmed.length, cancelled, warned, arriving };
+    // Pass 4 — a paid ride whose booked window is over is completed. Until
+    // this pass existed nothing ever wrote the status; rides aged into "past"
+    // by the clock alone.
+    for (const r of confirmed) {
+        if (!rideEnded(r, now)) continue;
+        try {
+            await sdk.asServiceRole.entities.RideBooking.update(r.id, {
+                status: 'completed',
+                completed_at: new Date().toISOString(),
+                completed_by: 'system',
+            });
+            completed += 1;
+        } catch (err) {
+            console.error(`Failed to complete ride ${r.id}:`, err);
+        }
+    }
+
+    // Pass 5 — release driver pay that has waited out its two hours. Wrapped
+    // as a whole so that a failed page read here cannot cost the counts from
+    // the passes above.
+    try {
+        const sr = sdk.asServiceRole.entities;
+        const held = await fetchAll(sr.DriverEarning, { status: 'held' });
+        for (const row of held) {
+            if (!isReleasable(row, now)) continue;
+            try {
+                const outcome = await settleDueEarning(sr, row.id, now);
+                const amount = `₦${(Number(row.amount_ngn) || 0).toLocaleString()}`;
+                if (outcome === 'reversed') payReversed += 1;
+                if (outcome === 'held') {
+                    await notifyAdminLine(
+                        `⏸ DRIVER PAY ON HOLD\n\n${amount} for ${row.vehicle_name || 'a ride'} (${row.booking_reference || row.ride_booking_id}) ` +
+                        `was due for release, but the ride is not marked paid. Review it in Admin → Rides → Earnings.`,
+                    );
+                }
+                if (outcome !== 'released') continue;
+                released += 1;
+                const driver = await sr.Driver.get(row.driver_id);
+                const driverEmail = typeof driver?.user_email === 'string' ? driver.user_email.trim().toLowerCase() : '';
+                if (driverEmail) {
+                    await tryPush(sdk, {
+                        user_email: driverEmail,
+                        title: `💸 ${amount} is now available`,
+                        body: `Your pay for the ${row.vehicle_name || 'ride'}${row.service_date ? ` on ${row.service_date}` : ''} has been released to your wallet.`,
+                        url: '/DriverWallet',
+                        tag: `driver-released-${row.id}`,
+                    });
+                }
+            } catch (err) {
+                console.error(`Failed to settle driver earning ${row.id}:`, err);
+            }
+        }
+    } catch (err) {
+        console.error('Driver pay release pass failed:', err);
+    }
+
+    return {
+        scanned: pending.length + confirmed.length,
+        cancelled, warned, arriving, completed, released, pay_reversed: payReversed,
+    };
 }
 
 async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number; warned: number }> {

@@ -9,8 +9,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Car, Clock, MapPin, Users, Loader2, ChevronDown, X, CalendarClock, Compass,
-  CreditCard, Phone, UserRound,
+  CreditCard, Phone, UserRound, Flag,
 } from 'lucide-react';
+import RideReportDialog from '@/components/rides/RideReportDialog';
 import { base44 } from '@/api/base44Client';
 import { durationLabel } from '@/config/rides';
 import { createPageUrl } from '@/utils';
@@ -47,7 +48,7 @@ const remaining = (ms) => {
 // (owner + confirmed + paid + assigned); this component only renders when
 // the ride row already reports driver_assigned, so a denial here means
 // something changed underneath and is worth showing plainly.
-const DriverCard = React.memo(function DriverCard({ rideId }) {
+const DriverCard = React.memo(function DriverCard({ rideId, canReport, alreadyReported, onReport }) {
   const [driver, setDriver] = useState(null);
   const [state, setState] = useState('loading');
 
@@ -128,6 +129,23 @@ const DriverCard = React.memo(function DriverCard({ rideId }) {
           </span>
         </div>
       )}
+
+      {/* getRideBookings decides whether this is offered: a paid ride with a
+          driver, from its start until a week after it ends, not yet reported. */}
+      {alreadyReported ? (
+        <p className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-900 text-xs text-emerald-900 dark:text-emerald-100">
+          You reported a problem with this ride. The team has it.
+        </p>
+      ) : canReport && onReport ? (
+        <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-900">
+          <button
+            type="button" onClick={onReport}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-red-700 dark:text-red-300 hover:underline py-1"
+          >
+            <Flag className="w-3.5 h-3.5" /> Report a problem with this driver
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 });
@@ -176,7 +194,7 @@ const SuggestedVehicles = React.memo(function SuggestedVehicles({ ids }) {
 
 // Module scope so the 30s refresh does not remount these and reset the
 // countdown — the same reason the stay cards live at module scope.
-const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
+const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling, onReport }) {
   const awaitingPayment = ride.bucket !== 'cancelled' && !!ride.approved_at && ride.payment_status !== 'paid';
 
   const [deadlineMs] = useState(() => {
@@ -300,7 +318,12 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
           {/* Driver contact is served by getRideDriverContact, never by the
               list endpoint — getRideBookings strips driver_id deliberately. */}
           {ride.driver_assigned && ride.payment_status === 'paid' && (
-            <DriverCard rideId={ride.id} />
+            <DriverCard
+              rideId={ride.id}
+              canReport={!!ride.can_report}
+              alreadyReported={!!ride.already_reported}
+              onReport={onReport ? () => onReport(ride) : undefined}
+            />
           )}
 
           {ride.bucket === 'pending-approval' && (
@@ -355,6 +378,7 @@ export default function RideBookingsSection() {
   const [showHistory, setShowHistory] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
+  const [reporting, setReporting] = useState(null); // the ride being reported
   const ridesRef = useRef(rides);
 
   useEffect(() => { ridesRef.current = rides; }, [rides]);
@@ -449,6 +473,7 @@ export default function RideBookingsSection() {
                   key={r.id} ride={r}
                   cancelling={cancellingId === r.id}
                   onCancel={setConfirmCancel}
+                  onReport={setReporting}
                 />
               ))}
             </div>
@@ -468,7 +493,7 @@ export default function RideBookingsSection() {
             {showHistory && (
               <div className="space-y-3 mt-2">
                 {history.map((r) => (
-                  <RideCard key={r.id} ride={r} cancelling={false} onCancel={setConfirmCancel} />
+                  <RideCard key={r.id} ride={r} cancelling={false} onCancel={setConfirmCancel} onReport={setReporting} />
                 ))}
               </div>
             )}
@@ -499,6 +524,18 @@ export default function RideBookingsSection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <RideReportDialog
+        open={!!reporting} ride={reporting} role="guest"
+        onClose={() => setReporting(null)}
+        onSubmitted={(outcome) => {
+          setReporting(null);
+          toast(outcome === 'already'
+            ? { title: 'Already reported', description: 'You have already reported this ride. The team has it.' }
+            : { title: 'Report sent', description: 'Thank you. The team will look into it.' });
+          load(true);
+        }}
+      />
     </div>
   );
 }

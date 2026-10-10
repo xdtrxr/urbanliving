@@ -20,6 +20,15 @@ const REFERRAL_RATE = 0.05;
 const REFERRER_LOYALTY_BONUS = 250;
 const GUEST_RIDE_POINTS = 500;
 
+// A ride that has been paid stays paid, whatever happened to it afterwards.
+// The guard used to be "paid AND confirmed", which let an old Paystack
+// reference walk straight past it on a ride that had since been completed by
+// the sweep or cancelled by admin, and flip that ride back to confirmed.
+// Lockstep copy in verifyRidePayment and paystackWebhook.
+function rideAlreadyPaid(ride: any) {
+    return !!ride && ride.payment_status === 'paid';
+}
+
 const APP_BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://urbanstays.io';
 const rideLink = (id: string) => `${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(id)}#ride-${encodeURIComponent(id)}`;
 
@@ -121,6 +130,33 @@ async function emailGuest(sdk: any, ride: any) {
     }
 }
 
+// Which booking a Paystack transaction was made for, read from the metadata
+// the payment page attached to it: ride_booking_id for a ride, booking_id for
+// a stay. Without this a reference that paid for one booking could be handed
+// in again to mark another booking of the same price as paid. true: it names
+// this booking. false: it names another one. null: it names none, and the
+// caller must check the reference has not been used. Lockstep copy in
+// verifyRidePayment and verifyPaystackPayment.
+function paymentIsFor(metadata: unknown, kind: string, id: string) {
+    let meta = metadata;
+    if (typeof meta === 'string') {
+        try {
+            meta = JSON.parse(meta);
+        } catch (_err) {
+            meta = null;
+        }
+    }
+    const m = meta && typeof meta === 'object' ? meta : {};
+    const ride = String(m.ride_booking_id || '');
+    const stay = String(m.booking_id || '');
+    if (kind === 'ride') {
+        if (stay) return false;
+        return ride ? ride === id : null;
+    }
+    if (ride) return false;
+    return stay ? stay === id : null;
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -151,7 +187,7 @@ Deno.serve(async (req) => {
         if (ride.guest_email !== user.email && user.role !== 'admin') {
             return json({ success: false, error: 'Not your booking' }, 403);
         }
-        if (ride.payment_status === 'paid' && ride.status === 'confirmed') {
+        if (rideAlreadyPaid(ride)) {
             return json({ success: true, data: { already_paid: true, ride_booking_id } });
         }
 
@@ -166,6 +202,16 @@ Deno.serve(async (req) => {
                 error: 'Payment not verified',
                 details: verifyData?.message || 'Paystack returned non-success',
             }, 402);
+        }
+
+        // The reference must be the one that paid for THIS booking, and must
+        // not already be on another one.
+        const madeFor = paymentIsFor(verifyData.data?.metadata, 'ride', ride.id);
+        const reused = madeFor === false ? [] : (await base44.asServiceRole.entities.RideBooking.filter({ transaction_hash: reference }))
+            .filter((row: any) => row.id !== ride.id);
+        if (madeFor === false || reused.length > 0) {
+            console.error(`Reference ${reference} was not paid for ride ${ride.id}`);
+            return json({ success: false, error: 'This payment was made for a different booking.', code: 'REFERENCE_MISMATCH' }, 400);
         }
 
         const expectedKobo = Math.round((Number(ride.total_price) || 0) * 100);

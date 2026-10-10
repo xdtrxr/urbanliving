@@ -425,6 +425,15 @@ const RIDE_REFERRAL_RATE = 0.05;
 const RIDE_REFERRER_LOYALTY_BONUS = 250;
 const GUEST_RIDE_POINTS = 500;
 
+// A ride that has been paid stays paid, whatever happened to it afterwards.
+// The guard used to be "paid AND confirmed", which let an old Paystack
+// reference walk straight past it on a ride that had since been completed by
+// the sweep or cancelled by admin, and flip that ride back to confirmed.
+// Lockstep copy in verifyRidePayment and paystackWebhook.
+function rideAlreadyPaid(ride: any) {
+    return !!ride && ride.payment_status === 'paid';
+}
+
 async function handleRidePayment(
     sdk: any,
     rideId: string,
@@ -434,7 +443,7 @@ async function handleRidePayment(
 ): Promise<Response> {
     const ride = await sdk.asServiceRole.entities.RideBooking.get(rideId);
     if (!ride) return ack({ skipped: 'ride_not_found' });
-    if (ride.payment_status === 'paid' && ride.status === 'confirmed') {
+    if (rideAlreadyPaid(ride)) {
         return ack({ skipped: 'already_paid' });
     }
 

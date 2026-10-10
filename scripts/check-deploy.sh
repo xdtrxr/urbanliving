@@ -33,11 +33,26 @@ curl -sL --max-time 45 "$SITE/$entry" -o "$TMP/all.js"
 # parallel -- there are ~50 and serial curls take minutes.
 grep -oE 'assets/[A-Za-z0-9_-]+-[A-Za-z0-9_-]+\.js' "$TMP/all.js" | sort -u > "$TMP/chunks.txt"
 printf "  fetching %s chunks\n" "$(wc -l < "$TMP/chunks.txt" | tr -d ' ')"
-xargs -P 12 -I{} curl -sL --max-time 30 "$SITE/{}" -o "$TMP/c_{}" < <(sed 's#assets/##' "$TMP/chunks.txt") 2>/dev/null || true
+xargs -P 12 -I{} curl -sL --max-time 30 "$SITE/assets/{}" -o "$TMP/c_{}" < <(sed 's#assets/##' "$TMP/chunks.txt") 2>/dev/null || true
+# A chunk URL that does not exist is answered with the site's index.html (the
+# SPA fallback) and HTTP 200. Until 2026-10-10 the line above asked for every
+# chunk WITHOUT its assets/ prefix, got fifty copies of the home page, and this
+# script reported every page-level marker as missing on a build that was in
+# fact live. So: if anything that should be JavaScript starts like an HTML
+# document, say so and stop. Every result below would be meaningless.
+html=$(grep -liE '^<!doctype html' "$TMP"/c_* 2>/dev/null | wc -l | tr -d ' ')
+if [ "$html" != "0" ]; then
+  no "$html chunk(s) came back as HTML, not JavaScript: this check cannot see the live code"
+  exit 1
+fi
+ok "every chunk fetched is JavaScript"
 cat "$TMP"/c_* >> "$TMP/all.js" 2>/dev/null
 printf "  fetched %s bytes of live JS\n" "$(wc -c < "$TMP/all.js" | tr -d ' ')"
 
 echo; echo "── revision markers (must all be present) ──"
+# Every marker is text a person reads or a field name sent over the wire. A
+# function or variable name is no good: the minifier renames it, and the
+# marker then reads as missing on a build that has the feature.
 while IFS='|' read -r label marker; do
   grep -qF -- "$marker" "$TMP/all.js" && ok "$label" || no "$label  (missing: $marker)"
 done <<'MARKERS'
@@ -45,7 +60,7 @@ hourly pricing|price_per_hour_ngn
 per-vehicle turnaround|turnaround_hours
 city-first browse|Where do you need a ride
 Port Harcourt|Port Harcourt
-category taxonomy|effectiveCategory
+category taxonomy|Air-conditioned saloon cars
 booking reference|booking_reference
 estimated vs final price|estimated_price
 price adjustment reason|price_adjustment_reason
@@ -58,6 +73,15 @@ admin-only costing|VehicleCosting
 nav says Book a Ride|Book a Ride
 stay cancel via function|cancelBooking
 stay payment via function|startStayPayment
+driver pages|getDriverRides
+driver wallet|getDriverWallet
+readable function refusals|Could not reach the server. Check your connection and try again.
+ride report dialog|Report a problem with this driver
+payout retry (hardening)|Paystack never confirmed this one
+record driver pay (hardening)|No pay recorded
+driver told when no pay is on record (hardening)|Confirm it with the team before you set off
+ride payment refusals shown (hardening)|This ride has already been paid for.
+report photos from the file store only (hardening)|[a-f0-9]{24}\/files\/
 id upload via function|submitBookingId
 points via function|awardPoints
 MARKERS
@@ -71,10 +95,12 @@ for m in "Plan a Trip" "Check availability" "/ full day"; do
   grep -qF -- "$m" "$TMP/all.js" && no "stale string still live: $m" || ok "gone: $m"
 done
 
-echo; echo "── entities reachable (401/403=exists, 404=schema NOT DEPLOYED) ──"
-# VehicleCosting is admin-only in every direction, so an unauthenticated read
-# is refused — but refused is not the same as missing.
-for e in VehicleCosting; do
+echo; echo "── entities reachable (200/401/403=exists, 404=schema NOT DEPLOYED) ──"
+# These three are admin-only in every direction. An unauthenticated read of
+# one that exists is answered with HTTP 200 and an empty list (the access rule
+# filters every row out), or refused. Either proves the schema is deployed;
+# only 404 means it is not.
+for e in VehicleCosting DriverEarning RideReport WithdrawalLedger; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$API/entities/$e?limit=1")
   [ "$code" = "404" ] && no "$e schema NOT DEPLOYED" || ok "$e (HTTP $code)"
 done
@@ -82,10 +108,17 @@ done
 echo; echo "── functions reachable (500=exists+needs auth, 404=NOT DEPLOYED) ──"
 for f in checkRideAvailability decideRideBooking assignRideDriver getRideDriverContact \
          startRidePayment verifyRidePayment cancelRideBooking getRideBookings \
-         cancelBooking startStayPayment submitBookingId awardPoints; do
+         cancelBooking startStayPayment submitBookingId awardPoints \
+         getDriverProfile getDriverRides getDriverWallet getDriverEarningsAdmin \
+         settleDriverEarning completeRide createRideReport resolveRideReport \
+         createWithdrawalRequest processWithdrawal; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
          -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
-  [ "$code" = "404" ] && no "$f NOT DEPLOYED" || ok "$f (HTTP $code)"
+  # 402 is the platform refusing to run ANY function for this workspace (the
+  # plan has no backend functions). It is not "deployed and fine".
+  if [ "$code" = "404" ]; then no "$f NOT DEPLOYED"
+  elif [ "$code" = "402" ]; then no "$f BLOCKED BY THE PLATFORM (HTTP 402: the workspace plan cannot run backend functions)"
+  else ok "$f (HTTP $code)"; fi
 done
 
 echo; echo "── vehicle data migration ──"

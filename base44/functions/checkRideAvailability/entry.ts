@@ -40,6 +40,30 @@ const DAY_MS = 24 * HOUR_MS;
 const PAYMENT_WINDOW_MS = 1 * HOUR_MS;
 const MAX_OPEN_REQUESTS = 3;
 const MAX_HOURLY = 8;
+// The booking form stops at 30 days (longer hires go by the week or month).
+// The server has to say so too: the day count multiplies straight into the
+// price, the driver's pay and the length of time the vehicle is blocked.
+const MAX_MULTI_DAYS = 30;
+
+function multiDaysOk(days: unknown) {
+    const d = Number(days);
+    return Number.isInteger(d) && d >= 1 && d <= MAX_MULTI_DAYS;
+}
+
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copy, see processWithdrawal.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// Admin blocked this account from rides when resolving a report against it
+// (resolveRideReport). Only the boolean true blocks.
+function isRideBlocked(account: any) {
+    return !!account && account.ride_blocked === true;
+}
 
 // Turnaround was a flat 2h constant until hourly hire landed. Two hours of
 // clearance either side of a one-hour booking would cap a car at roughly three
@@ -82,6 +106,19 @@ function windowsOverlap(
     buffer: number,
 ): boolean {
     return aStart < bEnd + buffer && aEnd + buffer > bStart;
+}
+
+// The stretch a ride keeps its driver, or its car, busy, given its booked
+// window `w`. A ride still to run, or running, holds them for all of it. A
+// completed ride held them until it was completed: at its booked end if the
+// sweep closed it, earlier if admin marked it done because the guest finished
+// early. The caller adds the turnaround. Lockstep copy, see assignRideDriver.
+function busyWindow(ride: any, w: any) {
+    if (!w) return null;
+    if (ride.status !== 'completed') return w;
+    const doneMs = Date.parse(ride.completed_at || '');
+    if (Number.isNaN(doneMs)) return w;
+    return { startMs: w.startMs, endMs: Math.max(w.startMs, Math.min(w.endMs, doneMs)) };
 }
 
 // ── Pricing — derived from the Vehicle, never from the request body ─────────
@@ -278,6 +315,17 @@ Deno.serve(async (req) => {
         const user = await base44.auth.me();
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
 
+        // Read the account fresh under the service role rather than trusting
+        // the copy on the session: a block must take effect at once.
+        const accounts = await base44.asServiceRole.entities.User.filter({ email: user.email });
+        if (isRideBlocked(accounts?.[0])) {
+            return json({
+                success: false,
+                error: 'Ride bookings are not available on this account. Please contact support.',
+                code: 'RIDE_BLOCKED',
+            }, 403);
+        }
+
         const body = await req.json().catch(() => ({}));
         const {
             vehicle_id, service_date, start_time, duration_tier,
@@ -295,8 +343,12 @@ Deno.serve(async (req) => {
         if (!user.phone_number && !body.guest_phone) {
             return json({ success: false, error: 'A phone number is required to book a ride', code: 'PHONE_REQUIRED' }, 400);
         }
-        if (duration_tier === 'multi_day' && (!Number(duration_days) || Number(duration_days) < 1)) {
-            return json({ success: false, error: 'multi_day bookings need duration_days of at least 1' }, 400);
+        if (duration_tier === 'multi_day' && !multiDaysOk(duration_days)) {
+            return json({
+                success: false,
+                error: `Multi-day bookings are for 1 to ${MAX_MULTI_DAYS} whole days. For longer, book by the week or the month.`,
+                code: 'INVALID_DAYS',
+            }, 400);
         }
         if (duration_tier === 'hourly') {
             const h = Number(duration_hours);
@@ -316,8 +368,8 @@ Deno.serve(async (req) => {
         }
 
         // ── Vehicle must exist and be bookable ──────────────────────────
-        const vehicle = await base44.asServiceRole.entities.Vehicle.get(vehicle_id);
-        if (!vehicle) return json({ success: false, error: 'Vehicle not found' }, 404);
+        const vehicle = isId(vehicle_id) ? await base44.asServiceRole.entities.Vehicle.get(vehicle_id) : null;
+        if (!vehicle || vehicle.id !== vehicle_id) return json({ success: false, error: 'Vehicle not found' }, 404);
         if (vehicle.active === false || vehicle.admin_approved === false) {
             return json({ success: false, error: 'This vehicle is not currently available', code: 'VEHICLE_UNAVAILABLE' }, 409);
         }
@@ -372,11 +424,14 @@ Deno.serve(async (req) => {
         }
 
         // ── Hard conflict block ─────────────────────────────────────────
+        // A completed ride still counts. The sweep completes a ride the
+        // moment its window ends, and leaving it out would let the next
+        // booking start inside the turnaround that follows it.
         const held = await fetchAll(base44.asServiceRole.entities.RideBooking, {
-            vehicle_id, status: { $in: ['pending', 'confirmed'] },
+            vehicle_id, status: { $in: ['pending', 'confirmed', 'completed'] },
         });
         for (const other of held) {
-            const ow = rideWindow(other);
+            const ow = busyWindow(other, rideWindow(other));
             if (!ow) continue;
             if (windowsOverlap(win.startMs, win.endMs, ow.startMs, ow.endMs, turnaroundMsFor(vehicle))) {
                 return json({
@@ -396,8 +451,10 @@ Deno.serve(async (req) => {
         // payment clock drifting against the first.
         let isAddOn = false;
         if (linked_property_booking_id) {
-            const stay = await base44.asServiceRole.entities.Booking.get(linked_property_booking_id);
-            if (!stay || stay.guest_email !== user.email) {
+            const stay = isId(linked_property_booking_id)
+                ? await base44.asServiceRole.entities.Booking.get(linked_property_booking_id)
+                : null;
+            if (!stay || stay.id !== linked_property_booking_id || stay.guest_email !== user.email) {
                 return json({ success: false, error: 'Linked booking not found', code: 'STAY_NOT_FOUND' }, 404);
             }
             if (stay.status !== 'confirmed' || stay.payment_status !== 'paid') {
@@ -453,7 +510,13 @@ Deno.serve(async (req) => {
             payload.admin_response = 'Added to your existing stay — no approval needed.';
         }
 
-        const ride = await base44.entities.RideBooking.create(payload);
+        // Created under the service role, never as the guest. Every figure on
+        // this row was worked out above from the Vehicle and the clock. The
+        // access rule staged in docs/entity-rules-pending-publish stops a
+        // browser creating a ride row at all; once it is live, this line is
+        // the only way a ride comes to exist. Until then a row can still be
+        // made by hand with any status on it.
+        const ride = await base44.asServiceRole.entities.RideBooking.create(payload);
 
         if (isAddOn) {
             return json({

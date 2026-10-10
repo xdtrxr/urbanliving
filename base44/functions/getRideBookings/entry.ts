@@ -56,6 +56,27 @@ function computeBucket(r: any, nowMs: number): string {
     return 'current';
 }
 
+// ── Reporting — lockstep copy, see createRideReport ─────────────────────────
+const REPORT_WINDOW_AFTER_END_MS = 7 * DAY_MS;
+
+function reportWindowOpen(ride: any, nowMs: number) {
+    const w = windowOf(ride);
+    if (!w || !Number.isFinite(w.startMs) || !Number.isFinite(w.endMs)) return false;
+    return w.startMs <= nowMs && nowMs <= w.endMs + REPORT_WINDOW_AFTER_END_MS;
+}
+
+// "<ride id>:<driver id>" for every pay row that still stands. Admin only.
+function livePayKeys(earnings: any[]) {
+    const keys = [];
+    for (const e of earnings || []) {
+        // A reversed row counts as recorded: pay that admin reversed on
+        // purpose must not be offered as "never recorded".
+        if (!e) continue;
+        keys.push(`${e.ride_booking_id}:${e.driver_id}`);
+    }
+    return keys;
+}
+
 const PAGE = 500;
 async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
     const out: any[] = [];
@@ -97,16 +118,46 @@ Deno.serve(async (req) => {
             rides = await fetchAll(base44.entities.RideBooking, { guest_email: user.email });
         }
 
+        // Which of their own rides this guest has already reported. Read under
+        // the service role because RideReport is admin-only at the API, and on
+        // its own so that a problem here can never cost them their ride list.
+        const reportedRides = new Set<string>();
+        if (scope === 'mine') {
+            try {
+                const mine = await fetchAll(base44.asServiceRole.entities.RideReport, { reporter_email: user.email });
+                for (const rep of mine) reportedRides.add(rep.ride_booking_id);
+            } catch (err) {
+                console.warn('Could not read ride reports (the ride list is unaffected):', err);
+            }
+        }
+
         // Admins already have full read on Driver, so hiding the assignment
         // from them protects nothing and just costs a round trip. Resolve the
         // names once for the whole page instead of per row.
         const driverNames = new Map<string, string>();
+        // Admin only: which assigned drivers have a login, and which rides
+        // already have pay standing for their driver. Together they let the
+        // list point at a ride whose driver should be paid through the app
+        // and is not, which is every ride assigned before the driver was
+        // given a login. `paid` stays null if the ledger cannot be read, and
+        // the client then makes no claim either way.
+        const linkedDrivers = new Set<string>();
+        let paid: Set<string> | null = null;
         if (scope === 'all') {
             const ids = new Set(rides.map((r) => r.driver_id).filter(Boolean));
             if (ids.size > 0) {
                 const roster = await fetchAll(base44.asServiceRole.entities.Driver, {});
                 for (const d of roster) {
-                    if (ids.has(d.id)) driverNames.set(d.id, d.full_name || '');
+                    if (!ids.has(d.id)) continue;
+                    driverNames.set(d.id, d.full_name || '');
+                    if (String(d.user_email || '').trim()) linkedDrivers.add(d.id);
+                }
+                try {
+                    const standing = await fetchAll(base44.asServiceRole.entities.DriverEarning, {
+                    });
+                    paid = new Set(livePayKeys(standing));
+                } catch (err) {
+                    console.warn('Could not read driver earnings (the ride list is unaffected):', err);
                 }
             }
         }
@@ -133,6 +184,16 @@ Deno.serve(async (req) => {
                 driver_id: scope === 'all' ? r.driver_id : undefined,
                 driver_name: scope === 'all' ? (driverNames.get(r.driver_id) || undefined) : undefined,
                 driver_assigned: !!r.driver_id,
+                // Admin only. driver_pay_recorded is null when the ledger
+                // could not be read.
+                driver_linked: scope === 'all' ? linkedDrivers.has(r.driver_id) : undefined,
+                driver_pay_recorded: scope === 'all' ? (paid ? paid.has(`${r.id}:${r.driver_id}`) : null) : undefined,
+                // Guests only: whether "Report a problem with this driver" is
+                // offered. createRideReport checks every part of it again.
+                already_reported: scope === 'mine' ? reportedRides.has(r.id) : undefined,
+                can_report: scope === 'mine'
+                    ? r.payment_status === 'paid' && !!r.driver_id && reportWindowOpen(r, nowMs) && !reportedRides.has(r.id)
+                    : undefined,
             };
         });
 

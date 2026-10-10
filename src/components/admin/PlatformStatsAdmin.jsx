@@ -238,6 +238,17 @@ export default function PlatformStatsAdmin() {
                 : 'No withdrawals in flight'
             }
           />
+          <Stat
+            icon={Banknote}
+            tone="amber"
+            label="Driver pay owed"
+            value={ngn((liabilities.driverHeldNGN || 0) + (liabilities.driverAvailableNGN || 0))}
+            sub={
+              (liabilities.driverShortfallNGN || 0) > 0
+                ? `${ngn(liabilities.driverShortfallNGN)} to recover from drivers. See Rides → Earnings`
+                : `${ngn(liabilities.driverHeldNGN || 0)} held on rides · ${ngn(liabilities.driverAvailableNGN || 0)} ready to withdraw`
+            }
+          />
         </Section>
 
         <Section title="Audience & inventory" description="Who's on the platform and what they can book.">

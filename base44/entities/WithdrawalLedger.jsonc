@@ -1,0 +1,59 @@
+{
+  "name": "WithdrawalLedger",
+  "type": "object",
+  "properties": {
+    "withdrawal_request_id": {
+      "type": "string",
+      "description": "The WithdrawalRequest this row is about"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Whose referral balance it concerns"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "debit",
+        "attempt",
+        "refund"
+      ],
+      "description": "debit: createWithdrawalRequest took the amount off the stored balance. attempt: a call is about to ask Paystack to send the withdrawal. refund: a call claims the right to credit it back."
+    },
+    "state": {
+      "type": "string",
+      "description": "debit: recorded. attempt: open, then sent | refused | unconfirmed | abandoned. refund: claimed, then crediting, then credited; or duplicate | held_back | no_user."
+    },
+    "amount_ngn": {
+      "type": "number",
+      "description": "Whole naira"
+    }
+  },
+  "required": [
+    "withdrawal_request_id",
+    "user_email",
+    "kind",
+    "amount_ngn"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

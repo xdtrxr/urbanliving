@@ -176,6 +176,33 @@ async function notifyAdmin(opts: {
     }
 }
 
+// Which booking a Paystack transaction was made for, read from the metadata
+// the payment page attached to it: ride_booking_id for a ride, booking_id for
+// a stay. Without this a reference that paid for one booking could be handed
+// in again to mark another booking of the same price as paid. true: it names
+// this booking. false: it names another one. null: it names none, and the
+// caller must check the reference has not been used. Lockstep copy in
+// verifyRidePayment and verifyPaystackPayment.
+function paymentIsFor(metadata: unknown, kind: string, id: string) {
+    let meta = metadata;
+    if (typeof meta === 'string') {
+        try {
+            meta = JSON.parse(meta);
+        } catch (_err) {
+            meta = null;
+        }
+    }
+    const m = meta && typeof meta === 'object' ? meta : {};
+    const ride = String(m.ride_booking_id || '');
+    const stay = String(m.booking_id || '');
+    if (kind === 'ride') {
+        if (stay) return false;
+        return ride ? ride === id : null;
+    }
+    if (ride) return false;
+    return stay ? stay === id : null;
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -244,6 +271,16 @@ Deno.serve(async (req) => {
                 error: 'Payment not verified',
                 details: verifyData?.message || 'Paystack returned non-success',
             }), { status: 402, headers });
+        }
+
+        // The reference must be the one that paid for THIS booking, and must
+        // not already be on another one.
+        const madeFor = paymentIsFor(verifyData.data?.metadata, 'stay', booking.id);
+        const reused = madeFor === false ? [] : (await base44.asServiceRole.entities.Booking.filter({ transaction_hash: reference }))
+            .filter((row: any) => row.id !== booking.id);
+        if (madeFor === false || reused.length > 0) {
+            console.error(`Reference ${reference} was not paid for stay ${booking.id}`);
+            return new Response(JSON.stringify({ success: false, error: 'This payment was made for a different booking.', code: 'REFERENCE_MISMATCH' }), { status: 400, headers });
         }
 
         // Amount check (Paystack returns kobo)

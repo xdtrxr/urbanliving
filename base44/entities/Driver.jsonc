@@ -59,6 +59,17 @@
       "type": "boolean",
       "default": false,
       "description": "Admin must explicitly approve a driver before they can be assigned to bookings"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "The login this driver signs in with, stored trimmed and lower-cased. Empty until admin links one; an unlinked driver is assigned as before and their pay is not tracked in the app."
+    },
+    "previous_user_emails": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Every login this driver was linked to before the current one. DriversAdmin appends the old address when user_email changes, so withdrawals made under it still count against the driver's balance."
     }
   },
   "required": ["full_name", "phone", "city"],

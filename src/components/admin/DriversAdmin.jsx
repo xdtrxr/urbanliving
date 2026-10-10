@@ -15,10 +15,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Plus, List, UserRound, Upload, Loader2, Trash2, Edit3, Save, X,
-  AlertCircle, Phone, RefreshCw,
+  AlertCircle, Phone, RefreshCw, Mail,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { CITIES } from '@/config/rides';
+import { CITIES, normaliseEmail, looksLikeEmail, driverLoginPatch, mayDeleteDriver } from '@/config/rides';
 
 // DriversAdmin — CRUD for the driver roster.
 //
@@ -33,6 +33,8 @@ import { CITIES } from '@/config/rides';
 const EMPTY = {
   full_name: '',
   phone: '',
+  // The login the driver signs in with. Empty means their pay is not tracked.
+  user_email: '',
   photo: '',
   city: CITIES[0],
   languages: '',          // comma-separated in the form, array on the row
@@ -92,6 +94,7 @@ export default function DriversAdmin() {
     setForm({
       full_name: d.full_name || '',
       phone: d.phone || '',
+      user_email: d.user_email || '',
       photo: d.photo || '',
       city: d.city || CITIES[0],
       languages: arrayToCsv(d.languages),
@@ -134,11 +137,24 @@ export default function DriversAdmin() {
       setError('Name and phone are both required — the phone is what the guest gets on the day.');
       return;
     }
+    const loginEmail = normaliseEmail(form.user_email);
+    if (loginEmail && !looksLikeEmail(loginEmail)) {
+      setError('That login email does not look like an email address.');
+      return;
+    }
+    // One login is one driver. getDriverProfile would otherwise have to pick.
+    if (loginEmail && drivers.some((d) => d.id !== editingId && normaliseEmail(d.user_email) === loginEmail)) {
+      setError('Another driver is already linked to that login email.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         full_name: form.full_name.trim(),
         phone: form.phone.trim(),
+        // user_email plus previous_user_emails: changing a login keeps the old
+        // address on the row so withdrawals made under it still count.
+        ...driverLoginPatch(drivers.find((d) => d.id === editingId), form.user_email),
         photo: form.photo || undefined,
         city: form.city,
         languages: csvToArray(form.languages),
@@ -167,6 +183,22 @@ export default function DriversAdmin() {
     if (!toDelete) return;
     setDeletingId(toDelete.id);
     try {
+      // Earnings and withdrawals hang off the profile's id. Delete the profile
+      // and the driver's wallet, and any payout waiting on it, are orphaned.
+      // Both entities are admin-only at the API, like Driver itself. If either
+      // lookup fails this throws, and nothing is deleted.
+      const [earnings, withdrawals] = await Promise.all([
+        base44.entities.DriverEarning.filter({ driver_id: toDelete.id }, undefined, 1),
+        base44.entities.WithdrawalRequest.filter({ driver_id: toDelete.id }, undefined, 1),
+      ]);
+      if (!mayDeleteDriver(earnings, withdrawals)) {
+        toast({
+          title: 'This driver has pay on record',
+          description: `${toDelete.full_name} has earnings or withdrawals in the app, so the profile cannot be removed. Switch them to inactive instead: they are no longer offered rides and keep access to their wallet.`,
+          variant: 'destructive',
+        });
+        return;
+      }
       await base44.entities.Driver.delete(toDelete.id);
       toast({ title: 'Driver removed' });
       await load();
@@ -255,6 +287,19 @@ export default function DriversAdmin() {
                   <Label htmlFor="d-langs">Languages (comma separated)</Label>
                   <Input id="d-langs" value={form.languages} onChange={(e) => set('languages', e.target.value)}
                     placeholder="English, Igbo, Pidgin" className="mt-1 rounded-xl" />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="d-email" className="flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" /> Login email
+                  </Label>
+                  <Input id="d-email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off"
+                    spellCheck={false} value={form.user_email}
+                    onChange={(e) => set('user_email', e.target.value)}
+                    placeholder="emeka@example.com" className="mt-1 rounded-xl" />
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    The driver signs in with this email to see rides and pay. Leave it empty and
+                    they are assigned as before, with their pay kept outside the app.
+                  </p>
                 </div>
               </div>
 
@@ -369,6 +414,11 @@ export default function DriversAdmin() {
                   {expirySoon(d.licence_expiry) && (
                     <Badge className="bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-0">Licence expiring</Badge>
                   )}
+                  {d.user_email ? (
+                    <Badge variant="outline" className="text-xs">Has login</Badge>
+                  ) : (
+                    <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-0 text-xs">No login · pay not tracked</Badge>
+                  )}
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-300 truncate">
                   {[d.city, d.phone, d.years_experience ? `${d.years_experience} yrs` : null]
@@ -397,7 +447,8 @@ export default function DriversAdmin() {
             <AlertDialogDescription>
               This cannot be undone. Rides already assigned to this driver keep the
               assignment on the row, but the guest&apos;s driver card will stop
-              resolving — deactivate instead if they might return.
+              resolving — deactivate instead if they might return. A driver
+              with earnings or withdrawals on record cannot be removed at all.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

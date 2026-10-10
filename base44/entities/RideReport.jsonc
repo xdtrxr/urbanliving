@@ -1,0 +1,138 @@
+{
+  "name": "RideReport",
+  "type": "object",
+  "description": "A complaint about a ride, filed by one party about the other: a driver about a rude, abusive or absent guest, or a guest about a driver. Written only by createRideReport, which checks the reporter is a party to the ride and inside the reporting window (ride start until 7 days after its end), and by resolveRideReport (admin). While a report on a ride is open or being reviewed, the driver's pay for that ride stays held. Admin-only in every direction because rows carry admin's notes about real people; reporters learn the state of their report through the ride lists.",
+  "properties": {
+    "ride_booking_id": {
+      "type": "string",
+      "description": "FK to RideBooking."
+    },
+    "booking_reference": {
+      "type": "string",
+      "description": "Snapshot of RideBooking.booking_reference so the inbox reads without a join."
+    },
+    "vehicle_name": {
+      "type": "string",
+      "description": "Snapshot of RideBooking.vehicle_name."
+    },
+    "service_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Snapshot of RideBooking.service_date."
+    },
+    "reporter_email": {
+      "type": "string",
+      "description": "Login of the person who filed the report. Taken from the session, never from the request."
+    },
+    "reporter_role": {
+      "type": "string",
+      "enum": [
+        "driver",
+        "guest"
+      ],
+      "description": "Which side of the ride the reporter was on, decided by the server."
+    },
+    "reporter_name": {
+      "type": "string",
+      "description": "Display name of the reporter at the time."
+    },
+    "reported_email": {
+      "type": "string",
+      "description": "The guest's login, set when a driver reports a guest. Empty for a report about a driver."
+    },
+    "reported_driver_id": {
+      "type": "string",
+      "description": "FK to Driver, set when a guest reports a driver. Empty for a report about a guest."
+    },
+    "reported_name": {
+      "type": "string",
+      "description": "Display name of the person reported, at the time."
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "rude",
+        "abusive",
+        "threatening",
+        "unsafe",
+        "no_show",
+        "damage",
+        "other"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "description": "What happened, in the reporter's words. 10 to 2000 characters."
+    },
+    "evidence_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Up to three uploaded photos. Each is an https URL; the admin tab renders them as images only."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "reviewing",
+        "resolved",
+        "dismissed"
+      ],
+      "default": "open",
+      "description": "open and reviewing keep the ride's driver pay held. resolved and dismissed let it release."
+    },
+    "action_taken": {
+      "type": "string",
+      "enum": [
+        "none",
+        "warning",
+        "blocked"
+      ],
+      "default": "none",
+      "description": "What admin decided. blocked sets User.ride_blocked for a reported guest, or deactivates a reported driver."
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "Internal. Never shown to either party."
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resolved_by": {
+      "type": "string",
+      "description": "Login of the admin who resolved or dismissed it."
+    }
+  },
+  "required": [
+    "ride_booking_id",
+    "reporter_email",
+    "reporter_role",
+    "category",
+    "description",
+    "status"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

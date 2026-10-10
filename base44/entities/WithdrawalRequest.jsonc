@@ -34,6 +34,10 @@
       "type": "string",
       "description": "Paystack transfer ID"
     },
+    "transfer_reference": {
+      "type": "string",
+      "description": "The reference sent to Paystack for this withdrawal: wd-<row id>, fixed per row, so Paystack never holds two transfers for one withdrawal. Written before the transfer is requested, so the settlement webhook can find the row even if Paystack's answer never arrived."
+    },
     "error_message": {
       "type": "string",
       "description": "Error details if the withdrawal failed"
@@ -56,6 +60,19 @@
     "admin_notes": {
       "type": "string",
       "description": "Internal notes from admin review"
+    },
+    "wallet": {
+      "type": "string",
+      "enum": [
+        "referral",
+        "driver"
+      ],
+      "default": "referral",
+      "description": "Which money this pays out. referral: debited from User.referral_balance_ngn at request time and refunded on failure. driver: nothing is debited; the row itself is the reservation against the driver's released earnings, and a failed row simply stops counting. Rows written before this field existed are referral."
+    },
+    "driver_id": {
+      "type": "string",
+      "description": "FK to Driver, set only when wallet is driver. The driver's balance counts withdrawals by this id."
     }
   },
   "required": [

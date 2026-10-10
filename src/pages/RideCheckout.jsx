@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
+import { fromThrown } from '@/lib/fnResult';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -228,7 +229,11 @@ export default function RideCheckoutPage() {
       setDecision(data.data.next === 'payment' ? 'approved' : 'pending');
     } catch (err) {
       console.error('Ride request failed:', err);
-      setSubmitError(err?.message || 'Something went wrong. Please try again.');
+      // A refusal is a 4xx, which the SDK throws. Its body carries the reason
+      // the guest can act on ("That vehicle is already booked for…", "Ride
+      // bookings are not available on this account…"); err.message is only
+      // "Request failed with status code 409".
+      setSubmitError(fromThrown(err).error);
     } finally {
       setSubmitting(false);
     }

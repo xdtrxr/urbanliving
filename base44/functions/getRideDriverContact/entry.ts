@@ -53,8 +53,9 @@ Deno.serve(async (req) => {
             return json({ success: false, error: 'Not your booking' }, 403);
         }
 
-        // 2. Paid and confirmed
-        if (ride.status !== 'confirmed' || ride.payment_status !== 'paid') {
+        // 2. Paid, and either still to happen or already driven. A completed
+        // ride stays readable so the guest can reach this card after the trip.
+        if ((ride.status !== 'confirmed' && ride.status !== 'completed') || ride.payment_status !== 'paid') {
             return json({
                 success: false,
                 error: 'Driver details become available once your ride is confirmed and paid.',
