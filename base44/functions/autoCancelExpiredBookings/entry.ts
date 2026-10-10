@@ -162,6 +162,14 @@ function releaseDecision(earning: any, ride: any) {
     return 'release';
 }
 
+// True while admin has not closed a report on this ride. Open and reviewing
+// both hold the driver's pay; resolved and dismissed let it go. Lockstep copy
+// in settleDriverEarning.
+async function hasOpenReport(sr: any, rideBookingId: string) {
+    const open = await sr.RideReport.filter({ ride_booking_id: rideBookingId, status: { $in: ['open', 'reviewing'] } });
+    return Array.isArray(open) && open.length > 0;
+}
+
 // Settle one due earning: 'released' | 'reversed' | 'held' | 'skipped'.
 // Re-reads the row first, because admin may have paused, adjusted or reversed
 // it since the page was fetched. Releasing is a status flip and nothing else:
@@ -194,6 +202,9 @@ async function settleDueEarning(sr: any, earningId: string, nowMs: number) {
         await sr.DriverEarning.update(e.id, { on_hold: true, hold_reason: parts[1] });
         return 'held';
     }
+    // Someone has complained about this ride and admin has not closed it yet.
+    // The pay waits; the next tick after the report is closed releases it.
+    if (await hasOpenReport(sr, e.ride_booking_id)) return 'skipped';
     await sr.DriverEarning.update(e.id, {
         status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
     });

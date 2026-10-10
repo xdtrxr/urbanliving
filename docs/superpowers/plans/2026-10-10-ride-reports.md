@@ -1306,3 +1306,578 @@ git add scripts/check-ride-reports.mjs base44/functions/checkRideAvailability/en
 git commit -m "feat(rides): a blocked guest cannot request a ride; refusals on the request screen are readable" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task B05: An open report holds the pay, and the ride lists know about reports
+
+**Files:**
+- Modify: `scripts/check-ride-reports.mjs` (reports and money section, above `// ---- result ----`)
+- Modify: `scripts/check-driver-wallet.mjs` (the sweep's settle helper now needs a report table; two allow-lists gain fields)
+- Modify: `base44/functions/autoCancelExpiredBookings/entry.ts` (`hasOpenReport`; the release pass skips a ride under review)
+- Modify: `base44/functions/settleDriverEarning/entry.ts` (`hasOpenReport`; Release now refuses with `OPEN_REPORT`)
+- Modify: `base44/functions/getDriverRides/entry.ts` (`reportWindowOpen`; `can_report`, `already_reported`, `earning.under_review`)
+- Modify: `base44/functions/getDriverWallet/entry.ts` (`under_review` on ledger rows)
+- Modify: `base44/functions/getRideBookings/entry.ts` (`reportWindowOpen`; `can_report`, `already_reported` for the guest)
+
+**Interfaces:**
+- Consumes: entity `RideReport` (Task B01); `reportWindowOpen`, `REPORT_WINDOW_AFTER_END_MS` (Task B02, copied); `settleDueEarning`, `isReleasable`, `releaseDecision` (wallet plan, Task A05); `driverRideView`, `ledgerView` (wallet plan, Tasks A07 and A08).
+- Produces: `async hasOpenReport(sr, rideBookingId) → boolean`, identical in `autoCancelExpiredBookings` and `settleDriverEarning`. `settleDriverEarning` gains the refusal `OPEN_REPORT` (409) for `release`.
+- Changes: `driverRideView(ride, bucket, win, earning, flags)` where `flags` is `{ reported, under_review, window_open }`; every ride from `getDriverRides` now carries `already_reported: boolean`, `can_report: boolean`, and `earning.under_review: boolean`. `ledgerView(earning, underReview)`; every ledger row from `getDriverWallet` carries `under_review: boolean`. Every ride from `getRideBookings` with `scope: 'mine'` carries `already_reported` and `can_report`.
+
+- [ ] **Step 1: Write the failing checks**
+
+**Edit `scripts/check-ride-reports.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Reports and money ──────────────────────────────────────────────────────
+// Review focus 5: pay that falls due while a report on its ride is open.
+console.log('\n— reports and money —');
+identical('hasOpenReport', 'sr, rideBookingId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
+for (const dir of ['getDriverRides', 'getRideBookings']) {
+  identical('reportWindowOpen', 'ride, nowMs', [HOME, dir]);
+  check(`one reporting window: ${dir} agrees with ${HOME}`,
+    constLine(dir, 'REPORT_WINDOW_AFTER_END_MS'), constLine(HOME, 'REPORT_WINDOW_AFTER_END_MS'));
+}
+
+const SWEEP = 'autoCancelExpiredBookings';
+const hasOpenReport = make('hasOpenReport', liftSrc(SWEEP, 'hasOpenReport', 'sr, rideBookingId'));
+const reportsOf = (rows) => ({ RideReport: fakeEntity(rows) });
+check('an open report holds the ride', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }]), 'ride1'), true);
+check('so does one being reviewed', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'reviewing' }]), 'ride1'), true);
+check('a resolved report does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'resolved' }]), 'ride1'), false);
+check('a dismissed report does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'dismissed' }]), 'ride1'), false);
+check('a report on another ride does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'other', status: 'open' }]), 'ride1'), false);
+check('no reports at all', await hasOpenReport(reportsOf([]), 'ride1'), false);
+
+const settleDueEarning = make('settleDueEarning',
+  liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),
+  liftSrc(SWEEP, 'hasOpenReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
+const DUE = at('2026-08-10T12:00:00.000Z');
+const dueEarning = { id: 'e1', ride_booking_id: 'ride1', driver_id: 'drvA', amount_ngn: 15000, status: 'held', on_hold: false, release_at: '2026-08-10T12:00:00.000Z' };
+const drivenRide = { id: 'ride1', driver_id: 'drvA', status: 'completed', payment_status: 'paid' };
+const worldWith = (reports, rideOverride = {}) => ({
+  DriverEarning: fakeEntity([dueEarning]), RideBooking: fakeEntity([{ ...drivenRide, ...rideOverride }]), RideReport: fakeEntity(reports),
+});
+{
+  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }]);
+  check('due pay is not released while a report is open', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  check('…it stays held', sr.DriverEarning.rows[0].status, 'held');
+  // Admin closes the report; the very next tick pays.
+  sr.RideReport.rows[0].status = 'resolved';
+  check('once the report is resolved the next sweep releases it', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
+}
+{
+  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'reviewing' }]);
+  check('a report being reviewed holds the pay too', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  sr.RideReport.rows[0].status = 'dismissed';
+  check('a dismissed report lets it go', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
+}
+{
+  // A cancelled ride is reversed whether or not anyone complained about it.
+  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }], { status: 'cancelled' });
+  check('a cancelled ride is still reversed with a report open', await settleDueEarning(sr, 'e1', DUE), 'reversed');
+}
+{
+  const sr = worldWith([{ id: 'r1', ride_booking_id: 'someone-elses-ride', status: 'open' }]);
+  check('a report on a different ride holds nothing here', await settleDueEarning(sr, 'e1', DUE), 'released');
+}
+
+console.log('\n— what the ride lists say about reports —');
+const driverRideView = make('driverRideView',
+  liftSrc('getDriverRides', 'safeIso', 'ms'), liftSrc('getDriverRides', 'driverRideView', 'ride, bucket, win, earning, flags'));
+const paidRide = { id: 'ride1', status: 'completed', payment_status: 'paid', guest_name: 'Ada Obi' };
+const win = { startMs: at('2026-08-10T08:00:00.000Z'), endMs: at('2026-08-10T10:00:00.000Z') };
+const heldPay = { id: 'e1', amount_ngn: 15000, status: 'held' };
+const view = (flags, earning = heldPay, r = paidRide) => driverRideView(r, 'past', win, earning, flags);
+check('inside the window and not yet reported: offered', view({ window_open: true, reported: false }).can_report, true);
+check('already reported: not offered again', view({ window_open: true, reported: true }).can_report, false);
+check('…and the card can say so', view({ window_open: true, reported: true }).already_reported, true);
+check('outside the window: not offered', view({ window_open: false, reported: false }).can_report, false);
+check('an unpaid ride is never reportable', view({ window_open: true, reported: false }, heldPay, { ...paidRide, payment_status: 'unpaid' }).can_report, false);
+check('no flags at all: not offered, not reported', `${view(undefined).can_report}/${view(undefined).already_reported}`, 'false/false');
+check('held pay on a ride under review says so', view({ under_review: true }).earning.under_review, true);
+check('released pay is never "under review"', view({ under_review: true }, { ...heldPay, status: 'released' }).earning.under_review, false);
+
+const ledgerView = make('ledgerView', liftSrc('getDriverWallet', 'ledgerView', 'earning, underReview'));
+check('a held ledger row on a ride under review says so', ledgerView({ id: 'e1', status: 'held' }, true).under_review, true);
+check('a held row with no report does not', ledgerView({ id: 'e1', status: 'held' }, false).under_review, false);
+check('a released row never does', ledgerView({ id: 'e1', status: 'released' }, true).under_review, false);
+
+// ---- result ----
+```
+
+The wallet script's copy of the settle helper has to be built with a report table too, and two allow-lists it pins gain fields.
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+const settleDueEarning = make('settleDueEarning',
+  sweepSrc('isReleasable', 'earning, nowMs'), sweepSrc('releaseDecision', 'earning, ride'),
+  sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
+const world = (earning, ride) => ({ DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []) });
+```
+
+replace with:
+
+```js
+const settleDueEarning = make('settleDueEarning',
+  sweepSrc('isReleasable', 'earning, nowMs'), sweepSrc('releaseDecision', 'earning, ride'),
+  sweepSrc('hasOpenReport', 'sr, rideBookingId'), sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
+// No reports on any ride here; scripts/check-ride-reports.mjs covers the cases with one.
+const world = (earning, ride) => ({
+  DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []), RideReport: fakeEntity([]),
+});
+```
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+  liftSrc('getDriverRides', 'safeIso', 'ms'), liftSrc('getDriverRides', 'driverRideView', 'ride, bucket, win, earning'));
+```
+
+replace with:
+
+```js
+  liftSrc('getDriverRides', 'safeIso', 'ms'), liftSrc('getDriverRides', 'driverRideView', 'ride, bucket, win, earning, flags'));
+```
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+  'booking_reference', 'bucket', 'dropoff_location', 'duration_days', 'duration_hours', 'duration_tier',
+```
+
+replace with:
+
+```js
+  'already_reported', 'booking_reference', 'bucket', 'can_report', 'dropoff_location', 'duration_days', 'duration_hours', 'duration_tier',
+```
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+  ['amount_ngn', 'id', 'on_hold', 'release_at', 'released_at', 'status']);
+```
+
+replace with:
+
+```js
+  ['amount_ngn', 'id', 'on_hold', 'release_at', 'released_at', 'status', 'under_review']);
+```
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+const ledgerView = make('ledgerView', walletSrc('ledgerView', 'earning'));
+```
+
+replace with:
+
+```js
+const ledgerView = make('ledgerView', walletSrc('ledgerView', 'earning, underReview'));
+```
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+    'ride_booking_id', 'service_date', 'status', 'vehicle_name']);
+```
+
+replace with:
+
+```js
+    'ride_booking_id', 'service_date', 'status', 'under_review', 'vehicle_name']);
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `node scripts/check-ride-reports.mjs`
+
+Expected: `Error: could not find hasOpenReport in base44/functions/autoCancelExpiredBookings/entry.ts`.
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: the same error, from the wallet script's own settle section.
+
+- [ ] **Step 3: The sweep skips pay on a ride under review**
+
+The check sits after the reverse and hold branches on purpose: a cancelled or reassigned ride is still reversed while a report is open. Only the release waits.
+
+**Edit `base44/functions/autoCancelExpiredBookings/entry.ts`** — find:
+
+```ts
+// Settle one due earning: 'released' | 'reversed' | 'held' | 'skipped'.
+```
+
+replace with:
+
+```ts
+// True while admin has not closed a report on this ride. Open and reviewing
+// both hold the driver's pay; resolved and dismissed let it go. Lockstep copy
+// in settleDriverEarning.
+async function hasOpenReport(sr: any, rideBookingId: string) {
+    const open = await sr.RideReport.filter({ ride_booking_id: rideBookingId, status: { $in: ['open', 'reviewing'] } });
+    return Array.isArray(open) && open.length > 0;
+}
+
+// Settle one due earning: 'released' | 'reversed' | 'held' | 'skipped'.
+```
+
+**Edit `base44/functions/autoCancelExpiredBookings/entry.ts`** — find:
+
+```ts
+        return 'held';
+    }
+    await sr.DriverEarning.update(e.id, {
+        status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
+    });
+```
+
+replace with:
+
+```ts
+        return 'held';
+    }
+    // Someone has complained about this ride and admin has not closed it yet.
+    // The pay waits; the next tick after the report is closed releases it.
+    if (await hasOpenReport(sr, e.ride_booking_id)) return 'skipped';
+    await sr.DriverEarning.update(e.id, {
+        status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
+    });
+```
+
+- [ ] **Step 4: Admin's Release now refuses too**
+
+**Edit `base44/functions/settleDriverEarning/entry.ts`** — find:
+
+```ts
+async function tryPush(sdk: any, opts: Record<string, unknown>) {
+```
+
+replace with:
+
+```ts
+// True while admin has not closed a report on this ride. Open and reviewing
+// both hold the driver's pay; resolved and dismissed let it go. Lockstep copy,
+// see autoCancelExpiredBookings.
+async function hasOpenReport(sr: any, rideBookingId: string) {
+    const open = await sr.RideReport.filter({ ride_booking_id: rideBookingId, status: { $in: ['open', 'reviewing'] } });
+    return Array.isArray(open) && open.length > 0;
+}
+
+async function tryPush(sdk: any, opts: Record<string, unknown>) {
+```
+
+**Edit `base44/functions/settleDriverEarning/entry.ts`** — find:
+
+```ts
+                    code: 'RIDE_STATE',
+                }, 409);
+            }
+```
+
+replace with:
+
+```ts
+                    code: 'RIDE_STATE',
+                }, 409);
+            }
+            // Releasing around an open complaint would make the report
+            // pointless. Admin closes it first, in Rides → Reports.
+            if (await hasOpenReport(sr, earning.ride_booking_id)) {
+                return json({
+                    success: false,
+                    error: 'A report on this ride is still open. Resolve or dismiss it under Rides → Reports first.',
+                    code: 'OPEN_REPORT',
+                }, 409);
+            }
+```
+
+- [ ] **Step 5: `getDriverRides` says which rides can be reported and which pay is under review**
+
+**Edit `base44/functions/getDriverRides/entry.ts`** — find:
+
+```ts
+function safeIso(ms: number) {
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+const PAGE = 500;
+```
+
+replace with:
+
+```ts
+function safeIso(ms: number) {
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+// ── Reporting — lockstep copy, see createRideReport ─────────────────────────
+const REPORT_WINDOW_AFTER_END_MS = 7 * DAY_MS;
+
+function reportWindowOpen(ride: any, nowMs: number) {
+    const w = windowOf(ride);
+    if (!w || !Number.isFinite(w.startMs) || !Number.isFinite(w.endMs)) return false;
+    return w.startMs <= nowMs && nowMs <= w.endMs + REPORT_WINDOW_AFTER_END_MS;
+}
+
+const PAGE = 500;
+```
+
+**Edit `base44/functions/getDriverRides/entry.ts`** — find:
+
+```ts
+function driverRideView(ride: any, bucket: string, win: any, earning: any) {
+```
+
+replace with:
+
+```ts
+function driverRideView(ride: any, bucket: string, win: any, earning: any, flags: any) {
+```
+
+**Edit `base44/functions/getDriverRides/entry.ts`** — find:
+
+```ts
+        bucket,
+        status: ride.status,
+        earning: earning ? {
+            id: earning.id,
+            amount_ngn: Math.max(0, Math.round(Number(earning.amount_ngn) || 0)),
+            status: earning.status,
+            on_hold: !!earning.on_hold,
+            release_at: earning.release_at || null,
+            released_at: earning.released_at || null,
+        } : null,
+```
+
+replace with:
+
+```ts
+        bucket,
+        status: ride.status,
+        // The driver has already told us about this ride.
+        already_reported: !!(flags && flags.reported),
+        // Whether to offer "Report this customer": a paid ride, inside the
+        // window, not reported yet. createRideReport checks all three again.
+        can_report: ride.payment_status === 'paid' && !!(flags && flags.window_open) && !(flags && flags.reported),
+        earning: earning ? {
+            id: earning.id,
+            amount_ngn: Math.max(0, Math.round(Number(earning.amount_ngn) || 0)),
+            status: earning.status,
+            on_hold: !!earning.on_hold,
+            release_at: earning.release_at || null,
+            released_at: earning.released_at || null,
+            // A report on this ride is open, so the held pay waits for admin.
+            under_review: earning.status === 'held' && !!(flags && flags.under_review),
+        } : null,
+```
+
+**Edit `base44/functions/getDriverRides/entry.ts`** — find:
+
+```ts
+        const [rides, earnings] = await Promise.all([
+            fetchAll(sr.RideBooking, { driver_id: driver.id }),
+            fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+        ]);
+```
+
+replace with:
+
+```ts
+        const [rides, earnings, myReports, openReports] = await Promise.all([
+            fetchAll(sr.RideBooking, { driver_id: driver.id }),
+            fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+            fetchAll(sr.RideReport, { reporter_email: user.email }),
+            fetchAll(sr.RideReport, { status: { $in: ['open', 'reviewing'] } }),
+        ]);
+        const reportedRides = new Set(myReports.map((r: any) => r.ride_booking_id));
+        const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
+```
+
+**Edit `base44/functions/getDriverRides/entry.ts`** — find:
+
+```ts
+            return driverRideView(r, bucket, windowOf(r), earningForRide(earningsByRide.get(r.id) || []));
+```
+
+replace with:
+
+```ts
+            return driverRideView(r, bucket, windowOf(r), earningForRide(earningsByRide.get(r.id) || []), {
+                reported: reportedRides.has(r.id),
+                under_review: ridesUnderReview.has(r.id),
+                window_open: reportWindowOpen(r, nowMs),
+            });
+```
+
+- [ ] **Step 6: `getDriverWallet` marks ledger rows under review**
+
+**Edit `base44/functions/getDriverWallet/entry.ts`** — find:
+
+```ts
+function ledgerView(earning: any) {
+```
+
+replace with:
+
+```ts
+function ledgerView(earning: any, underReview: boolean) {
+```
+
+**Edit `base44/functions/getDriverWallet/entry.ts`** — find:
+
+```ts
+        on_hold: !!earning.on_hold,
+        release_at: earning.release_at || null,
+        held_at: earning.held_at || earning.created_date || null,
+```
+
+replace with:
+
+```ts
+        on_hold: !!earning.on_hold,
+        // A report on this ride is open, so the held pay waits for admin.
+        under_review: earning.status === 'held' && !!underReview,
+        release_at: earning.release_at || null,
+        held_at: earning.held_at || earning.created_date || null,
+```
+
+**Edit `base44/functions/getDriverWallet/entry.ts`** — find:
+
+```ts
+        const [earnings, withdrawalRows] = await Promise.all([
+            fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+            fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
+        ]);
+```
+
+replace with:
+
+```ts
+        const [earnings, withdrawalRows, openReports] = await Promise.all([
+            fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+            fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
+            fetchAll(sr.RideReport, { status: { $in: ['open', 'reviewing'] } }),
+        ]);
+        const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
+```
+
+**Edit `base44/functions/getDriverWallet/entry.ts`** — find:
+
+```ts
+                ledger: earnings.slice().sort(newestFirst).slice(0, LEDGER_LIMIT).map(ledgerView),
+```
+
+replace with:
+
+```ts
+                ledger: earnings.slice().sort(newestFirst).slice(0, LEDGER_LIMIT)
+                    .map((e) => ledgerView(e, ridesUnderReview.has(e.ride_booking_id))),
+```
+
+- [ ] **Step 7: `getRideBookings` tells the guest which rides they can report**
+
+The report lookup is wrapped on its own: a guest's ride list must never fail because the reports table could not be read.
+
+**Edit `base44/functions/getRideBookings/entry.ts`** — find:
+
+```ts
+    if (nowMs < w.startMs) return 'upcoming';
+    return 'current';
+}
+```
+
+replace with:
+
+```ts
+    if (nowMs < w.startMs) return 'upcoming';
+    return 'current';
+}
+
+// ── Reporting — lockstep copy, see createRideReport ─────────────────────────
+const REPORT_WINDOW_AFTER_END_MS = 7 * DAY_MS;
+
+function reportWindowOpen(ride: any, nowMs: number) {
+    const w = windowOf(ride);
+    if (!w || !Number.isFinite(w.startMs) || !Number.isFinite(w.endMs)) return false;
+    return w.startMs <= nowMs && nowMs <= w.endMs + REPORT_WINDOW_AFTER_END_MS;
+}
+```
+
+**Edit `base44/functions/getRideBookings/entry.ts`** — find:
+
+```ts
+            rides = await fetchAll(base44.entities.RideBooking, { guest_email: user.email });
+        }
+```
+
+replace with:
+
+```ts
+            rides = await fetchAll(base44.entities.RideBooking, { guest_email: user.email });
+        }
+
+        // Which of their own rides this guest has already reported. Read under
+        // the service role because RideReport is admin-only at the API, and on
+        // its own so that a problem here can never cost them their ride list.
+        const reportedRides = new Set<string>();
+        if (scope === 'mine') {
+            try {
+                const mine = await fetchAll(base44.asServiceRole.entities.RideReport, { reporter_email: user.email });
+                for (const rep of mine) reportedRides.add(rep.ride_booking_id);
+            } catch (err) {
+                console.warn('Could not read ride reports (the ride list is unaffected):', err);
+            }
+        }
+```
+
+**Edit `base44/functions/getRideBookings/entry.ts`** — find:
+
+```ts
+                driver_assigned: !!r.driver_id,
+            };
+```
+
+replace with:
+
+```ts
+                driver_assigned: !!r.driver_id,
+                // Guests only: whether "Report a problem with this driver" is
+                // offered. createRideReport checks every part of it again.
+                already_reported: scope === 'mine' ? reportedRides.has(r.id) : undefined,
+                can_report: scope === 'mine'
+                    ? r.payment_status === 'paid' && !!r.driver_id && reportWindowOpen(r, nowMs) && !reportedRides.has(r.id)
+                    : undefined,
+            };
+```
+
+- [ ] **Step 8: Run the checks**
+
+Run: `npm run check`
+
+Expected: five `PASS` lines.
+
+Run: `for f in autoCancelExpiredBookings settleDriverEarning getDriverRides getDriverWallet getRideBookings; do node_modules/.bin/esbuild base44/functions/$f/entry.ts --format=esm --target=esnext --outfile=/dev/null || echo "PARSE FAIL $f"; done`
+
+Expected: no `PARSE FAIL` line.
+
+- [ ] **Step 9: Sandbox checklist (after the next publish)**
+
+1. File a report on a ride whose pay is due (Task B02, step 6.1), then POST to `autoCancelExpiredBookings` as admin. Expected: `rides.released` does not count that ride; its earning is still `held`; the driver's wallet shows it as "Under review".
+2. As admin, press Release now on that row in Rides → Earnings. Expected: "A report on this ride is still open…".
+3. Dismiss the report, POST to the sweep again. Expected: the earning is `released`.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add scripts/check-ride-reports.mjs scripts/check-driver-wallet.mjs base44/functions/autoCancelExpiredBookings/entry.ts base44/functions/settleDriverEarning/entry.ts base44/functions/getDriverRides/entry.ts base44/functions/getDriverWallet/entry.ts base44/functions/getRideBookings/entry.ts
+git commit -m "feat(rides): an open report holds the driver's pay; ride lists know what can be reported" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+

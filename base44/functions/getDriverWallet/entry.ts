@@ -109,7 +109,7 @@ function walletTotals(earnings: any[], withdrawals: any[]) {
 
 // One ledger row as the driver sees it. An allow-list: hold reasons, admin
 // notes and the rate behind the figure stay on the server.
-function ledgerView(earning: any) {
+function ledgerView(earning: any, underReview: boolean) {
     return {
         id: earning.id,
         ride_booking_id: earning.ride_booking_id,
@@ -119,6 +119,8 @@ function ledgerView(earning: any) {
         amount_ngn: Math.max(0, Math.round(Number(earning.amount_ngn) || 0)),
         status: earning.status,
         on_hold: !!earning.on_hold,
+        // A report on this ride is open, so the held pay waits for admin.
+        under_review: earning.status === 'held' && !!underReview,
         release_at: earning.release_at || null,
         held_at: earning.held_at || earning.created_date || null,
         released_at: earning.released_at || null,
@@ -153,10 +155,12 @@ Deno.serve(async (req) => {
             }, 403);
         }
 
-        const [earnings, withdrawalRows] = await Promise.all([
+        const [earnings, withdrawalRows, openReports] = await Promise.all([
             fetchAll(sr.DriverEarning, { driver_id: driver.id }),
             fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
+            fetchAll(sr.RideReport, { status: { $in: ['open', 'reviewing'] } }),
         ]);
+        const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
         const mine = driverWithdrawals(driver, withdrawalRows);
         const totals = walletTotals(earnings, mine);
 
@@ -181,7 +185,8 @@ Deno.serve(async (req) => {
                     status: inFlight.status,
                     requested_at: inFlight.requested_at || inFlight.created_date || null,
                 } : null,
-                ledger: earnings.slice().sort(newestFirst).slice(0, LEDGER_LIMIT).map(ledgerView),
+                ledger: earnings.slice().sort(newestFirst).slice(0, LEDGER_LIMIT)
+                    .map((e) => ledgerView(e, ridesUnderReview.has(e.ride_booking_id))),
                 ledger_truncated: earnings.length > LEDGER_LIMIT,
             },
         });

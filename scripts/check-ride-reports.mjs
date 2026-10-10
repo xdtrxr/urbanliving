@@ -244,6 +244,80 @@ check('an account from before the flag existed is not', isRideBlocked({ email: '
 check('the string "false" does not block', isRideBlocked({ ride_blocked: 'false' }), false);
 check('a missing account row does not block', isRideBlocked(undefined), false);
 
+// ── Reports and money ──────────────────────────────────────────────────────
+// Review focus 5: pay that falls due while a report on its ride is open.
+console.log('\n— reports and money —');
+identical('hasOpenReport', 'sr, rideBookingId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
+for (const dir of ['getDriverRides', 'getRideBookings']) {
+  identical('reportWindowOpen', 'ride, nowMs', [HOME, dir]);
+  check(`one reporting window: ${dir} agrees with ${HOME}`,
+    constLine(dir, 'REPORT_WINDOW_AFTER_END_MS'), constLine(HOME, 'REPORT_WINDOW_AFTER_END_MS'));
+}
+
+const SWEEP = 'autoCancelExpiredBookings';
+const hasOpenReport = make('hasOpenReport', liftSrc(SWEEP, 'hasOpenReport', 'sr, rideBookingId'));
+const reportsOf = (rows) => ({ RideReport: fakeEntity(rows) });
+check('an open report holds the ride', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }]), 'ride1'), true);
+check('so does one being reviewed', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'reviewing' }]), 'ride1'), true);
+check('a resolved report does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'resolved' }]), 'ride1'), false);
+check('a dismissed report does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'dismissed' }]), 'ride1'), false);
+check('a report on another ride does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'other', status: 'open' }]), 'ride1'), false);
+check('no reports at all', await hasOpenReport(reportsOf([]), 'ride1'), false);
+
+const settleDueEarning = make('settleDueEarning',
+  liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),
+  liftSrc(SWEEP, 'hasOpenReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
+const DUE = at('2026-08-10T12:00:00.000Z');
+const dueEarning = { id: 'e1', ride_booking_id: 'ride1', driver_id: 'drvA', amount_ngn: 15000, status: 'held', on_hold: false, release_at: '2026-08-10T12:00:00.000Z' };
+const drivenRide = { id: 'ride1', driver_id: 'drvA', status: 'completed', payment_status: 'paid' };
+const worldWith = (reports, rideOverride = {}) => ({
+  DriverEarning: fakeEntity([dueEarning]), RideBooking: fakeEntity([{ ...drivenRide, ...rideOverride }]), RideReport: fakeEntity(reports),
+});
+{
+  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }]);
+  check('due pay is not released while a report is open', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  check('…it stays held', sr.DriverEarning.rows[0].status, 'held');
+  // Admin closes the report; the very next tick pays.
+  sr.RideReport.rows[0].status = 'resolved';
+  check('once the report is resolved the next sweep releases it', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
+}
+{
+  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'reviewing' }]);
+  check('a report being reviewed holds the pay too', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  sr.RideReport.rows[0].status = 'dismissed';
+  check('a dismissed report lets it go', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
+}
+{
+  // A cancelled ride is reversed whether or not anyone complained about it.
+  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }], { status: 'cancelled' });
+  check('a cancelled ride is still reversed with a report open', await settleDueEarning(sr, 'e1', DUE), 'reversed');
+}
+{
+  const sr = worldWith([{ id: 'r1', ride_booking_id: 'someone-elses-ride', status: 'open' }]);
+  check('a report on a different ride holds nothing here', await settleDueEarning(sr, 'e1', DUE), 'released');
+}
+
+console.log('\n— what the ride lists say about reports —');
+const driverRideView = make('driverRideView',
+  liftSrc('getDriverRides', 'safeIso', 'ms'), liftSrc('getDriverRides', 'driverRideView', 'ride, bucket, win, earning, flags'));
+const paidRide = { id: 'ride1', status: 'completed', payment_status: 'paid', guest_name: 'Ada Obi' };
+const win = { startMs: at('2026-08-10T08:00:00.000Z'), endMs: at('2026-08-10T10:00:00.000Z') };
+const heldPay = { id: 'e1', amount_ngn: 15000, status: 'held' };
+const view = (flags, earning = heldPay, r = paidRide) => driverRideView(r, 'past', win, earning, flags);
+check('inside the window and not yet reported: offered', view({ window_open: true, reported: false }).can_report, true);
+check('already reported: not offered again', view({ window_open: true, reported: true }).can_report, false);
+check('…and the card can say so', view({ window_open: true, reported: true }).already_reported, true);
+check('outside the window: not offered', view({ window_open: false, reported: false }).can_report, false);
+check('an unpaid ride is never reportable', view({ window_open: true, reported: false }, heldPay, { ...paidRide, payment_status: 'unpaid' }).can_report, false);
+check('no flags at all: not offered, not reported', `${view(undefined).can_report}/${view(undefined).already_reported}`, 'false/false');
+check('held pay on a ride under review says so', view({ under_review: true }).earning.under_review, true);
+check('released pay is never "under review"', view({ under_review: true }, { ...heldPay, status: 'released' }).earning.under_review, false);
+
+const ledgerView = make('ledgerView', liftSrc('getDriverWallet', 'ledgerView', 'earning, underReview'));
+check('a held ledger row on a ride under review says so', ledgerView({ id: 'e1', status: 'held' }, true).under_review, true);
+check('a held row with no report does not', ledgerView({ id: 'e1', status: 'held' }, false).under_review, false);
+check('a released row never does', ledgerView({ id: 'e1', status: 'released' }, true).under_review, false);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

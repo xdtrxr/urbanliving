@@ -379,8 +379,11 @@ check('a refunded ride is put on hold for admin', releaseDecision(due(), drivenR
 
 const settleDueEarning = make('settleDueEarning',
   sweepSrc('isReleasable', 'earning, nowMs'), sweepSrc('releaseDecision', 'earning, ride'),
-  sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
-const world = (earning, ride) => ({ DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []) });
+  sweepSrc('hasOpenReport', 'sr, rideBookingId'), sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
+// No reports on any ride here; scripts/check-ride-reports.mjs covers the cases with one.
+const world = (earning, ride) => ({
+  DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []), RideReport: fakeEntity([]),
+});
 {
   const sr = world(due(), drivenRide());
   check('a due earning is released', await settleDueEarning(sr, 'e1', DUE), 'released');
@@ -519,7 +522,7 @@ check('only reversed rows: the latest is shown',
   ])?.id, 'r2');
 
 const driverRideView = make('driverRideView',
-  liftSrc('getDriverRides', 'safeIso', 'ms'), liftSrc('getDriverRides', 'driverRideView', 'ride, bucket, win, earning'));
+  liftSrc('getDriverRides', 'safeIso', 'ms'), liftSrc('getDriverRides', 'driverRideView', 'ride, bucket, win, earning, flags'));
 const fullRide = {
   id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado', vehicle_image: 'https://x/p.jpg',
   service_date: '2026-08-10', start_time: '09:00', duration_tier: 'hourly', duration_hours: 3,
@@ -543,13 +546,13 @@ check('instants are returned in UTC', `${upcomingView.start_at}|${upcomingView.e
 // Allow-list, not a spread: what the guest paid and how to reach them by email
 // are not the driver's to see, and neither are admin's notes on the pay.
 same('exactly these ride fields reach the driver', Object.keys(upcomingView).sort(), [
-  'booking_reference', 'bucket', 'dropoff_location', 'duration_days', 'duration_hours', 'duration_tier',
+  'already_reported', 'booking_reference', 'bucket', 'can_report', 'dropoff_location', 'duration_days', 'duration_hours', 'duration_tier',
   'earning', 'end_at', 'guest_name', 'guest_phone', 'id', 'passengers', 'pickup_instructions',
   'pickup_location', 'service_date', 'special_requests', 'start_at', 'start_time', 'status',
   'vehicle_image', 'vehicle_name',
 ]);
 same('exactly these pay fields reach the driver', Object.keys(upcomingView.earning).sort(),
-  ['amount_ngn', 'id', 'on_hold', 'release_at', 'released_at', 'status']);
+  ['amount_ngn', 'id', 'on_hold', 'release_at', 'released_at', 'status', 'under_review']);
 check('a ride with no earning says so', driverRideView(fullRide, 'upcoming', liveWin, null).earning, null);
 check('an unreadable window gives null instants, not a crash', driverRideView(fullRide, 'upcoming', null, null).start_at, null);
 
@@ -628,7 +631,7 @@ same('garbage, negative and infinite amounts count as nothing, never as NaN',
   ),
   { ...ZERO, released: 1000, available: 1000 });
 
-const ledgerView = make('ledgerView', walletSrc('ledgerView', 'earning'));
+const ledgerView = make('ledgerView', walletSrc('ledgerView', 'earning, underReview'));
 same('exactly these ledger fields reach the driver',
   Object.keys(ledgerView({
     id: 'e1', driver_id: 'drvA', ride_booking_id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado',
@@ -637,7 +640,7 @@ same('exactly these ledger fields reach the driver',
     release_at: '2026-08-10T12:00:00.000Z', held_at: '2026-08-09T09:00:00.000Z',
   })).sort(),
   ['amount_ngn', 'booking_reference', 'held_at', 'id', 'on_hold', 'release_at', 'released_at', 'reversed_at',
-    'ride_booking_id', 'service_date', 'status', 'vehicle_name']);
+    'ride_booking_id', 'service_date', 'status', 'under_review', 'vehicle_name']);
 
 // ── Withdrawals from the driver wallet ─────────────────────────────────────
 console.log('\n— withdrawals —');

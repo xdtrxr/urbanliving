@@ -71,6 +71,15 @@ function safeIso(ms: number) {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// ── Reporting — lockstep copy, see createRideReport ─────────────────────────
+const REPORT_WINDOW_AFTER_END_MS = 7 * DAY_MS;
+
+function reportWindowOpen(ride: any, nowMs: number) {
+    const w = windowOf(ride);
+    if (!w || !Number.isFinite(w.startMs) || !Number.isFinite(w.endMs)) return false;
+    return w.startMs <= nowMs && nowMs <= w.endMs + REPORT_WINDOW_AFTER_END_MS;
+}
+
 const PAGE = 500;
 async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
     const out: any[] = [];
@@ -109,7 +118,7 @@ function earningForRide(rows: any[]) {
 // Everything the driver may know about one ride. An explicit allow-list, so a
 // column added to RideBooking or DriverEarning later cannot leak here by
 // default. bucket is one of upcoming | current | past | cancelled.
-function driverRideView(ride: any, bucket: string, win: any, earning: any) {
+function driverRideView(ride: any, bucket: string, win: any, earning: any, flags: any) {
     const live = bucket === 'upcoming' || bucket === 'current';
     return {
         id: ride.id,
@@ -133,6 +142,11 @@ function driverRideView(ride: any, bucket: string, win: any, earning: any) {
         guest_phone: live ? (ride.guest_phone || null) : null,
         bucket,
         status: ride.status,
+        // The driver has already told us about this ride.
+        already_reported: !!(flags && flags.reported),
+        // Whether to offer "Report this customer": a paid ride, inside the
+        // window, not reported yet. createRideReport checks all three again.
+        can_report: ride.payment_status === 'paid' && !!(flags && flags.window_open) && !(flags && flags.reported),
         earning: earning ? {
             id: earning.id,
             amount_ngn: Math.max(0, Math.round(Number(earning.amount_ngn) || 0)),
@@ -140,6 +154,8 @@ function driverRideView(ride: any, bucket: string, win: any, earning: any) {
             on_hold: !!earning.on_hold,
             release_at: earning.release_at || null,
             released_at: earning.released_at || null,
+            // A report on this ride is open, so the held pay waits for admin.
+            under_review: earning.status === 'held' && !!(flags && flags.under_review),
         } : null,
     };
 }
@@ -171,10 +187,14 @@ Deno.serve(async (req) => {
             }, 403);
         }
 
-        const [rides, earnings] = await Promise.all([
+        const [rides, earnings, myReports, openReports] = await Promise.all([
             fetchAll(sr.RideBooking, { driver_id: driver.id }),
             fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+            fetchAll(sr.RideReport, { reporter_email: user.email }),
+            fetchAll(sr.RideReport, { status: { $in: ['open', 'reviewing'] } }),
         ]);
+        const reportedRides = new Set(myReports.map((r: any) => r.ride_booking_id));
+        const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
 
         const earningsByRide = new Map<string, any[]>();
         for (const e of earnings) {
@@ -192,7 +212,11 @@ Deno.serve(async (req) => {
             // upcoming rather than hide a job from the person doing it.
             const bucket = raw === 'pending-approval' ? 'upcoming' : raw;
             counts[bucket] = (counts[bucket] || 0) + 1;
-            return driverRideView(r, bucket, windowOf(r), earningForRide(earningsByRide.get(r.id) || []));
+            return driverRideView(r, bucket, windowOf(r), earningForRide(earningsByRide.get(r.id) || []), {
+                reported: reportedRides.has(r.id),
+                under_review: ridesUnderReview.has(r.id),
+                window_open: reportWindowOpen(r, nowMs),
+            });
         });
 
         // What needs the driver now comes first: in progress, then upcoming

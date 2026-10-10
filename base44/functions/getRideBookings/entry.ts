@@ -56,6 +56,15 @@ function computeBucket(r: any, nowMs: number): string {
     return 'current';
 }
 
+// ── Reporting — lockstep copy, see createRideReport ─────────────────────────
+const REPORT_WINDOW_AFTER_END_MS = 7 * DAY_MS;
+
+function reportWindowOpen(ride: any, nowMs: number) {
+    const w = windowOf(ride);
+    if (!w || !Number.isFinite(w.startMs) || !Number.isFinite(w.endMs)) return false;
+    return w.startMs <= nowMs && nowMs <= w.endMs + REPORT_WINDOW_AFTER_END_MS;
+}
+
 const PAGE = 500;
 async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
     const out: any[] = [];
@@ -97,6 +106,19 @@ Deno.serve(async (req) => {
             rides = await fetchAll(base44.entities.RideBooking, { guest_email: user.email });
         }
 
+        // Which of their own rides this guest has already reported. Read under
+        // the service role because RideReport is admin-only at the API, and on
+        // its own so that a problem here can never cost them their ride list.
+        const reportedRides = new Set<string>();
+        if (scope === 'mine') {
+            try {
+                const mine = await fetchAll(base44.asServiceRole.entities.RideReport, { reporter_email: user.email });
+                for (const rep of mine) reportedRides.add(rep.ride_booking_id);
+            } catch (err) {
+                console.warn('Could not read ride reports (the ride list is unaffected):', err);
+            }
+        }
+
         // Admins already have full read on Driver, so hiding the assignment
         // from them protects nothing and just costs a round trip. Resolve the
         // names once for the whole page instead of per row.
@@ -133,6 +155,12 @@ Deno.serve(async (req) => {
                 driver_id: scope === 'all' ? r.driver_id : undefined,
                 driver_name: scope === 'all' ? (driverNames.get(r.driver_id) || undefined) : undefined,
                 driver_assigned: !!r.driver_id,
+                // Guests only: whether "Report a problem with this driver" is
+                // offered. createRideReport checks every part of it again.
+                already_reported: scope === 'mine' ? reportedRides.has(r.id) : undefined,
+                can_report: scope === 'mine'
+                    ? r.payment_status === 'paid' && !!r.driver_id && reportWindowOpen(r, nowMs) && !reportedRides.has(r.id)
+                    : undefined,
             };
         });
 

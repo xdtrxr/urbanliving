@@ -95,6 +95,14 @@ function releaseDecision(earning: any, ride: any) {
     return 'release';
 }
 
+// True while admin has not closed a report on this ride. Open and reviewing
+// both hold the driver's pay; resolved and dismissed let it go. Lockstep copy,
+// see autoCancelExpiredBookings.
+async function hasOpenReport(sr: any, rideBookingId: string) {
+    const open = await sr.RideReport.filter({ ride_booking_id: rideBookingId, status: { $in: ['open', 'reviewing'] } });
+    return Array.isArray(open) && open.length > 0;
+}
+
 async function tryPush(sdk: any, opts: Record<string, unknown>) {
     try {
         await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
@@ -146,6 +154,15 @@ Deno.serve(async (req) => {
                     success: false,
                     error: `This pay cannot be released: ${verdict.split(':')[1]}. Reverse it instead.`,
                     code: 'RIDE_STATE',
+                }, 409);
+            }
+            // Releasing around an open complaint would make the report
+            // pointless. Admin closes it first, in Rides → Reports.
+            if (await hasOpenReport(sr, earning.ride_booking_id)) {
+                return json({
+                    success: false,
+                    error: 'A report on this ride is still open. Resolve or dismiss it under Rides → Reports first.',
+                    code: 'OPEN_REPORT',
                 }, 409);
             }
         }
