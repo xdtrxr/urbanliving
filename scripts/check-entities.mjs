@@ -211,29 +211,17 @@ for (const file of stagedFiles) {
     !live ? 'no live schema of that name' : `would drop: [${dropped.join(', ')}] would add: [${invented.join(', ')}]`);
   check(`staged ${file} requires the same fields`, JSON.stringify(staged.required || []) === JSON.stringify(live?.required || []));
 }
-const stagedWithdrawal = stagedFiles.includes('WithdrawalRequest.jsonc')
-  ? JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, 'WithdrawalRequest.jsonc'), 'utf8')))
-  : null;
-// Until this is live, a signed-in user can create a pending withdrawal row by
-// hand. createWithdrawalRequest already creates under the service role, so
-// the strict rule breaks nothing once that function is published.
-check('staged WithdrawalRequest: only the server may create a row', adminOnly(stagedWithdrawal?.rls?.create));
-check('staged WithdrawalRequest: reading is unchanged',
-  JSON.stringify(stagedWithdrawal?.rls?.read) === JSON.stringify(entities.WithdrawalRequest?.rls?.read));
-
-const stagedRide = stagedFiles.includes('RideBooking.jsonc')
-  ? JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, 'RideBooking.jsonc'), 'utf8')))
-  : null;
-// Until this is live, a signed-in user can create a ride row by hand with any
-// status on it, including confirmed and paid. checkRideAvailability creates
-// under the service role, so the strict rule breaks nothing once published.
-check('staged RideBooking: only the server may create a row', adminOnly(stagedRide?.rls?.create));
-for (const op of ['read', 'update', 'delete']) {
-  check(`staged RideBooking: ${op} is unchanged`,
-    !!stagedRide && JSON.stringify(stagedRide.rls?.[op]) === JSON.stringify(entities.RideBooking?.rls?.[op]));
+// The strict rules were applied on 2026-10-10, after the functions that make
+// them safe were published. They are pinned here so nobody loosens them.
+check('WithdrawalRequest: only the server may create a row', adminOnly(entities.WithdrawalRequest?.rls?.create));
+check('RideBooking: only the server may create a row', adminOnly(entities.RideBooking?.rls?.create));
+check('LoyaltyTransaction: only the server may create a row', adminOnly(entities.LoyaltyTransaction?.rls?.create));
+check('Booking: only admin may update a row', adminOnly(entities.Booking?.rls?.update));
+for (const f of ['loyalty_points', 'loyalty_tier', 'referral_balance_ngn', 'ride_blocked']) {
+  check(`User.${f} is admin-write`, adminOnly(prop('User', f)?.rls?.write));
 }
 
-// A staged "only the server may create" rule is safe to apply only if nothing
+// An "only the server may create" rule only works if nothing
 // creates that row as the signed-in user: no function (it must go through
 // asServiceRole) and nothing in the browser. This is the README's "Needs"
 // column, checked.
@@ -245,10 +233,7 @@ const filesUnder = (dir, exts) => fs.readdirSync(dir, { withFileTypes: true }).f
 const functionFiles = filesUnder(path.join(ROOT, 'base44/functions'), ['.ts']);
 const browserFiles = filesUnder(path.join(ROOT, 'src'), ['.js', '.jsx']);
 const rel = (file) => path.relative(ROOT, file);
-for (const file of stagedFiles) {
-  const stem = file.replace(/\.jsonc$/, '');
-  const staged = JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, file), 'utf8')));
-  if (!adminOnly(staged.rls?.create)) continue;
+for (const stem of ['WithdrawalRequest', 'RideBooking', 'LoyaltyTransaction']) {
   const asCaller = new RegExp(`(?<!asServiceRole)\\.entities\\.${stem}\\.(create|bulkCreate)\\(`);
   const inBrowser = new RegExp(`\\b${stem}\\.(create|bulkCreate)\\(`);
   const offenders = [
