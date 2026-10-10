@@ -99,6 +99,19 @@ function windowsOverlap(
     return aStart < bEnd + buffer && aEnd + buffer > bStart;
 }
 
+// The stretch a ride keeps its driver, or its car, busy, given its booked
+// window `w`. A ride still to run, or running, holds them for all of it. A
+// completed ride held them until it was completed: at its booked end if the
+// sweep closed it, earlier if admin marked it done because the guest finished
+// early. The caller adds the turnaround. Lockstep copy, see assignRideDriver.
+function busyWindow(ride: any, w: any) {
+    if (!w) return null;
+    if (ride.status !== 'completed') return w;
+    const doneMs = Date.parse(ride.completed_at || '');
+    if (Number.isNaN(doneMs)) return w;
+    return { startMs: w.startMs, endMs: Math.max(w.startMs, Math.min(w.endMs, doneMs)) };
+}
+
 // ── Pricing — derived from the Vehicle, never from the request body ─────────
 // MIRRORED client-side by estimateRidePrice in src/config/rides.js, which
 // draws the figure the guest sees before submitting. Keep the two in lockstep:
@@ -402,11 +415,14 @@ Deno.serve(async (req) => {
         }
 
         // ── Hard conflict block ─────────────────────────────────────────
+        // A completed ride still counts. The sweep completes a ride the
+        // moment its window ends, and leaving it out would let the next
+        // booking start inside the turnaround that follows it.
         const held = await fetchAll(base44.asServiceRole.entities.RideBooking, {
-            vehicle_id, status: { $in: ['pending', 'confirmed'] },
+            vehicle_id, status: { $in: ['pending', 'confirmed', 'completed'] },
         });
         for (const other of held) {
-            const ow = rideWindow(other);
+            const ow = busyWindow(other, rideWindow(other));
             if (!ow) continue;
             if (windowsOverlap(win.startMs, win.endMs, ow.startMs, ow.endMs, turnaroundMsFor(vehicle))) {
                 return json({

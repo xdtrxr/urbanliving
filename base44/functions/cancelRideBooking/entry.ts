@@ -37,11 +37,12 @@ async function tryPush(sdk: any, opts: Record<string, unknown>) {
 
 // Reverse the pay still HELD on a ride for every driver except keepDriverId
 // (pass '' to reverse all of it). Released rows are never clawed back here;
-// they are totalled so the caller can tell admin. Lockstep copy, see
+// they are totalled so the caller can tell admin. The rows that were reversed
+// are handed back as they were read, pay figures included. Lockstep copy, see
 // assignRideDriver; scripts/check-driver-wallet.mjs fails if the two differ.
 async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string, note: string, nowIso: string) {
     const ledger = await fetchAll(sr.DriverEarning, { ride_booking_id: rideId });
-    const out = { reversed_ngn: 0, released_ngn: 0, driver_ids: [] };
+    const out = { reversed_ngn: 0, released_ngn: 0, driver_ids: [], rows: [] };
     for (const e of ledger) {
         if (keepDriverId && e.driver_id === keepDriverId) continue;
         const amount = Math.max(0, Math.round(Number(e.amount_ngn) || 0));
@@ -54,6 +55,7 @@ async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string
             });
             out.reversed_ngn += amount;
             if (!out.driver_ids.includes(e.driver_id)) out.driver_ids.push(e.driver_id);
+            out.rows.push(e);
         } else if (e.status === 'released') {
             out.released_ngn += amount;
         }

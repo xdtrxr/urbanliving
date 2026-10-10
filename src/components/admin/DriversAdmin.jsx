@@ -18,7 +18,7 @@ import {
   AlertCircle, Phone, RefreshCw, Mail,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { CITIES, normaliseEmail, looksLikeEmail, driverLoginPatch } from '@/config/rides';
+import { CITIES, normaliseEmail, looksLikeEmail, driverLoginPatch, mayDeleteDriver } from '@/config/rides';
 
 // DriversAdmin — CRUD for the driver roster.
 //
@@ -183,6 +183,22 @@ export default function DriversAdmin() {
     if (!toDelete) return;
     setDeletingId(toDelete.id);
     try {
+      // Earnings and withdrawals hang off the profile's id. Delete the profile
+      // and the driver's wallet, and any payout waiting on it, are orphaned.
+      // Both entities are admin-only at the API, like Driver itself. If either
+      // lookup fails this throws, and nothing is deleted.
+      const [earnings, withdrawals] = await Promise.all([
+        base44.entities.DriverEarning.filter({ driver_id: toDelete.id }, undefined, 1),
+        base44.entities.WithdrawalRequest.filter({ driver_id: toDelete.id }, undefined, 1),
+      ]);
+      if (!mayDeleteDriver(earnings, withdrawals)) {
+        toast({
+          title: 'This driver has pay on record',
+          description: `${toDelete.full_name} has earnings or withdrawals in the app, so the profile cannot be removed. Switch them to inactive instead: they are no longer offered rides and keep access to their wallet.`,
+          variant: 'destructive',
+        });
+        return;
+      }
       await base44.entities.Driver.delete(toDelete.id);
       toast({ title: 'Driver removed' });
       await load();
@@ -431,7 +447,8 @@ export default function DriversAdmin() {
             <AlertDialogDescription>
               This cannot be undone. Rides already assigned to this driver keep the
               assignment on the row, but the guest&apos;s driver card will stop
-              resolving — deactivate instead if they might return.
+              resolving — deactivate instead if they might return. A driver
+              with earnings or withdrawals on record cannot be removed at all.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

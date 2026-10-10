@@ -15,6 +15,7 @@ import { invokeFn } from '@/lib/invokeFn';
 import { useToast } from '@/components/ui/use-toast';
 import {
   categoryLabel, ADJUSTMENT_REASONS, driverPayoutFor, typedDriverPay, RELEASE_BUFFER_HOURS,
+  payMissing, needsDriver,
 } from '@/config/rides';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -84,27 +85,33 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
   // suggestion", and the server computes that same figure for itself.
   const [pay, setPay] = useState('');
   const [suggested, setSuggested] = useState(null);
+  // Whether the driver already on this ride has pay recorded for it. null
+  // until the ledger has been read; "Record pay" is only offered on false.
+  const [currentPaid, setCurrentPaid] = useState(null);
 
   useEffect(() => { setInstructions(ride?.pickup_instructions || ''); }, [ride]);
 
   useEffect(() => {
     setPay('');
     setSuggested(null);
+    setCurrentPaid(null);
     if (!ride) return undefined;
     let cancelled = false;
     (async () => {
       try {
         // Both entities are admin-only at the API, like the Driver roster below.
-        const [costings, held] = await Promise.all([
+        const [costings, ledger] = await Promise.all([
           base44.entities.VehicleCosting.filter({ vehicle_id: ride.vehicle_id }),
-          base44.entities.DriverEarning.filter({ ride_booking_id: ride.id, status: 'held' }),
+          base44.entities.DriverEarning.filter({ ride_booking_id: ride.id }),
         ]);
         if (cancelled) return;
         setSuggested(driverPayoutFor(costings?.[0] || null, ride.duration_tier, {
           hours: ride.duration_hours, days: ride.duration_days,
         }));
+        const standing = (Array.isArray(ledger) ? ledger : []).filter((e) => e.status !== 'reversed');
+        setCurrentPaid(!!ride.driver_id && standing.some((e) => e.driver_id === ride.driver_id));
         // Changing the driver: start from the figure the outgoing driver was promised.
-        const current = Array.isArray(held) && held.length > 0 ? held[0] : null;
+        const current = standing.find((e) => e.status === 'held') || null;
         if (current) setPay(String(Math.round(Number(current.amount_ngn) || 0)));
       } catch (err) {
         console.error('Could not load the driver pay context:', err);
@@ -150,7 +157,13 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
     });
     setSaving(null);
     if (!r.ok) {
-      toast({ title: 'Could not assign', description: r.error, variant: 'destructive' });
+      toast({
+        title: r.code === 'SUPERSEDED' ? 'Someone else just assigned this ride' : 'Could not assign',
+        description: r.error,
+        variant: 'destructive',
+      });
+      // The list on screen is out of date: close and reload it.
+      if (r.code === 'SUPERSEDED') onAssigned();
       return;
     }
     const d = r.data || {};
@@ -159,10 +172,27 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
       : d.driver_payout_ngn > 0
         ? `${ngn(d.driver_payout_ngn)} is held for them and released ${RELEASE_BUFFER_HOURS} hours after the ride ends.`
         : 'No pay was recorded for this ride.';
-    toast({
-      title: ride?.driver_id ? 'Driver changed' : 'Driver assigned',
-      description: `${driver.full_name} is on this ride. The guest has been emailed and notified. ${payNote}`,
-    });
+    if (d.already_assigned) {
+      // The same driver again: nothing about the ride changed, only the ledger.
+      toast({
+        title: d.pay_recorded ? 'Pay recorded' : 'Nothing changed',
+        description: d.pay_recorded
+          ? `${ngn(d.driver_payout_ngn)} is now held for ${driver.full_name} on this ride. The guest was not contacted again.`
+          : `${driver.full_name} was already on this ride. ${payNote}`,
+      });
+    } else {
+      toast({
+        title: ride?.driver_id ? 'Driver changed' : 'Driver assigned',
+        description: `${driver.full_name} is on this ride. ${d.guest_notified ? 'The guest has been emailed and notified. ' : ''}${payNote}`,
+      });
+    }
+    if (d.ledger_warning) {
+      toast({
+        title: 'Check this ride under Earnings',
+        description: 'The driver is on the ride, but the pay records could not be brought fully up to date. Open Rides → Earnings and look at the rows for this ride.',
+        variant: 'destructive',
+      });
+    }
     if (d.previous_earning_released) {
       toast({
         title: 'Check the previous driver',
@@ -267,16 +297,23 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
                       d.user_email ? null : 'no login, pay not tracked'].filter(Boolean).join(' · ')}
                   </p>
                 </div>
+                {/* One save at a time: every button waits while any is in
+                    flight, so a slip onto the wrong driver cannot be followed
+                    by a second click that races it. The driver already on the
+                    ride gets "Record pay" when they have a login and nothing
+                    on the ledger for this ride, which is how pay is added for
+                    a ride assigned before pay was tracked. */}
                 <Button
                   size="sm"
                   variant={d.id === ride?.driver_id ? 'outline' : 'default'}
-                  disabled={saving === d.id || d.id === ride?.driver_id}
+                  disabled={!!saving || (d.id === ride?.driver_id && !(d.user_email && currentPaid === false))}
                   onClick={() => assign(d)}
                   className="rounded-xl flex-shrink-0"
                 >
                   {saving === d.id
                     ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : d.id === ride?.driver_id ? 'Assigned' : 'Assign'}
+                    : d.id !== ride?.driver_id ? 'Assign'
+                      : d.user_email && currentPaid === false ? 'Record pay' : 'Assigned'}
                 </Button>
               </div>
             ))}
@@ -606,11 +643,9 @@ function RideRequestsPanel() {
   const shown = filter === 'all'
     ? rides
     : filter === 'needs-driver'
-      ? rides.filter((r) => r.payment_status === 'paid' && r.status === 'confirmed' && !r.driver_assigned)
+      ? rides.filter(needsDriver)
       : rides.filter((r) => r.bucket === filter);
-  const needsDriverCount = rides.filter(
-    (r) => r.payment_status === 'paid' && r.status === 'confirmed' && !r.driver_assigned,
-  ).length;
+  const needsDriverCount = rides.filter(needsDriver).length;
   const pendingCount = counts['pending-approval'] || 0;
 
   return (
@@ -704,6 +739,11 @@ function RideRequestsPanel() {
                             {r.driver_name ? `Driver: ${r.driver_name}` : 'Driver assigned'}
                           </Badge>
                         )}
+                        {payMissing(r, Date.now()) && (
+                          <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-0 text-xs">
+                            No pay recorded
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
@@ -746,8 +786,10 @@ function RideRequestsPanel() {
                       )}
                     </div>
 
-                    {r.payment_status === 'paid' && r.status === 'confirmed'
-                      && (!r.driver_assigned || r.bucket === 'upcoming' || r.bucket === 'current') && (
+                    {/* A ride the sweep has completed keeps this button while
+                        it has no driver, or its driver has no pay recorded. */}
+                    {r.payment_status === 'paid' && (r.status === 'confirmed' || r.status === 'completed')
+                      && (!r.driver_assigned || r.bucket === 'upcoming' || r.bucket === 'current' || payMissing(r, Date.now())) && (
                       <div className="flex flex-col gap-2 flex-shrink-0 w-full sm:w-auto">
                         {/* Reassignment stays available right up to the end of the
                             ride: a driver calling in sick on the morning is the
@@ -763,7 +805,7 @@ function RideRequestsPanel() {
                             : 'rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-600 dark:text-slate-950 text-white w-full sm:w-auto'}
                         >
                           <UserPlus className="w-4 h-4 mr-2" />
-                          {r.driver_assigned ? 'Change driver' : 'Assign driver'}
+                          {!r.driver_assigned ? 'Assign driver' : payMissing(r, Date.now()) ? 'Record pay' : 'Change driver'}
                         </Button>
                       </div>
                     )}

@@ -268,7 +268,9 @@ const heldRow = (id, driver, extra = {}) => ({
   check('…stamps when and why', `${row('a1').reversed_at}|${row('a1').admin_notes}`, `${NOW}|Reassigned to B`);
   check('…leaves the new driver held', row(b.id).status, 'held');
   check('…never touches another ride', row('x1').status, 'held');
-  same('…and reports what moved', out, { reversed_ngn: 15000, released_ngn: 0, driver_ids: ['drvA'] });
+  same('…and reports what moved', { ...out, rows: out.rows.map((r) => r.id) },
+    { reversed_ngn: 15000, released_ngn: 0, driver_ids: ['drvA'], rows: ['a1'] });
+  check('…handing back the row as it was read, pay figure included', `${out.rows[0].status}/${out.rows[0].amount_ngn}`, 'held/15000');
 }
 {
   // The previous driver's pay had already been released: it is not clawed back
@@ -276,7 +278,7 @@ const heldRow = (id, driver, extra = {}) => ({
   const sr = { DriverEarning: fakeEntity([heldRow('a1', 'drvA', { status: 'released' })]) };
   const out = await reverseHeldEarnings(sr, 'ride1', 'drvB', 'Reassigned to B', NOW);
   check('a released row is left alone on reassignment', sr.DriverEarning.rows[0].status, 'released');
-  same('…and reported', out, { reversed_ngn: 0, released_ngn: 15000, driver_ids: [] });
+  same('…and reported', out, { reversed_ngn: 0, released_ngn: 15000, driver_ids: [], rows: [] });
 }
 {
   // Cancellation passes '' and reverses everyone still holding.
@@ -284,7 +286,8 @@ const heldRow = (id, driver, extra = {}) => ({
   const out = await reverseHeldEarnings(sr, 'ride1', '', 'Ride cancelled', NOW);
   check('cancel reverses every held row', sr.DriverEarning.rows.every((r) => r.status === 'reversed'), true);
   check('…keeping earlier notes', sr.DriverEarning.rows[1].admin_notes, 'earlier note | Ride cancelled');
-  same('…and totals it', out, { reversed_ngn: 35000, released_ngn: 0, driver_ids: ['drvA', 'drvB'] });
+  same('…and totals it', { ...out, rows: out.rows.map((r) => r.id) },
+    { reversed_ngn: 35000, released_ngn: 0, driver_ids: ['drvA', 'drvB'], rows: ['a1', 'b1'] });
 }
 {
   // Two admins assign in the same second: this call's first read is stale, so
@@ -1383,6 +1386,269 @@ check('a second failure on a failed row is ignored', webhookShouldAct('transfer.
 check('a reversal after success is acted on', webhookShouldAct('transfer.reversed', 'completed'), true);
 check('a second reversal is ignored', webhookShouldAct('transfer.reversed', 'reversed'), false);
 check('nothing acts on a pending row', webhookShouldAct('transfer.success', 'pending'), false);
+
+// ── Assignment: two at once, the same driver again, and at rollout ─────────
+console.log('\n— assignment under concurrency —');
+const AR = 'assignRideDriver';
+const ar = (name, signature) => liftSrc(AR, name, signature);
+identical('isId', 'value', [PW, AR]);
+identical('isRideBlocked', 'account', ['checkRideAvailability', AR]);
+identical('busyWindow', 'ride, w', [AR, 'checkRideAvailability']);
+
+const guestIsBlocked = make('guestIsBlocked', ar('isRideBlocked', 'account'), ar('guestIsBlocked', 'accounts, email'));
+check('a blocked guest is blocked', guestIsBlocked([{ email: 'tunde@mail.ng', ride_blocked: true }], 'Tunde@Mail.ng'), true);
+check('a guest who is not blocked is not', guestIsBlocked([{ email: 'tunde@mail.ng', ride_blocked: false }], 'tunde@mail.ng'), false);
+check('the word "true" does not block', guestIsBlocked([{ email: 'tunde@mail.ng', ride_blocked: 'true' }], 'tunde@mail.ng'), false);
+// A ride row with no guest email makes the lookup answer with whoever comes first.
+check('a ride with no guest email matches nobody', guestIsBlocked([{ email: 'someone@else.ng', ride_blocked: true }], ''), false);
+check('…and another account that happens to be blocked is not this guest',
+  guestIsBlocked([{ email: 'someone@else.ng', ride_blocked: true }], 'tunde@mail.ng'), false);
+
+// A ride keeps its driver and its car busy for its booked window. One that
+// was completed early frees them from that moment.
+const busyWindow = make('busyWindow', ar('busyWindow', 'ride, w'));
+const windowsOverlap = make('windowsOverlap', ar('windowsOverlap', 'aStart, aEnd, bStart, bEnd, buffer'));
+const W = { startMs: at('2026-08-10T08:00:00.000Z'), endMs: at('2026-08-10T16:00:00.000Z') };
+same('a confirmed ride is busy for its whole booked window', busyWindow({ status: 'confirmed' }, W), W);
+same('a ride the sweep completed at its end: the whole window',
+  busyWindow({ status: 'completed', completed_at: '2026-08-10T16:05:00.000Z' }, W), W);
+same('a ride admin completed early: until that moment',
+  busyWindow({ status: 'completed', completed_at: '2026-08-10T11:00:00.000Z' }, W), { startMs: W.startMs, endMs: at('2026-08-10T11:00:00.000Z') });
+same('a completed ride with no completion time keeps its whole window', busyWindow({ status: 'completed' }, W), W);
+same('a completion stamped before the start cannot make a window run backwards',
+  busyWindow({ status: 'completed', completed_at: '2026-08-10T07:00:00.000Z' }, W), { startMs: W.startMs, endMs: W.startMs });
+check('a ride with no readable time has no window', busyWindow({ status: 'completed' }, null), null);
+// The same thing as the functions use it, with the default one-hour turnaround.
+const clashes = (ride, startIso, endIso) => {
+  const b = busyWindow(ride, W);
+  return windowsOverlap(at(startIso), at(endIso), b.startMs, b.endMs, 3600000);
+};
+const sweptAtEnd = { status: 'completed', completed_at: '2026-08-10T16:00:30.000Z' };
+check('closed by the sweep at 16:00: a 16:30 pickup is still inside the turnaround',
+  clashes(sweptAtEnd, '2026-08-10T16:30:00.000Z', '2026-08-10T18:30:00.000Z'), true);
+check('…and a 17:00 pickup is clear', clashes(sweptAtEnd, '2026-08-10T17:00:00.000Z', '2026-08-10T19:00:00.000Z'), false);
+const doneEarly = { status: 'completed', completed_at: '2026-08-10T11:00:00.000Z' };
+check('completed early at 11:00: free for a 12:30 pickup',
+  clashes(doneEarly, '2026-08-10T12:30:00.000Z', '2026-08-10T14:30:00.000Z'), false);
+check('…which the booked window alone would have refused',
+  clashes({ status: 'confirmed' }, '2026-08-10T12:30:00.000Z', '2026-08-10T14:30:00.000Z'), true);
+
+const assignmentNotices = make('assignmentNotices', ar('assignmentNotices', 'sameDriver, rideOver, payIsNew'));
+same('a new driver for a ride still to come: guest and driver are told',
+  assignmentNotices(false, false, true), { guest: true, driver: 'assigned' });
+same('the same driver again: the guest is not told twice, the driver hears about the pay',
+  assignmentNotices(true, false, true), { guest: false, driver: 'pay' });
+same('the same driver again with nothing new: nobody is told', assignmentNotices(true, false, false), { guest: false, driver: '' });
+same('a driver attached after the ride is over: the guest is not told someone is coming',
+  assignmentNotices(false, true, true), { guest: false, driver: 'pay' });
+same('…and with no pay recorded, nobody is told', assignmentNotices(false, true, false), { guest: false, driver: '' });
+
+const ASSIGN = [
+  PAY, FETCH_ALL, constLine(AR, 'MAX_REALIGN_PASSES'),
+  ar('releaseAtFor', 'endAtIso'),
+  ar('holdEarning', 'sr, ride, driverId, payout, endAtIso, nowIso'),
+  ar('reverseHeldEarnings', 'sr, rideId, keepDriverId, note, nowIso'),
+  ar('payoutOf', 'earning'),
+  ar('realignLedger', 'sr, ride, driverId, payout, endAtIso, note, nowIso, heldBefore'),
+  ar('writeAssignment', 'sr, ride, driverId, payout, endAtIso, patch, note, nowIso'),
+];
+const writeAssignment = make('writeAssignment', ...ASSIGN);
+const ASSIGNED_EARLIER = '2026-08-01T00:00:00.000Z';
+const rideWorld = (driverId = '', earnings = []) => ({
+  RideBooking: fakeEntity([{
+    ...rideA, status: 'confirmed', payment_status: 'paid', driver_id: driverId,
+    driver_assigned_at: driverId ? ASSIGNED_EARLIER : '',
+  }]),
+  DriverEarning: fakeEntity(earnings),
+});
+const assignTo = (sr, driver, payout = dayPay) => writeAssignment(
+  sr, rideA, driver, payout, END, { driver_id: driver, driver_assigned_at: NOW }, `Reassigned to ${driver}`, NOW);
+const heldBy = (sr) => sr.DriverEarning.rows.filter((e) => e.status === 'held').map((e) => e.driver_id).join(',');
+const onRide = (sr) => sr.RideBooking.rows[0].driver_id;
+
+{
+  const sr = rideWorld();
+  const r = await assignTo(sr, 'drvA');
+  check('a first assignment: the driver is on the ride with one held row', `${onRide(sr)}/${heldBy(sr)}`, 'drvA/drvA');
+  check('…and the call is told so', `${r.superseded}/${r.ledger_error}/${r.earning.status}/${r.earning.amount_ngn}`, 'false//held/15000');
+}
+{
+  const sr = rideWorld('drvA', [heldRow('a1', 'drvA')]);
+  const r = await assignTo(sr, 'drvB');
+  check('a change of driver: the new one holds, the old one does not', `${onRide(sr)}/${heldBy(sr)}`, 'drvB/drvB');
+  check('…the old row is reversed, not deleted', sr.DriverEarning.rows.find((e) => e.id === 'a1').status, 'reversed');
+  check('…and nothing had been released', r.released_ngn, 0);
+}
+{
+  const sr = rideWorld('drvA', [heldRow('a1', 'drvA', { status: 'released' })]);
+  const r = await assignTo(sr, 'drvB');
+  check('a change of driver after the old one was paid: reported, not clawed back',
+    `${r.released_ngn}/${sr.DriverEarning.rows[0].status}`, '15000/released');
+}
+{
+  // Rollout: the driver was put on this ride before pay was tracked. The same
+  // driver is submitted again, with nothing to change on the ride itself.
+  const sr = rideWorld('drvA');
+  const r = await writeAssignment(sr, rideA, 'drvA', dayPay, END, {}, 'Reassigned to drvA', NOW);
+  check('the same driver again records their pay', `${heldBy(sr)}/${r.earning.amount_ngn}/${r.earning.held_at}`, `drvA/15000/${NOW}`);
+  check('…without rewriting the ride', sr.RideBooking.rows[0].driver_assigned_at, ASSIGNED_EARLIER);
+  const again = await writeAssignment(sr, rideA, 'drvA', { ...dayPay, amount: 99999 }, END, {}, 'Reassigned to drvA', '2026-08-09T10:00:00.000Z');
+  check('…and a second time changes nothing: the first figure stands',
+    `${sr.DriverEarning.rows.length}/${again.earning.amount_ngn}/${again.earning.held_at}`, `1/15000/${NOW}`);
+}
+{
+  // A driver with no login: nothing is recorded, as before.
+  const sr = rideWorld('drvA', [heldRow('a1', 'drvA')]);
+  const r = await assignTo(sr, 'drvU', null);
+  check('a driver with no login is assigned with no pay row', `${onRide(sr)}/${heldBy(sr)}/${r.earning}`, 'drvU//null');
+}
+{
+  // The ledger cannot be read. A driver with no login has nothing to record,
+  // so the assignment still goes through and says what it could not do.
+  const sr = rideWorld();
+  sr.DriverEarning.filter = async () => { throw new Error('ledger unavailable'); };
+  const r = await assignTo(sr, 'drvU', null);
+  check('ledger down, driver with no login: assigned, and admin is warned', `${onRide(sr)}/${r.ledger_error}`, 'drvU/ledger unavailable');
+}
+{
+  // The same failure for a driver whose pay must be recorded: nothing happens.
+  const sr = rideWorld();
+  sr.DriverEarning.filter = async () => { throw new Error('ledger unavailable'); };
+  let threw = '';
+  try { await assignTo(sr, 'drvA'); } catch (err) { threw = err.message; }
+  check('ledger down, driver with a login: refused before the ride is touched', `${threw}/${onRide(sr)}`, 'ledger unavailable/');
+}
+{
+  // Another assignment lands just after this call writes the ride row.
+  const sr = rideWorld();
+  const realUpdate = sr.RideBooking.update;
+  sr.RideBooking.update = async (id, patch) => { await realUpdate(id, patch); return realUpdate(id, { driver_id: 'drvB' }); };
+  const r = await assignTo(sr, 'drvA');
+  check('overtaken by another assignment: this call is told it lost', `${r.superseded}/${r.current_driver_id}/${r.earning}`, 'true/drvB/null');
+  check('…and leaves no pay held for its driver', heldBy(sr), '');
+}
+
+// Two assignments for one ride at the same moment. Each actor is the shipped
+// writeAssignment; the walker from the payout section tries the orders their
+// database requests could arrive in. Whoever the ride ends with must hold
+// exactly one row, nobody else may hold any, and the call whose driver is on
+// the ride must not have been told it lost.
+//
+// An assignment makes more requests than a payout, so walking every order
+// would take minutes. Each race below walks every order in which the turn
+// changes hands at most a set number of times, which is where two real calls
+// overlap, and a random sample with no such limit covers the long tail.
+const assignActors = (sr, calls) => calls.map(([driver, payout]) => (gate) => writeAssignment(
+  gatedWorld(sr, gate), rideA, driver, payout, END, { driver_id: driver, driver_assigned_at: NOW }, `Reassigned to ${driver}`, NOW));
+const assignRace = (calls, driverId = '', earnings = []) => () => {
+  const sr = rideWorld(driverId, earnings);
+  return { world: { sr, calls }, actors: assignActors(sr, calls) };
+};
+const ledgerAgrees = ({ sr, calls }, results) => {
+  const final = onRide(sr);
+  const winners = calls.map(([driver], i) => (driver === final ? i : -1)).filter((i) => i >= 0);
+  if (winners.length === 0) return `the ride ended with "${final}"`;
+  const tracked = !!calls[winners[0]][1];
+  const held = sr.DriverEarning.rows.filter((e) => e.status === 'held');
+  const theirs = held.filter((e) => e.driver_id === final);
+  if (theirs.length !== (tracked ? 1 : 0)) return `${final} is on the ride with ${theirs.length} held rows`;
+  if (held.length !== theirs.length) return `pay is still held for a driver who is not on the ride (${heldBy(sr)})`;
+  for (let i = 0; i < results.length; i += 1) {
+    const r = results[i];
+    if (!r || r.threw) return `a call threw: ${r && r.threw}`;
+    if (r.ledger_error) return `a call could not settle the ledger: ${r.ledger_error}`;
+    if (winners.includes(i) && r.superseded) return 'the call whose driver is on the ride was told it lost';
+    if (winners.includes(i) && tracked && !(r.earning && r.earning.status === 'held')) return 'the winning call was handed no held row';
+  }
+  return '';
+};
+// A fixed pseudo-random sequence, so a failing schedule can be run again.
+function seeded(seed) {
+  let s = seed >>> 0;
+  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+}
+async function randomSchedules(setup, verdict, count, seed) {
+  const rand = seeded(seed);
+  for (let n = 1; n <= count; n += 1) {
+    const { world, actors } = setup();
+    const trace = [];
+    const results = await interleave(actors, (ready) => {
+      const pick = ready[Math.floor(rand() * ready.length)];
+      trace.push(pick);
+      return pick;
+    });
+    const problem = verdict(world, results);
+    if (problem) return { runs: n, problem, schedule: trace.join('') };
+  }
+  return { runs: count, problem: '', schedule: '' };
+}
+const A_PAY = ['drvA', dayPay];
+const B_PAY = ['drvB', { ...dayPay, amount: 20000, rate: 20000 }];
+{
+  const out = await everySchedule(assignRace([A_PAY, B_PAY]), ledgerAgrees, 4);
+  check(`two drivers assigned at once (${out.runs} orders): whoever is on the ride holds one row, the other none`, `${out.problem}${out.schedule}`, '');
+  check('…and that was more than a handful of orders', out.runs > 500, true);
+}
+{
+  const out = await everySchedule(assignRace([A_PAY, B_PAY], 'drvC', [heldRow('c1', 'drvC')]), ledgerAgrees, 4);
+  check(`…the same when a third driver was on the ride before (${out.runs})`, `${out.problem}${out.schedule}`, '');
+}
+{
+  const out = await everySchedule(assignRace([A_PAY, A_PAY]), ledgerAgrees, 6);
+  check(`the same driver submitted twice at once (${out.runs}): one row, not two`, `${out.problem}${out.schedule}`, '');
+}
+{
+  const out = await everySchedule(assignRace([A_PAY, ['drvU', null]]), ledgerAgrees, 5);
+  check(`a driver with a login against one without (${out.runs}): pay is held only if the first is on the ride`, `${out.problem}${out.schedule}`, '');
+}
+{
+  const out = await randomSchedules(assignRace([A_PAY, B_PAY], 'drvC', [heldRow('c1', 'drvC')]), ledgerAgrees, 1500, 7);
+  check(`two drivers at once, ${out.runs} random orders with no limit on changes of turn`, `${out.problem}${out.schedule}`, '');
+}
+{
+  const out = await randomSchedules(assignRace([A_PAY, B_PAY, ['drvC', dayPay]]), ledgerAgrees, 500, 20261010);
+  check(`three drivers assigned at once, ${out.runs} random orders`, `${out.problem}${out.schedule}`, '');
+}
+
+// ── What the rides list tells admin ────────────────────────────────────────
+console.log('\n— rides list flags —');
+const livePayKeys = make('livePayKeys', liftSrc('getRideBookings', 'livePayKeys', 'earnings'));
+same('pay that still stands is keyed by ride and driver', livePayKeys([
+  { ride_booking_id: 'r1', driver_id: 'drvA', status: 'held' },
+  { ride_booking_id: 'r2', driver_id: 'drvB', status: 'released' },
+  { ride_booking_id: 'r3', driver_id: 'drvA', status: 'reversed' },
+  null,
+]), ['r1:drvA', 'r2:drvB']);
+same('no ledger, no keys', livePayKeys(undefined), []);
+
+const T0 = at('2026-08-10T12:00:00.000Z');
+const unpaidDriver = {
+  payment_status: 'paid', status: 'confirmed', driver_assigned: true, driver_linked: true, driver_pay_recorded: false,
+  end_at: '2026-08-10T10:00:00.000Z',
+};
+check('a driver with a login and no pay on record: flagged', rides.payMissing(unpaidDriver, T0), true);
+check('…not once pay is recorded', rides.payMissing({ ...unpaidDriver, driver_pay_recorded: true }, T0), false);
+check('…not when the ledger could not be read: no claim is made', rides.payMissing({ ...unpaidDriver, driver_pay_recorded: null }, T0), false);
+check('…not for a driver with no login', rides.payMissing({ ...unpaidDriver, driver_linked: false }, T0), false);
+check('…not for a ride with no driver', rides.payMissing({ ...unpaidDriver, driver_assigned: false }, T0), false);
+check('…not for an unpaid ride', rides.payMissing({ ...unpaidDriver, payment_status: 'unpaid' }, T0), false);
+check('…not for a cancelled ride', rides.payMissing({ ...unpaidDriver, status: 'cancelled' }, T0), false);
+check('a completed ride is flagged the same way', rides.payMissing({ ...unpaidDriver, status: 'completed' }, T0), true);
+check('still flagged a week after the ride ended', rides.payMissing(unpaidDriver, at('2026-08-17T10:00:00.000Z')), true);
+check('…but not older history, which was settled outside the app', rides.payMissing(unpaidDriver, at('2026-08-17T10:00:01.000Z')), false);
+check('the week is the shipped constant', rides.PAY_NUDGE_DAYS, 7);
+
+const driverless = { payment_status: 'paid', status: 'confirmed', driver_assigned: false };
+check('a paid, confirmed ride with no driver needs one', rides.needsDriver(driverless), true);
+check('…and still does after the sweep completed it', rides.needsDriver({ ...driverless, status: 'completed' }), true);
+check('…not once it has one', rides.needsDriver({ ...driverless, driver_assigned: true }), false);
+check('an unpaid ride does not', rides.needsDriver({ ...driverless, payment_status: 'unpaid' }), false);
+check('a cancelled ride does not', rides.needsDriver({ ...driverless, status: 'cancelled' }), false);
+
+check('a driver with nothing on record may be deleted', rides.mayDeleteDriver([], []), true);
+check('a driver with an earning may not', rides.mayDeleteDriver([{ id: 'e1' }], []), false);
+check('a driver with a withdrawal may not', rides.mayDeleteDriver([], [{ id: 'w1' }]), false);
+check('a lookup that did not answer is not "nothing on record"', rides.mayDeleteDriver(undefined, []), false);
 
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

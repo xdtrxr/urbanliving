@@ -271,6 +271,39 @@ export function typedDriverPay(hasLogin, typed, computedAmount) {
   return { ok: true, value };
 }
 
+// ── What the admin rides list points at ─────────────────────────────────────
+// Days after a ride's end during which admin is still nudged to record pay
+// for a driver who had none. Older rides were settled outside the app.
+export const PAY_NUDGE_DAYS = 7;
+
+// Whether this ride's driver has a login but no pay on record for it: a ride
+// assigned before the driver was given a login, or before pay was tracked.
+// Reads the two flags getRideBookings sends to admin. driver_pay_recorded is
+// null when the ledger could not be read, and then no claim is made.
+export function payMissing(ride, nowMs) {
+  if (!ride || ride.payment_status !== 'paid' || ride.status === 'cancelled') return false;
+  if (!ride.driver_assigned || !ride.driver_linked || ride.driver_pay_recorded !== false) return false;
+  const endMs = Date.parse(ride.end_at || '');
+  if (Number.isNaN(endMs)) return true;
+  return nowMs <= endMs + PAY_NUDGE_DAYS * 24 * 60 * 60 * 1000;
+}
+
+// A paid ride nobody has been assigned to. A ride the sweep has already
+// completed still counts: who drove it, and their pay, can be recorded after
+// the fact.
+export const needsDriver = (ride) => !!ride
+  && ride.payment_status === 'paid'
+  && (ride.status === 'confirmed' || ride.status === 'completed')
+  && !ride.driver_assigned;
+
+// Whether a driver profile may be deleted: only when both lookups answered
+// and found nothing. Earnings and withdrawals hang off the profile's id, so a
+// driver with either is switched to inactive instead.
+export const mayDeleteDriver = (earnings, withdrawals) => Array.isArray(earnings)
+  && Array.isArray(withdrawals)
+  && earnings.length === 0
+  && withdrawals.length === 0;
+
 // ── Ride reports ────────────────────────────────────────────────────────────
 // MIRROR of the limits in base44/functions/createRideReport/entry.ts. The
 // server is the authority; these let the dialog stop a report it would refuse

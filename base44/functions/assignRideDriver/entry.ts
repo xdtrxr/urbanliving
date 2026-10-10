@@ -15,6 +15,44 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 // what admin typed, or the vehicle's driver cost for the booked duration.
 // The sweep releases it two hours after the booked end. A driver without a
 // login is assigned exactly as before and nothing is recorded.
+//
+// TWO ASSIGNMENTS AT ONCE. Nothing here can lock the ride, so a second
+// assignment can land a moment before or after this one. writeAssignment
+// writes the ride row and then makes the ledger agree with whoever the ride
+// row says is driving, however the two calls interleave: that driver ends
+// with one held row and nobody else with any. The call that lost is told so
+// (SUPERSEDED) and its guest is not notified.
+//
+// THE SAME DRIVER AGAIN is not a new assignment. It is how pay is recorded
+// for a ride that was assigned before the driver had a login, or before pay
+// was tracked: the checks on whether this driver should be sent are skipped,
+// the guest is not told a second time, and a standing pay row is never
+// repriced.
+
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copy, see processWithdrawal.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// Admin blocked this account from rides when resolving a report against it
+// (resolveRideReport). Only the boolean true blocks. Lockstep copy, see
+// checkRideAvailability.
+function isRideBlocked(account: any) {
+    return !!account && account.ride_blocked === true;
+}
+
+// Whether the account a ride was booked under is blocked from rides. Looks
+// only at an account that really has that address: a ride row with no guest
+// email must not match whichever account the lookup happened to return.
+function guestIsBlocked(accounts: any[], email: string) {
+    const wanted = String(email || '').trim().toLowerCase();
+    if (!wanted) return false;
+    return (accounts || []).some((a) => !!a && String(a.email || '').trim().toLowerCase() === wanted && isRideBlocked(a));
+}
 
 // ── Ride time model — lockstep copy, see checkRideAvailability ──────────────
 const WAT_OFFSET = '+01:00';
@@ -57,6 +95,20 @@ function windowOf(r: any): { startMs: number; endMs: number } | null {
 
 function windowsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number, buffer: number): boolean {
     return aStart < bEnd + buffer && aEnd + buffer > bStart;
+}
+
+// The stretch a ride keeps its driver, or its car, busy, given its booked
+// window `w`. A ride still to run, or running, holds them for all of it. A
+// completed ride held them until it was completed: at its booked end if the
+// sweep closed it, earlier if admin marked it done because the guest finished
+// early. The caller adds the turnaround. Lockstep copy in
+// checkRideAvailability.
+function busyWindow(ride: any, w: any) {
+    if (!w) return null;
+    if (ride.status !== 'completed') return w;
+    const doneMs = Date.parse(ride.completed_at || '');
+    if (Number.isNaN(doneMs)) return w;
+    return { startMs: w.startMs, endMs: Math.max(w.startMs, Math.min(w.endMs, doneMs)) };
 }
 
 // ── Driver pay model ────────────────────────────────────────────────────────
@@ -203,11 +255,12 @@ async function holdEarning(sr: any, ride: any, driverId: string, payout: any, en
 
 // Reverse the pay still HELD on a ride for every driver except keepDriverId
 // (pass '' to reverse all of it). Released rows are never clawed back here;
-// they are totalled so the caller can tell admin. Lockstep copy in
+// they are totalled so the caller can tell admin. The rows that were reversed
+// are handed back as they were read, pay figures included. Lockstep copy in
 // cancelRideBooking.
 async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string, note: string, nowIso: string) {
     const ledger = await fetchAll(sr.DriverEarning, { ride_booking_id: rideId });
-    const out = { reversed_ngn: 0, released_ngn: 0, driver_ids: [] };
+    const out = { reversed_ngn: 0, released_ngn: 0, driver_ids: [], rows: [] };
     for (const e of ledger) {
         if (keepDriverId && e.driver_id === keepDriverId) continue;
         const amount = Math.max(0, Math.round(Number(e.amount_ngn) || 0));
@@ -220,11 +273,114 @@ async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string
             });
             out.reversed_ngn += amount;
             if (!out.driver_ids.includes(e.driver_id)) out.driver_ids.push(e.driver_id);
+            out.rows.push(e);
         } else if (e.status === 'released') {
             out.released_ngn += amount;
         }
     }
     return out;
+}
+
+// The pay figures on a ledger row, in the shape holdEarning takes.
+function payoutOf(earning: any) {
+    return {
+        amount: Math.max(0, Math.round(Number(earning.amount_ngn) || 0)),
+        basis: earning.basis || 'manual',
+        rate: Math.max(0, Math.round(Number(earning.rate_ngn) || 0)),
+        units: Number(earning.units) || 1,
+    };
+}
+
+// How many times realignLedger looks again before it gives up and says so.
+const MAX_REALIGN_PASSES = 6;
+
+// Make the ledger agree with whoever the ride row says is driving NOW. That
+// is not always the driver this call just wrote: another assignment for the
+// same ride can land a moment before or after this one, and nothing here can
+// lock the ride.
+//
+// Each pass reads the ride, reverses pay still held for anyone else, and
+// makes sure the driver on the ride has a standing row. Every write is made
+// on a reading of the ride that may be stale by the time it lands, so every
+// write is followed by another pass, and the loop ends on a pass that found
+// nothing to fix. If this call reversed a row for a driver who turns out to
+// be on the ride after all, it holds the same figures for them again, as a
+// new row: a reversed row is never revived.
+//
+// scripts/check-driver-wallet.mjs runs two of these against each other in
+// every order their requests could arrive.
+async function realignLedger(sr: any, ride: any, driverId: string, payout: any, endAtIso: string, note: string, nowIso: string, heldBefore: any) {
+    const out = { settled: false, superseded: false, current_driver_id: '', earning: null, reversed_ngn: 0, released_ngn: 0 };
+    // Rows this call reversed, and the ids of rows it created.
+    const taken = [];
+    const made = heldBefore ? [heldBefore.id] : [];
+    for (let pass = 0; pass < MAX_REALIGN_PASSES && !out.settled; pass += 1) {
+        const now = await sr.RideBooking.get(ride.id);
+        const currentId = (now && now.driver_id) || '';
+        const others = await reverseHeldEarnings(sr, ride.id, currentId, note, nowIso);
+        taken.push(...others.rows);
+        let wrote = others.rows.length > 0;
+        // What the driver on the ride should be holding: this call's figure
+        // if it is this call's driver, otherwise what this call took off
+        // them on an earlier pass, when the ride row still named someone else.
+        const theirs = taken.filter((e) => e.driver_id === currentId);
+        const figures = currentId === driverId ? payout : (theirs.length > 0 ? payoutOf(theirs[theirs.length - 1]) : null);
+        let standing = null;
+        if (currentId && figures) {
+            standing = await holdEarning(sr, ride, currentId, figures, endAtIso, nowIso);
+            if (standing && standing.held_at === nowIso && !made.includes(standing.id)) {
+                made.push(standing.id);
+                wrote = true;
+            }
+            // Held, and gone again before this call could look: another call
+            // reversed it on a stale reading of the ride. Look again.
+            if (!standing && figures.amount > 0) wrote = true;
+        }
+        out.superseded = currentId !== driverId;
+        out.current_driver_id = currentId;
+        out.earning = out.superseded ? null : standing;
+        out.reversed_ngn += others.reversed_ngn;
+        out.released_ngn = others.released_ngn;
+        out.settled = !wrote;
+    }
+    return out;
+}
+
+// Everything an assignment writes, in the one order that is safe.
+//   1. The pay row. If the ledger cannot be written this throws, and the ride
+//      is not handed to a driver whose pay could not be recorded.
+//   2. The ride row. `patch` is empty when the same driver is submitted again.
+//   3. The ledger is made to agree with the ride row. A failure here is
+//      reported in ledger_error, not thrown: the driver IS on the ride by
+//      then, and answering "it failed" would be a lie admin might act on.
+// `payout` is null for a driver with no login: nothing is recorded for them.
+async function writeAssignment(sr: any, ride: any, driverId: string, payout: any, endAtIso: string, patch: any, note: string, nowIso: string) {
+    const first = payout ? await holdEarning(sr, ride, driverId, payout, endAtIso, nowIso) : null;
+    if (Object.keys(patch || {}).length > 0) await sr.RideBooking.update(ride.id, patch);
+    try {
+        const out = await realignLedger(sr, ride, driverId, payout, endAtIso, note, nowIso, first);
+        return { ...out, ledger_error: out.settled ? '' : 'the ledger did not settle' };
+    } catch (err) {
+        return {
+            settled: false,
+            superseded: false,
+            current_driver_id: driverId,
+            earning: first,
+            reversed_ngn: 0,
+            released_ngn: 0,
+            ledger_error: String((err && err.message) || err),
+        };
+    }
+}
+
+// Who is told about an assignment. The guest hears when a driver is being
+// sent to them: not when the same driver is submitted again to record pay,
+// and not when a driver is attached to a ride that is already over. The
+// driver hears about a new job or, when there is no new job, about pay that
+// was recorded just now.
+function assignmentNotices(sameDriver: boolean, rideOver: boolean, payIsNew: boolean) {
+    const newJob = !sameDriver && !rideOver;
+    return { guest: newJob, driver: newJob ? 'assigned' : (payIsNew ? 'pay' : '') };
 }
 
 async function tryPush(sdk: any, opts: Record<string, unknown>) {
@@ -253,13 +409,15 @@ Deno.serve(async (req) => {
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
-        const { ride_booking_id, driver_id, pickup_instructions, driver_payout_ngn } = await req.json().catch(() => ({}));
-        if (!ride_booking_id || !driver_id) {
+        const body = await req.json().catch(() => null);
+        const { ride_booking_id, driver_id, pickup_instructions, driver_payout_ngn } = body || {};
+        if (!isId(ride_booking_id) || !isId(driver_id)) {
             return json({ success: false, error: 'ride_booking_id and driver_id are required' }, 400);
         }
 
-        const ride = await base44.asServiceRole.entities.RideBooking.get(ride_booking_id);
-        if (!ride) return json({ success: false, error: 'Ride booking not found' }, 404);
+        const sr = base44.asServiceRole.entities;
+        const ride = await sr.RideBooking.get(ride_booking_id);
+        if (!ride || ride.id !== ride_booking_id) return json({ success: false, error: 'Ride booking not found' }, 404);
         if (ride.status === 'cancelled') {
             return json({ success: false, error: 'This ride was cancelled', code: 'CANCELLED' }, 409);
         }
@@ -271,55 +429,80 @@ Deno.serve(async (req) => {
             }, 409);
         }
 
-        const driver = await base44.asServiceRole.entities.Driver.get(driver_id);
-        if (!driver) return json({ success: false, error: 'Driver not found' }, 404);
-        if (driver.active === false || driver.admin_approved === false) {
-            return json({
-                success: false,
-                error: 'That driver is inactive or not approved.',
-                code: 'DRIVER_UNAVAILABLE',
-            }, 409);
-        }
-
-        // City mismatch is almost always a mis-click rather than an intent to
-        // send a driver between Abuja and Lagos, so it is worth blocking.
-        const vehicle = await base44.asServiceRole.entities.Vehicle.get(ride.vehicle_id);
-        if (vehicle?.city && driver.city && vehicle.city !== driver.city) {
-            return json({
-                success: false,
-                error: `${driver.full_name} is based in ${driver.city} but this vehicle is in ${vehicle.city}.`,
-                code: 'CITY_MISMATCH',
-            }, 409);
-        }
+        const driver = await sr.Driver.get(driver_id);
+        if (!driver || driver.id !== driver_id) return json({ success: false, error: 'Driver not found' }, 404);
 
         const win = windowOf(ride);
         if (!win) return json({ success: false, error: 'This ride has an unreadable time window' }, 409);
 
-        // Driver double-booking check, same overlap rule as vehicles.
-        const theirRides = await fetchAll(base44.asServiceRole.entities.RideBooking, {
-            driver_id, status: { $in: ['pending', 'confirmed'] },
-        });
-        for (const other of theirRides) {
-            if (other.id === ride.id) continue;
-            const ow = windowOf(other);
-            if (!ow) continue;
-            if (windowsOverlap(win.startMs, win.endMs, ow.startMs, ow.endMs, turnaroundMsFor(vehicle))) {
+        const nowMs = Date.now();
+        const nowIso = new Date(nowMs).toISOString();
+        // The same driver again is not a new assignment: see the header.
+        const sameDriver = ride.driver_id === driver_id;
+        const reassigning = !!ride.driver_id && !sameDriver;
+        // Over: the sweep or admin completed it, or its booked window has passed.
+        const rideOver = ride.status === 'completed' || nowMs > win.endMs;
+
+        // ── Should this driver be sent? ─────────────────────────────────
+        // None of it is asked about the driver who is already on the ride.
+        if (!sameDriver) {
+            if (driver.active === false || driver.admin_approved === false) {
                 return json({
                     success: false,
-                    error: `${driver.full_name} is already driving another booking in that window.`,
-                    code: 'DRIVER_DOUBLE_BOOKED',
-                    conflict: {
-                        ride_booking_id: other.id,
-                        start_at: safeIso(ow.startMs),
-                        end_at: safeIso(ow.endMs),
-                    },
+                    error: 'That driver is inactive or not approved.',
+                    code: 'DRIVER_UNAVAILABLE',
                 }, 409);
             }
-        }
 
-        const sr = base44.asServiceRole.entities;
-        const reassigning = !!ride.driver_id && ride.driver_id !== driver_id;
-        const nowIso = new Date().toISOString();
+            // A guest admin has blocked from rides is not sent a driver. Not
+            // asked about a ride that is already over: recording who drove it
+            // sends nobody anywhere.
+            if (!rideOver && typeof ride.guest_email === 'string' && ride.guest_email.trim()) {
+                const accounts = await sr.User.filter({ email: ride.guest_email });
+                if (guestIsBlocked(accounts, ride.guest_email)) {
+                    return json({
+                        success: false,
+                        error: 'This guest is blocked from ride bookings. Cancel this ride, or lift the block under Rides → Reports, before sending a driver.',
+                        code: 'GUEST_BLOCKED',
+                    }, 409);
+                }
+            }
+
+            // City mismatch is almost always a mis-click rather than an intent to
+            // send a driver between Abuja and Lagos, so it is worth blocking.
+            const vehicle = isId(ride.vehicle_id) ? await sr.Vehicle.get(ride.vehicle_id) : null;
+            if (vehicle?.city && driver.city && vehicle.city !== driver.city) {
+                return json({
+                    success: false,
+                    error: `${driver.full_name} is based in ${driver.city} but this vehicle is in ${vehicle.city}.`,
+                    code: 'CITY_MISMATCH',
+                }, 409);
+            }
+
+            // Driver double-booking check, same overlap rule as vehicles. A
+            // completed ride still counts: it kept its driver until it was
+            // completed, and the turnaround after it still applies.
+            const theirRides = await fetchAll(sr.RideBooking, {
+                driver_id, status: { $in: ['pending', 'confirmed', 'completed'] },
+            });
+            for (const other of theirRides) {
+                if (other.id === ride.id) continue;
+                const ow = busyWindow(other, windowOf(other));
+                if (!ow) continue;
+                if (windowsOverlap(win.startMs, win.endMs, ow.startMs, ow.endMs, turnaroundMsFor(vehicle))) {
+                    return json({
+                        success: false,
+                        error: `${driver.full_name} is already driving another booking in that window.`,
+                        code: 'DRIVER_DOUBLE_BOOKED',
+                        conflict: {
+                            ride_booking_id: other.id,
+                            start_at: safeIso(ow.startMs),
+                            end_at: safeIso(ow.endMs),
+                        },
+                    }, 409);
+                }
+            }
+        }
 
         // ── Driver pay ──────────────────────────────────────────────────
         // Tracked only for a driver who has a login to see it with. ₦0 is a
@@ -359,65 +542,76 @@ Deno.serve(async (req) => {
             return json({ success: false, error: 'This ride has an unreadable time window', code: 'BAD_WINDOW' }, 409);
         }
 
-        const earning = linkedEmail
-            ? await holdEarning(sr, ride, driver_id, payout, endAtIso, nowIso)
-            : null;
-
-        await sr.RideBooking.update(ride_booking_id, {
-            driver_id,
-            driver_assigned_at: nowIso,
+        // ── Write ───────────────────────────────────────────────────────
+        const instructions = typeof pickup_instructions === 'string' ? pickup_instructions.trim() : '';
+        const patch = {
+            // The same driver again changes nothing about who is driving.
+            ...(sameDriver ? {} : { driver_id, driver_assigned_at: nowIso }),
             // Only overwrite when something was actually typed — a reassignment
             // that leaves the box blank must not wipe instructions already
             // written for this pickup.
-            ...(typeof pickup_instructions === 'string' && pickup_instructions.trim()
-                ? { pickup_instructions: pickup_instructions.trim() }
-                : {}),
-        });
-
-        // Runs for every assignment, linked driver or not: handing a ride to
-        // someone else must always take it off the previous driver's ledger.
-        const others = await reverseHeldEarnings(sr, ride_booking_id, driver_id, `Reassigned to ${driver.full_name}`, nowIso);
+            ...(instructions ? { pickup_instructions: instructions } : {}),
+        };
+        const written = await writeAssignment(
+            sr, ride, driver_id, payout, endAtIso, patch, `Reassigned to ${driver.full_name}`, nowIso,
+        );
+        if (written.ledger_error) {
+            console.error(`assignRideDriver: ledger not settled for ride ${ride_booking_id}:`, written.ledger_error);
+        }
+        if (written.superseded) {
+            return json({
+                success: false,
+                error: `Another assignment for this ride was saved at the same moment, so ${driver.full_name} is not on it. The list shows who is.`,
+                code: 'SUPERSEDED',
+            }, 409);
+        }
+        const earning = written.earning;
+        // Held by this call, as opposed to a row that was already standing.
+        const payIsNew = !!earning && earning.held_at === nowIso;
+        const notices = assignmentNotices(sameDriver, rideOver, payIsNew);
 
         // Guest email with the driver's details — this is the moment the
         // contact becomes visible, so it goes out by email as well as push
         // rather than relying on the guest opening the app.
-        try {
-            const when = new Date(win.startMs).toLocaleString('en-GB', {
-                timeZone: 'Africa/Lagos', dateStyle: 'full', timeStyle: 'short',
-            });
-            await base44.integrations.Core.SendEmail({
-                to: ride.guest_email,
-                subject: reassigning
-                    ? `Driver update for your ${ride.vehicle_name}`
-                    : `Your driver for the ${ride.vehicle_name}`,
-                body: `Hi ${ride.guest_name || 'there'},\n\n` +
-                    `${reassigning ? 'Your driver has been changed.' : 'Your driver is confirmed.'}\n\n` +
-                    `👤 Driver: ${driver.full_name}\n` +
-                    `📞 Phone: ${driver.phone}\n` +
-                    (driver.years_experience ? `⭐ Experience: ${driver.years_experience} years\n` : '') +
-                    `🚗 Vehicle: ${ride.vehicle_name}\n` +
-                    `🕒 Pickup: ${when}\n\n` +
-                    `They'll be in touch closer to the time. Safe travels.\n\n` +
-                    `— Urban Stays`,
-                from_name: 'Urban Stays',
-            });
-        } catch (err) {
-            console.warn('Driver assignment email failed (non-fatal):', err);
-        }
+        if (notices.guest) {
+            try {
+                const when = new Date(win.startMs).toLocaleString('en-GB', {
+                    timeZone: 'Africa/Lagos', dateStyle: 'full', timeStyle: 'short',
+                });
+                await base44.integrations.Core.SendEmail({
+                    to: ride.guest_email,
+                    subject: reassigning
+                        ? `Driver update for your ${ride.vehicle_name}`
+                        : `Your driver for the ${ride.vehicle_name}`,
+                    body: `Hi ${ride.guest_name || 'there'},\n\n` +
+                        `${reassigning ? 'Your driver has been changed.' : 'Your driver is confirmed.'}\n\n` +
+                        `👤 Driver: ${driver.full_name}\n` +
+                        `📞 Phone: ${driver.phone}\n` +
+                        (driver.years_experience ? `⭐ Experience: ${driver.years_experience} years\n` : '') +
+                        `🚗 Vehicle: ${ride.vehicle_name}\n` +
+                        `🕒 Pickup: ${when}\n\n` +
+                        `They'll be in touch closer to the time. Safe travels.\n\n` +
+                        `— Urban Stays`,
+                    from_name: 'Urban Stays',
+                });
+            } catch (err) {
+                console.warn('Driver assignment email failed (non-fatal):', err);
+            }
 
-        await tryPush(base44, {
-            user_email: ride.guest_email,
-            title: reassigning ? '🔄 Driver updated' : '👤 Driver assigned',
-            body: `${driver.full_name} will be driving your ${ride.vehicle_name}. Tap for their details.`,
-            url: `/Bookings#ride-${ride.id}`,
-            tag: `ride-driver-${ride.id}`,
-        });
+            await tryPush(base44, {
+                user_email: ride.guest_email,
+                title: reassigning ? '🔄 Driver updated' : '👤 Driver assigned',
+                body: `${driver.full_name} will be driving your ${ride.vehicle_name}. Tap for their details.`,
+                url: `/Bookings#ride-${ride.id}`,
+                tag: `ride-driver-${ride.id}`,
+            });
+        }
 
         // The driver hears about it too, now that they have somewhere to look.
         const whenShort = new Date(win.startMs).toLocaleString('en-GB', {
             timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short',
         });
-        if (linkedEmail) {
+        if (linkedEmail && notices.driver === 'assigned') {
             await tryPush(base44, {
                 user_email: linkedEmail,
                 title: '🚗 New ride assigned',
@@ -427,10 +621,18 @@ Deno.serve(async (req) => {
                 url: `/DriverRides#ride-${ride.id}`,
                 tag: `driver-assigned-${ride.id}`,
             });
+        } else if (linkedEmail && notices.driver === 'pay') {
+            await tryPush(base44, {
+                user_email: linkedEmail,
+                title: '💰 Pay recorded',
+                body: `₦${(Number(earning.amount_ngn) || 0).toLocaleString()} for the ${ride.vehicle_name} on ${whenShort} is in your wallet, held until it is released.`,
+                url: '/DriverWallet',
+                tag: `driver-pay-${ride.id}`,
+            });
         }
         if (reassigning) {
             try {
-                const previous = await sr.Driver.get(ride.driver_id);
+                const previous = isId(ride.driver_id) ? await sr.Driver.get(ride.driver_id) : null;
                 const previousEmail = typeof previous?.user_email === 'string' ? previous.user_email.trim().toLowerCase() : '';
                 if (previousEmail) {
                     await tryPush(base44, {
@@ -453,14 +655,23 @@ Deno.serve(async (req) => {
                 driver_id,
                 driver_name: driver.full_name,
                 reassigned: reassigning,
+                // true when this driver was already on the ride: nothing about
+                // the assignment changed, and the guest was not told again.
+                already_assigned: sameDriver,
                 // false means this driver has no login, so nothing was recorded.
                 pay_tracked: !!linkedEmail,
+                // true when this call is the one that held the pay.
+                pay_recorded: payIsNew,
                 driver_payout_ngn: earning ? Number(earning.amount_ngn) || 0 : (payout ? payout.amount : null),
                 payout_basis: earning ? earning.basis || null : (payout ? payout.basis : null),
                 earning_id: earning ? earning.id : null,
+                guest_notified: notices.guest,
                 // The previous driver's pay was already released and has NOT
                 // been taken back. Admin decides in Rides → Earnings.
-                previous_earning_released: others.released_ngn > 0,
+                previous_earning_released: written.released_ngn > 0,
+                // The driver is on the ride, but the pay records could not be
+                // brought fully up to date. Admin is told to look.
+                ledger_warning: !!written.ledger_error,
             },
         });
     } catch (error) {
