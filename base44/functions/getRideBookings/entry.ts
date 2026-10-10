@@ -69,7 +69,9 @@ function reportWindowOpen(ride: any, nowMs: number) {
 function livePayKeys(earnings: any[]) {
     const keys = [];
     for (const e of earnings || []) {
-        if (!e || e.status === 'reversed') continue;
+        // A reversed row counts as recorded: pay that admin reversed on
+        // purpose must not be offered as "never recorded".
+        if (!e) continue;
         keys.push(`${e.ride_booking_id}:${e.driver_id}`);
     }
     return keys;
@@ -152,7 +154,6 @@ Deno.serve(async (req) => {
                 }
                 try {
                     const standing = await fetchAll(base44.asServiceRole.entities.DriverEarning, {
-                        status: { $in: ['held', 'released'] },
                     });
                     paid = new Set(livePayKeys(standing));
                 } catch (err) {

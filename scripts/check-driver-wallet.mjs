@@ -1646,7 +1646,7 @@ same('pay that still stands is keyed by ride and driver', livePayKeys([
   { ride_booking_id: 'r2', driver_id: 'drvB', status: 'released' },
   { ride_booking_id: 'r3', driver_id: 'drvA', status: 'reversed' },
   null,
-]), ['r1:drvA', 'r2:drvB']);
+]), ['r1:drvA', 'r2:drvB', 'r3:drvA']);
 same('no ledger, no keys', livePayKeys(undefined), []);
 
 const T0 = at('2026-08-10T12:00:00.000Z');
@@ -2153,6 +2153,37 @@ const withEvent = (setup, eventName, transferStatus, prepare = () => {}) => () =
   check('…and that was more than a handful of orders', out.runs > 200, true);
   const more = await randomSchedules(withEvent(pressing(stuck, undefined, undefined, 1), 'transfer.failed', 'failed', failedAtBank), verdict, 1000, 15);
   check(`…and in ${more.runs} random orders`, `${more.problem}${more.schedule}`, '');
+}
+
+// ── A payment reference pays for one booking ───────────────────────────────
+console.log('\n— payment reference —');
+identical('paymentIsFor', 'metadata, kind, id', ['verifyRidePayment', 'verifyPaystackPayment']);
+const paymentIsFor = make('paymentIsFor', liftSrc('verifyRidePayment', 'paymentIsFor', 'metadata, kind, id'));
+check('a ride payment for this ride', paymentIsFor({ ride_booking_id: 'r1' }, 'ride', 'r1'), true);
+check('a ride payment replayed on another ride of the same price', paymentIsFor({ ride_booking_id: 'r1' }, 'ride', 'r2'), false);
+check('a stay payment handed in for a ride', paymentIsFor({ booking_id: 'b1' }, 'ride', 'r1'), false);
+check('a ride payment handed in for a stay', paymentIsFor({ ride_booking_id: 'r1' }, 'stay', 'b1'), false);
+check('a stay payment for this stay', paymentIsFor({ booking_id: 'b1' }, 'stay', 'b1'), true);
+check('a stay payment replayed on another stay', paymentIsFor({ booking_id: 'b1' }, 'stay', 'b2'), false);
+check('metadata that came back as text is read', paymentIsFor('{"ride_booking_id":"r1"}', 'ride', 'r1'), true);
+check('no metadata says nothing either way', paymentIsFor('', 'ride', 'r1'), null);
+check('unreadable metadata says nothing either way', paymentIsFor('{oops', 'stay', 'b1'), null);
+
+// ── An assignment that overlaps a cancellation ─────────────────────────────
+{
+  const out = await everySchedule(() => {
+    const sr = rideWorld('drvC', [heldRow('c1', 'drvC')]);
+    const cancel = async (gate) => {
+      const w = gatedWorld(sr, gate);
+      await w.RideBooking.update('ride1', { status: 'cancelled' });
+      return reverseHeldEarnings(w, 'ride1', '', 'Ride cancelled', NOW);
+    };
+    return { world: { sr }, actors: [...assignActors(sr, [A_PAY]), cancel] };
+  }, ({ sr }, results) => {
+    if (results.some((r) => !r || r.threw)) return `a call threw: ${JSON.stringify(results)}`;
+    return heldBy(sr) ? `pay is still held on a cancelled ride (${heldBy(sr)})` : '';
+  }, 5);
+  check(`a driver assigned while the ride is cancelled (${out.runs} orders): no pay is left held`, `${out.problem}${out.schedule}`, '');
 }
 
 // ---- result ----

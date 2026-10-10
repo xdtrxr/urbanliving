@@ -310,13 +310,17 @@ const MAX_REALIGN_PASSES = 6;
 // scripts/check-driver-wallet.mjs runs two of these against each other in
 // every order their requests could arrive.
 async function realignLedger(sr: any, ride: any, driverId: string, payout: any, endAtIso: string, note: string, nowIso: string, heldBefore: any) {
-    const out = { settled: false, superseded: false, current_driver_id: '', earning: null, reversed_ngn: 0, released_ngn: 0 };
+    const out = { settled: false, superseded: false, cancelled: false, current_driver_id: '', earning: null, reversed_ngn: 0, released_ngn: 0 };
     // Rows this call reversed, and the ids of rows it created.
     const taken = [];
     const made = heldBefore ? [heldBefore.id] : [];
     for (let pass = 0; pass < MAX_REALIGN_PASSES && !out.settled; pass += 1) {
         const now = await sr.RideBooking.get(ride.id);
-        const currentId = (now && now.driver_id) || '';
+        // A ride cancelled while this was running, or gone, has nobody
+        // driving it: every held row comes off and none goes on.
+        const cancelled = !now || now.status === 'cancelled';
+        const currentId = cancelled ? '' : (now.driver_id || '');
+        out.cancelled = cancelled;
         const others = await reverseHeldEarnings(sr, ride.id, currentId, note, nowIso);
         taken.push(...others.rows);
         let wrote = others.rows.length > 0;
@@ -557,6 +561,13 @@ Deno.serve(async (req) => {
         );
         if (written.ledger_error) {
             console.error(`assignRideDriver: ledger not settled for ride ${ride_booking_id}:`, written.ledger_error);
+        }
+        if (written.cancelled) {
+            return json({
+                success: false,
+                error: 'This ride was cancelled while the driver was being assigned. Nobody has been notified.',
+                code: 'CANCELLED',
+            }, 409);
         }
         if (written.superseded) {
             return json({

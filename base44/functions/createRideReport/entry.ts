@@ -72,7 +72,7 @@ const MAX_EVIDENCE = 3;
 const MAX_URL_LENGTH = 600;
 // Where an uploaded file lives: this platform's file store, under an app id.
 // MIRRORED client-side by UPLOAD_URL in src/config/rides.js.
-const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/[A-Za-z0-9._~%\/-]+$/;
+const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:jpe?g|png|webp|gif|heic|heif)$/i;
 const CARD_EXCERPT = 300;
 
 // A ride can be reported from the moment it starts until seven days after it

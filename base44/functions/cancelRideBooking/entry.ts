@@ -156,9 +156,10 @@ Deno.serve(async (req) => {
         // The driver's pay follows the ride. A failure here must not undo the
         // cancellation: the release pass in autoCancelExpiredBookings reverses
         // any held row whose ride is cancelled, so this is belt and braces.
-        // Only a ride that ever had a driver can have pay on it.
+        // Asked of the ledger whatever the ride row said when it was read: an
+        // assignment may be writing a driver onto it at this very moment.
         let payLine = '';
-        if (ride.driver_id) {
+        {
             try {
                 const sr = base44.asServiceRole.entities;
                 const pay = await reverseHeldEarnings(sr, ride_booking_id, '', 'Ride cancelled', new Date().toISOString());
@@ -168,7 +169,7 @@ Deno.serve(async (req) => {
                 if (pay.released_ngn > 0) {
                     payLine += `\n• Driver pay ALREADY RELEASED: ₦${pay.released_ngn.toLocaleString()} — review in Rides → Earnings`;
                 }
-                const driver = await sr.Driver.get(ride.driver_id);
+                const driver = ride.driver_id ? await sr.Driver.get(ride.driver_id) : null;
                 const driverEmail = typeof driver?.user_email === 'string' ? driver.user_email.trim().toLowerCase() : '';
                 if (driverEmail) {
                     await tryPush(base44, {

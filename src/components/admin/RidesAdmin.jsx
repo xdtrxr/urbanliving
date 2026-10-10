@@ -109,7 +109,9 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
           hours: ride.duration_hours, days: ride.duration_days,
         }));
         const standing = (Array.isArray(ledger) ? ledger : []).filter((e) => e.status !== 'reversed');
-        setCurrentPaid(!!ride.driver_id && standing.some((e) => e.driver_id === ride.driver_id));
+        // Any row counts, reversed ones too: pay that was reversed on purpose
+        // is not pay that was never recorded.
+        setCurrentPaid(!!ride.driver_id && (Array.isArray(ledger) ? ledger : []).some((e) => e.driver_id === ride.driver_id));
         // Changing the driver: start from the figure the outgoing driver was promised.
         const current = standing.find((e) => e.status === 'held') || null;
         if (current) setPay(String(Math.round(Number(current.amount_ngn) || 0)));

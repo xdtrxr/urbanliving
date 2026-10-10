@@ -173,6 +173,12 @@ for (const [why, bad] of [
   ['a fragment on a real upload', `${uploaded('a.jpg')}#x`],
   ['a path that climbs out of the file store', uploaded('../../../entities/User')],
   ['plain http', uploaded('a.jpg').replace('https:', 'http:')],
+  ['a path that climbs with encoded dots', uploaded('%2e%2e/functions/p.jpg')],
+  ['…in capitals', uploaded('%2E%2E/functions/p.jpg')],
+  ['…half encoded', uploaded('.%2e/entities/User.jpg')],
+  ['a hidden path segment', uploaded('.x/a.jpg')],
+  ['a page, not a picture', uploaded('x.html')],
+  ['a scripted image', uploaded('x.svg')],
 ]) {
   check(`a "photo" from ${why} is refused`, validateReportInput({ ...good, evidence_urls: [bad] }).code, 'BAD_URL');
 }

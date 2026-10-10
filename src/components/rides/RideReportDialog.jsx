@@ -87,12 +87,19 @@ export default function RideReportDialog({ open, ride, role, onClose, onSubmitte
     setUploading(true);
     setError(null);
     try {
-      const { file_url } = await UploadFile({ file });
-      if (!file_url) throw new Error('The upload did not return a link.');
-      // The server stores only links to this platform's own file store. Say
-      // so here, rather than refuse the whole report when it is sent.
-      if (!safePhotoUrl(file_url)) {
-        throw new Error('The upload returned a link this form cannot attach. Send the report without the photo and tell the team.');
+      // Uploaded under a plain name. The server only stores a link whose path
+      // is letters, digits, dots and dashes and ends in an image extension,
+      // and a phone's own file name ("IMG (1).jpeg") would not pass.
+      const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif' }[file.type];
+      if (!ext) {
+        setError('Choose a JPG, PNG, WEBP or HEIC photo.');
+        return;
+      }
+      const { file_url } = await UploadFile({ file: new File([file], `report-photo.${ext}`, { type: file.type }) });
+      // Said directly, not thrown: these are not failures to reach the server.
+      if (!file_url || !safePhotoUrl(file_url)) {
+        setError('The upload returned a link this form cannot attach. Send the report without the photo and tell the team.');
+        return;
       }
       setPhotos((list) => (list.includes(file_url) ? list : [...list, file_url]).slice(0, REPORT_LIMITS.maxPhotos));
     } catch (err) {

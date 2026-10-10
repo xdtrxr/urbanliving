@@ -331,7 +331,7 @@ export const REPORT_LIMITS = { minDescription: 10, maxDescription: 2000, maxPhot
 // Where an uploaded file lives: this platform's file store, under an app id.
 // MIRROR of UPLOAD_URL in base44/functions/createRideReport/entry.ts;
 // scripts/check-ride-reports.mjs fails if the two differ.
-export const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/[A-Za-z0-9._~%\/-]+$/;
+export const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:jpe?g|png|webp|gif|heic|heif)$/i;
 
 // A stored report photo, if it may be used as an <img src>: a link to a file
 // uploaded through this platform, and nothing else. Admin's browser fetches
