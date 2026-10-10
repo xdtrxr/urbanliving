@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Search, Calendar, User, Heart, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard } from "lucide-react";
+import { Search, Calendar, User, Heart, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard, Car, Banknote } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { User as UserEntity } from "@/entities/User";
 import ReferralTracker from "@/components/utils/ReferralTracker";
 import { useAuth } from "@/lib/AuthContext";
+import { useDriverProfile } from "@/lib/useDriverProfile";
 import { LogIn } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import BrandMark from "@/components/brand/BrandMark";
@@ -116,8 +117,20 @@ export default function Layout({ children, currentPageName }) {
     authLogout(true);
   };
 
+  // Drivers get their own pages first: it is what they open the app for.
+  // isDriver stays false for everyone else, so nothing changes for guests.
+  const { isDriver } = useDriverProfile();
+  const driverItems = isDriver ? [
+    {
+      title: "My rides",
+      url: createPageUrl("DriverRides"),
+      icon: Car,
+      description: "Rides assigned to you"
+    },
+  ] : [];
+
   // Add admin link if user is admin
-  const menuItems = [...navigationItems];
+  const menuItems = [...driverItems, ...navigationItems];
   if (user?.role === 'admin') {
     menuItems.push({
       title: "Admin Panel",

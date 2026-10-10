@@ -2660,3 +2660,792 @@ git add scripts/check-driver-wallet.mjs base44/functions/getDriverProfile/entry.
 git commit -m "feat(rides): link a driver to a login and look the driver up for the signed-in user" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A07: My rides
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (driver ride view section, above `// ---- result ----`)
+- Create: `base44/functions/getDriverRides/entry.ts`
+- Create: `src/components/driver/DriverRideCard.jsx`
+- Create: `src/pages/DriverRides.jsx`
+- Modify: `src/pages.config.js` (register the page)
+- Modify: `src/Layout.jsx` (navigation item for drivers)
+
+**Interfaces:**
+- Consumes: `findDriverForUser(sr, email)` (Task A06, copied); `rideDurationMs`, `windowOf`, `computeBucket` (lockstep copies of `getRideBookings`); `safeIso(ms)` (lockstep copy of `assignRideDriver`); `useDriverProfile()`, `DriverNotice` (Task A06); `durationLabel(tier, { hours, days })` from `@/config/rides`.
+- Produces, server: function `getDriverRides` — body `{}`; `403 NOT_A_DRIVER` when the login has no driver row; otherwise `{ success: true, data: { rides: Ride[], counts: { upcoming, current, past, cancelled } } }`. `Ride` is exactly `{ id, booking_reference, vehicle_name, vehicle_image, service_date, start_time, start_at, end_at, duration_tier, duration_hours, duration_days, pickup_location, dropoff_location, pickup_instructions, passengers, special_requests, guest_name, guest_phone, bucket, status, earning }` where `guest_phone` is `null` unless `bucket` is `upcoming` or `current`, and `earning` is `null` or `{ id, amount_ngn, status, on_hold, release_at, released_at }`. Helpers `earningForRide(rows)` and `driverRideView(ride, bucket, win, earning)`.
+- Produces, client: default export `DriverRideCard` (`props: { ride, onReport }`; the report button renders only when `ride.can_report && onReport`, both of which arrive with the ride reports plan) and page `DriverRides`, registered under that key.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── What a driver is shown about a ride ────────────────────────────────────
+console.log('\n— driver ride view —');
+identical('findDriverForUser', FIND_DRIVER_SIG, ['getDriverProfile', 'getDriverRides']);
+identical('rideDurationMs', 'tier, days, hours', ['getRideBookings', 'getDriverRides']);
+identical('windowOf', 'r', ['getRideBookings', 'getDriverRides']);
+identical('computeBucket', 'r, nowMs', ['getRideBookings', 'getDriverRides']);
+identical('safeIso', 'ms', ['assignRideDriver', 'getDriverRides']);
+
+const earningForRide = make('earningForRide', liftSrc('getDriverRides', 'earningForRide', 'rows'));
+check('no earning rows: nothing to show', earningForRide([]), null);
+check('a held row beats an older reversed one',
+  earningForRide([
+    { id: 'old', status: 'reversed', created_date: '2026-08-01T00:00:00.000Z' },
+    { id: 'live', status: 'held', created_date: '2026-08-02T00:00:00.000Z' },
+  ])?.id, 'live');
+check('a released row beats a newer reversed duplicate',
+  earningForRide([
+    { id: 'paid', status: 'released', created_date: '2026-08-01T00:00:00.000Z' },
+    { id: 'dup', status: 'reversed', created_date: '2026-08-02T00:00:00.000Z' },
+  ])?.id, 'paid');
+check('only reversed rows: the latest is shown',
+  earningForRide([
+    { id: 'r1', status: 'reversed', created_date: '2026-08-01T00:00:00.000Z' },
+    { id: 'r2', status: 'reversed', created_date: '2026-08-02T00:00:00.000Z' },
+  ])?.id, 'r2');
+
+const driverRideView = make('driverRideView',
+  liftSrc('getDriverRides', 'safeIso', 'ms'), liftSrc('getDriverRides', 'driverRideView', 'ride, bucket, win, earning'));
+const fullRide = {
+  id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado', vehicle_image: 'https://x/p.jpg',
+  service_date: '2026-08-10', start_time: '09:00', duration_tier: 'hourly', duration_hours: 3,
+  pickup_location: { address: '4 Aso Drive', city: 'Abuja' }, pickup_instructions: 'Gate 2',
+  passengers: 2, special_requests: 'Child seat', status: 'confirmed',
+  guest_name: 'Ada Obi', guest_phone: '+2348010000000', guest_email: 'ada@example.com',
+  total_price: 45000, estimated_price: 45000, transaction_hash: 'T123', admin_response: 'internal',
+};
+const fullEarning = {
+  id: 'e1', amount_ngn: 7500, status: 'held', on_hold: false, release_at: '2026-08-10T13:00:00.000Z',
+  admin_notes: 'internal', hold_reason: 'internal', adjustment_reason: 'internal', rate_ngn: 2500, units: 3,
+};
+const liveWin = { startMs: at('2026-08-10T08:00:00.000Z'), endMs: at('2026-08-10T11:00:00.000Z') };
+const upcomingView = driverRideView(fullRide, 'upcoming', liveWin, fullEarning);
+check('an upcoming ride shows the guest phone', upcomingView.guest_phone, '+2348010000000');
+check('a ride in progress shows the guest phone', driverRideView(fullRide, 'current', liveWin, fullEarning).guest_phone, '+2348010000000');
+check('a past ride no longer shows the guest phone', driverRideView(fullRide, 'past', liveWin, fullEarning).guest_phone, null);
+check('a cancelled ride does not show the guest phone', driverRideView(fullRide, 'cancelled', liveWin, fullEarning).guest_phone, null);
+check('the guest name stays, so a report has a subject', driverRideView(fullRide, 'past', liveWin, fullEarning).guest_name, 'Ada Obi');
+check('instants are returned in UTC', `${upcomingView.start_at}|${upcomingView.end_at}`, '2026-08-10T08:00:00.000Z|2026-08-10T11:00:00.000Z');
+// Allow-list, not a spread: what the guest paid and how to reach them by email
+// are not the driver's to see, and neither are admin's notes on the pay.
+same('exactly these ride fields reach the driver', Object.keys(upcomingView).sort(), [
+  'booking_reference', 'bucket', 'dropoff_location', 'duration_days', 'duration_hours', 'duration_tier',
+  'earning', 'end_at', 'guest_name', 'guest_phone', 'id', 'passengers', 'pickup_instructions',
+  'pickup_location', 'service_date', 'special_requests', 'start_at', 'start_time', 'status',
+  'vehicle_image', 'vehicle_name',
+]);
+same('exactly these pay fields reach the driver', Object.keys(upcomingView.earning).sort(),
+  ['amount_ngn', 'id', 'on_hold', 'release_at', 'released_at', 'status']);
+check('a ride with no earning says so', driverRideView(fullRide, 'upcoming', liveWin, null).earning, null);
+check('an unreadable window gives null instants, not a crash', driverRideView(fullRide, 'upcoming', null, null).start_at, null);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error: ENOENT: no such file or directory, open '…/base44/functions/getDriverRides/entry.ts'`.
+
+- [ ] **Step 3: Create the function**
+
+**Create `base44/functions/getDriverRides/entry.ts`:**
+
+```ts
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+// getDriverRides
+// ----------------------------------------------------------------------------
+// The signed-in driver's rides, each with what it pays and where that pay
+// stands. Read-only.
+//
+// Three rules shape it:
+//   1. The driver is resolved from the session email on the server. Nothing
+//      the browser sends chooses whose rides come back.
+//   2. The ride is returned through an allow-list, not a spread. What the
+//      guest paid, their email and admin's notes are not the driver's to see.
+//   3. The guest's phone is included only while the ride is still to happen or
+//      under way. Afterwards the driver has no reason to hold it.
+//
+// Buckets come from the same computeBucket as getRideBookings, so the driver,
+// the guest and admin can never disagree about whether a ride is over.
+
+// ── Ride time model — lockstep copy, see checkRideAvailability ──────────────
+const WAT_OFFSET = '+01:00';
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+const MAX_HOURLY = 8;
+
+function rideDurationMs(tier: string, days?: number, hours?: number): number {
+    switch (tier) {
+        case 'hourly': return Math.min(MAX_HOURLY, Math.max(1, Number(hours) || 1)) * HOUR_MS;
+        case '12hr': return 12 * HOUR_MS;
+        case '24hr': return DAY_MS;
+        case 'multi_day': return Math.max(1, Number(days) || 1) * DAY_MS;
+        case 'weekly': return 7 * DAY_MS;
+        case 'monthly': return 30 * DAY_MS;
+        default: return NaN;
+    }
+}
+
+// Prefer the stored instants. Fall back to deriving them for any row written
+// before start_at existed.
+function windowOf(r: any): { startMs: number; endMs: number } | null {
+    let startMs = Date.parse(r.start_at || '');
+    if (Number.isNaN(startMs)) startMs = Date.parse(`${r.service_date}T${r.start_time}:00${WAT_OFFSET}`);
+    if (Number.isNaN(startMs)) return null;
+    let endMs = Date.parse(r.end_at || '');
+    if (Number.isNaN(endMs)) {
+        const dur = rideDurationMs(r.duration_tier, r.duration_days, r.duration_hours);
+        if (Number.isNaN(dur)) return null;
+        endMs = startMs + dur;
+    }
+    return { startMs, endMs };
+}
+
+// Lockstep copy, see getRideBookings.
+function computeBucket(r: any, nowMs: number): string {
+    if (r.status === 'cancelled') return 'cancelled';
+    if (r.status === 'completed') return 'past';
+    if (r.status === 'pending' && !r.approved_at) return 'pending-approval';
+    const w = windowOf(r);
+    if (!w) return 'pending-approval';
+    const isPaid = r.payment_status === 'paid';
+    // An unpaid ride whose window has passed is dead, not history.
+    if (nowMs > w.endMs) return isPaid ? 'past' : 'cancelled';
+    if (nowMs < w.startMs) return 'upcoming';
+    return 'current';
+}
+
+// ISO string for an instant, or null when it is not a representable date.
+// Lockstep copy, see assignRideDriver.
+function safeIso(ms: number) {
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+// The Driver row this login belongs to, or null. Lockstep copy, see
+// getDriverProfile.
+async function findDriverForUser(sr: any, email: string) {
+    const raw = String(email || '').trim();
+    const lower = raw.toLowerCase();
+    if (!lower) return null;
+    let rows = await sr.Driver.filter({ user_email: lower });
+    if ((!rows || rows.length === 0) && raw !== lower) rows = await sr.Driver.filter({ user_email: raw });
+    if (!rows || rows.length === 0) return null;
+    rows.sort((a, b) => String(a.created_date || '').localeCompare(String(b.created_date || '')));
+    return rows[0];
+}
+
+// Which earning row speaks for a ride on the driver's card: one still in play
+// if there is one (held or released), otherwise the most recent reversed row.
+function earningForRide(rows: any[]) {
+    const live = rows.filter((e) => e.status !== 'reversed');
+    const pool = live.length > 0 ? live : rows;
+    if (pool.length === 0) return null;
+    const newestFirst = pool.slice().sort((a, b) => String(b.created_date || '').localeCompare(String(a.created_date || '')));
+    return newestFirst[0];
+}
+
+// Everything the driver may know about one ride. An explicit allow-list, so a
+// column added to RideBooking or DriverEarning later cannot leak here by
+// default. bucket is one of upcoming | current | past | cancelled.
+function driverRideView(ride: any, bucket: string, win: any, earning: any) {
+    const live = bucket === 'upcoming' || bucket === 'current';
+    return {
+        id: ride.id,
+        booking_reference: ride.booking_reference || null,
+        vehicle_name: ride.vehicle_name || 'Vehicle',
+        vehicle_image: ride.vehicle_image || null,
+        service_date: ride.service_date || null,
+        start_time: ride.start_time || null,
+        start_at: win ? safeIso(win.startMs) : null,
+        end_at: win ? safeIso(win.endMs) : null,
+        duration_tier: ride.duration_tier || null,
+        duration_hours: ride.duration_hours || null,
+        duration_days: ride.duration_days || null,
+        pickup_location: ride.pickup_location || null,
+        dropoff_location: ride.dropoff_location || null,
+        pickup_instructions: ride.pickup_instructions || null,
+        passengers: ride.passengers || 1,
+        special_requests: ride.special_requests || null,
+        guest_name: ride.guest_name || 'Guest',
+        // Needed to find each other at pickup. Not needed once the ride is over.
+        guest_phone: live ? (ride.guest_phone || null) : null,
+        bucket,
+        status: ride.status,
+        earning: earning ? {
+            id: earning.id,
+            amount_ngn: Math.max(0, Math.round(Number(earning.amount_ngn) || 0)),
+            status: earning.status,
+            on_hold: !!earning.on_hold,
+            release_at: earning.release_at || null,
+            released_at: earning.released_at || null,
+        } : null,
+    };
+}
+
+Deno.serve(async (req) => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+    const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers });
+
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+    if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
+
+    try {
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
+        if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+
+        const sr = base44.asServiceRole.entities;
+        const driver = await findDriverForUser(sr, user.email);
+        if (!driver) {
+            return json({
+                success: false,
+                error: 'This account is not linked to a driver profile.',
+                code: 'NOT_A_DRIVER',
+            }, 403);
+        }
+
+        const [rides, earnings] = await Promise.all([
+            fetchAll(sr.RideBooking, { driver_id: driver.id }),
+            fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+        ]);
+
+        const earningsByRide = new Map<string, any[]>();
+        for (const e of earnings) {
+            const list = earningsByRide.get(e.ride_booking_id) || [];
+            list.push(e);
+            earningsByRide.set(e.ride_booking_id, list);
+        }
+
+        const nowMs = Date.now();
+        const counts: Record<string, number> = { upcoming: 0, current: 0, past: 0, cancelled: 0 };
+        const views = rides.map((r) => {
+            const raw = computeBucket(r, nowMs);
+            // A ride only gets a driver after it is paid, so 'pending-approval'
+            // here can only mean its time could not be read. Show it as
+            // upcoming rather than hide a job from the person doing it.
+            const bucket = raw === 'pending-approval' ? 'upcoming' : raw;
+            counts[bucket] = (counts[bucket] || 0) + 1;
+            return driverRideView(r, bucket, windowOf(r), earningForRide(earningsByRide.get(r.id) || []));
+        });
+
+        // What needs the driver now comes first: in progress, then upcoming
+        // soonest first, then history newest first.
+        const groupOrder: Record<string, number> = { current: 0, upcoming: 1, past: 2, cancelled: 3 };
+        views.sort((a, b) => {
+            if (a.bucket !== b.bucket) return groupOrder[a.bucket] - groupOrder[b.bucket];
+            const byStart = String(a.start_at || '').localeCompare(String(b.start_at || ''));
+            return a.bucket === 'current' || a.bucket === 'upcoming' ? byStart : -byStart;
+        });
+
+        return json({ success: true, data: { rides: views, counts } });
+    } catch (error) {
+        console.error('getDriverRides error:', error);
+        return json({ success: false, error: 'Internal server error', details: (error as Error).message }, 500);
+    }
+});
+```
+
+- [ ] **Step 4: Run the check and watch it pass**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, including every line under `— driver ride view —`.
+
+- [ ] **Step 5: Create the ride card**
+
+**Create `src/components/driver/DriverRideCard.jsx`:**
+
+```jsx
+import React from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Car, CalendarClock, MapPin, Users, Phone, UserRound, Banknote, Flag, MessageSquare } from 'lucide-react';
+import { durationLabel } from '@/config/rides';
+
+// DriverRideCard — one ride as the driver needs to see it: when, where, who,
+// and what it pays.
+//
+// Everything on it comes from getDriverRides, which has already decided what
+// the driver may know. This component adds nothing and derives nothing about
+// the ride's state; it only words it.
+
+const ngn = (n) => `₦${(Number(n) || 0).toLocaleString()}`;
+
+const fmtWhen = (iso) => {
+  if (!iso) return 'Time to be confirmed';
+  try {
+    return new Date(iso).toLocaleString('en-GB', {
+      timeZone: 'Africa/Lagos', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    });
+  } catch { return 'Time to be confirmed'; }
+};
+
+const BUCKET_BADGE = {
+  current: { label: 'In progress', className: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900' },
+  upcoming: { label: 'Upcoming', className: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900' },
+  past: { label: 'Completed', className: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700' },
+  cancelled: { label: 'Cancelled', className: 'bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-rose-200 dark:border-rose-900' },
+};
+
+const PAY_TONE = {
+  good: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-100',
+  held: 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-100',
+  warn: 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-900 text-orange-900 dark:text-orange-100',
+  muted: 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300',
+};
+
+// The one sentence about money. A ride with no earning row predates pay
+// tracking or was assigned at ₦0; either way the driver is told who to ask.
+export function payLine(earning) {
+  if (!earning) return { tone: 'muted', text: 'Pay for this ride is arranged with the team.' };
+  const amount = ngn(earning.amount_ngn);
+  if (earning.status === 'released') return { tone: 'good', text: `${amount} released to your wallet` };
+  if (earning.status === 'reversed') return { tone: 'muted', text: `${amount} reversed. This ride no longer pays.` };
+  if (earning.on_hold || earning.under_review) return { tone: 'warn', text: `${amount} held · under review by the team` };
+  return { tone: 'held', text: `${amount} held · releases ${fmtWhen(earning.release_at)}` };
+}
+
+export default function DriverRideCard({ ride, onReport }) {
+  const badge = BUCKET_BADGE[ride.bucket] || BUCKET_BADGE.upcoming;
+  const pickup = [ride.pickup_location?.address, ride.pickup_location?.area, ride.pickup_location?.city]
+    .filter(Boolean).join(', ');
+  const dropoff = [ride.dropoff_location?.address, ride.dropoff_location?.area].filter(Boolean).join(', ');
+  const pay = payLine(ride.earning);
+  const cancelled = ride.bucket === 'cancelled';
+
+  return (
+    <div
+      id={`ride-${ride.id}`}
+      className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white/80 dark:bg-slate-900/80"
+    >
+      <div className="flex flex-col sm:flex-row">
+        {ride.vehicle_image ? (
+          <img src={ride.vehicle_image} alt="" className="w-full sm:w-36 h-28 sm:h-auto object-cover flex-shrink-0" />
+        ) : (
+          <div className="w-full sm:w-36 h-28 sm:h-auto bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+            <Car className="w-8 h-8 text-slate-400 dark:text-slate-500" />
+          </div>
+        )}
+
+        <div className="p-4 flex-1 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+            <p className={`font-semibold break-words min-w-0 flex-1 ${cancelled ? 'text-slate-500 dark:text-slate-400 line-through' : 'text-slate-900 dark:text-white'}`}>
+              {ride.vehicle_name}
+            </p>
+            <div className="flex flex-wrap gap-2 flex-shrink-0">
+              {ride.booking_reference && (
+                <Badge variant="outline" className="text-xs font-mono">{ride.booking_reference}</Badge>
+              )}
+              <Badge className={`${badge.className} border font-medium`}>{badge.label}</Badge>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
+            <span className="flex items-start gap-1.5">
+              <CalendarClock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              <span className="break-words">
+                {fmtWhen(ride.start_at)} · {durationLabel(ride.duration_tier, { hours: ride.duration_hours, days: ride.duration_days })}
+              </span>
+            </span>
+            {pickup && (
+              <span className="flex items-start gap-1.5">
+                <MapPin className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span className="break-words">
+                  Pickup: {pickup}
+                  {dropoff ? ` · Drop-off: ${dropoff}` : ''}
+                </span>
+              </span>
+            )}
+            <span className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 flex-shrink-0" />
+              {ride.passengers} passenger{ride.passengers === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          {ride.pickup_instructions && !cancelled && (
+            <div className="mt-3 flex items-start gap-2 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl p-3">
+              <MapPin className="w-4 h-4 text-blue-700 dark:text-blue-300 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-blue-900 dark:text-blue-100 break-words">{ride.pickup_instructions}</p>
+            </div>
+          )}
+
+          {ride.special_requests && !cancelled && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-slate-500 dark:text-slate-400 break-words">
+              <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              <span>Guest asked: {ride.special_requests}</span>
+            </p>
+          )}
+
+          <div className="mt-3 flex items-center gap-3 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
+            <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+              <UserRound className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Your passenger</p>
+              <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{ride.guest_name}</p>
+            </div>
+            {ride.guest_phone ? (
+              <a href={`tel:${ride.guest_phone}`} className="flex-shrink-0">
+                <Button size="sm" variant="outline" className="rounded-xl">
+                  <Phone className="w-4 h-4 mr-1.5" /> Call
+                </Button>
+              </a>
+            ) : null}
+          </div>
+
+          <div className={`mt-3 flex items-center gap-2 border rounded-xl px-3 py-2 ${PAY_TONE[pay.tone]}`}>
+            <Banknote className="w-4 h-4 flex-shrink-0" />
+            <p className="text-sm font-medium break-words">{pay.text}</p>
+          </div>
+
+          {ride.already_reported ? (
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+              You reported this ride. The team will be in touch.
+            </p>
+          ) : ride.can_report && onReport ? (
+            <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <Button
+                variant="outline" size="sm" onClick={() => onReport(ride)}
+                className="rounded-xl border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
+              >
+                <Flag className="w-4 h-4 mr-2" /> Report this customer
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 6: Create the page**
+
+**Create `src/pages/DriverRides.jsx`:**
+
+```jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Loader2, RefreshCw, Car, ChevronDown, AlertCircle } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
+import { useDriverProfile } from '@/lib/useDriverProfile';
+import DriverNotice from '@/components/driver/DriverNotice';
+import DriverRideCard from '@/components/driver/DriverRideCard';
+
+// DriverRides — the driver's jobs: what is on now, what is coming, what is done.
+//
+// Grouping and order come from getDriverRides. This page never works out for
+// itself whether a ride is over, so it cannot disagree with the guest's view
+// or with admin's.
+
+const LIVE_GROUPS = [
+  { key: 'current', label: 'In progress' },
+  { key: 'upcoming', label: 'Upcoming' },
+];
+
+export default function DriverRidesPage() {
+  const location = useLocation();
+  const { driver, isDriver, isLoading: profileLoading } = useDriverProfile();
+  const [rides, setRides] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const load = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true);
+    try {
+      const res = await base44.functions.invoke('getDriverRides', {});
+      if (res?.data?.success) {
+        setRides(res.data.data?.rides || []);
+        setError(null);
+      } else {
+        setError(res?.data?.error || 'Could not load your rides.');
+      }
+    } catch (err) {
+      console.error('getDriverRides failed:', err);
+      setError(err?.message || 'Could not load your rides.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isDriver) load();
+  }, [isDriver, load]);
+
+  // A push notification links to #ride-<id>. Bring that card into view once
+  // the list is on screen, opening the history group if that is where it is.
+  useEffect(() => {
+    const id = location.hash ? location.hash.slice(1) : '';
+    if (!id || rides.length === 0) return;
+    const target = rides.find((r) => `ride-${r.id}` === id);
+    if (!target) return;
+    if (target.bucket === 'past' || target.bucket === 'cancelled') setShowHistory(true);
+    const t = setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+    return () => clearTimeout(t);
+  }, [location.hash, rides]);
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-slate-400 dark:text-slate-500" />
+      </div>
+    );
+  }
+  if (!isDriver) return <DriverNotice />;
+
+  const history = rides.filter((r) => r.bucket === 'past' || r.bucket === 'cancelled');
+  const liveCount = rides.length - history.length;
+  const paused = driver?.active === false || driver?.admin_approved === false;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-start justify-between gap-3 mb-6">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-1">My rides</h1>
+            <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
+              {driver?.full_name ? `${driver.full_name} · ` : ''}rides assigned to you and what each one pays
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="outline" size="icon" onClick={() => load(true)} disabled={refreshing}
+              className="rounded-xl" aria-label="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+
+        {paused && (
+          <div className="mb-4 flex items-start gap-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-900 dark:text-amber-100">
+              Your profile is paused for new rides. Rides and pay you already have are still here.
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 flex items-start gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+              <button type="button" onClick={() => load(true)} className="text-sm font-medium text-red-700 dark:text-red-300 underline mt-1">
+                Try again
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-400 dark:text-slate-500" />
+          </div>
+        ) : rides.length === 0 && !error ? (
+          <Card className="bg-white/90 dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
+            <CardContent className="py-12 text-center">
+              <Car className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+              <h2 className="font-semibold text-slate-900 dark:text-white mb-1">No rides yet</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-300 max-w-sm mx-auto">
+                When the team assigns you to a ride it appears here with the pickup details and your pay,
+                and you get a notification.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-8">
+            {liveCount === 0 && !error && (
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Nothing coming up right now. Your earlier rides are below.
+              </p>
+            )}
+
+            {LIVE_GROUPS.map((group) => {
+              const items = rides.filter((r) => r.bucket === group.key);
+              if (items.length === 0) return null;
+              return (
+                <section key={group.key}>
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">
+                    {group.label} ({items.length})
+                  </h2>
+                  <div className="space-y-3">
+                    {items.map((ride) => <DriverRideCard key={ride.id} ride={ride} />)}
+                  </div>
+                </section>
+              );
+            })}
+
+            {history.length > 0 && (
+              <section>
+                <button
+                  type="button" onClick={() => setShowHistory((v) => !v)}
+                  className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-3"
+                  aria-expanded={showHistory}
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+                  Past and cancelled ({history.length})
+                </button>
+                {showHistory && (
+                  <div className="space-y-3">
+                    {history.map((ride) => <DriverRideCard key={ride.id} ride={ride} />)}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 7: Register the page and add it to the navigation**
+
+A page that is not in `PUBLIC_PAGES` requires a session automatically (`RequireAuth` in `src/App.jsx`), which is what this one needs.
+
+**Edit `src/pages.config.js`** — find:
+
+```js
+const Install = lazy(() => import('./pages/Install'));
+```
+
+replace with:
+
+```js
+const Install = lazy(() => import('./pages/Install'));
+const DriverRides = lazy(() => import('./pages/DriverRides'));
+```
+
+**Edit `src/pages.config.js`** — find:
+
+```js
+    "Withdrawals": Withdrawals,
+}
+```
+
+replace with:
+
+```js
+    "Withdrawals": Withdrawals,
+    "DriverRides": DriverRides,
+}
+```
+
+**Edit `src/Layout.jsx`** — find:
+
+```jsx
+import { Search, Calendar, User, Heart, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard } from "lucide-react";
+```
+
+replace with:
+
+```jsx
+import { Search, Calendar, User, Heart, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard, Car, Banknote } from "lucide-react";
+```
+
+**Edit `src/Layout.jsx`** — find:
+
+```jsx
+import { useAuth } from "@/lib/AuthContext";
+```
+
+replace with:
+
+```jsx
+import { useAuth } from "@/lib/AuthContext";
+import { useDriverProfile } from "@/lib/useDriverProfile";
+```
+
+**Edit `src/Layout.jsx`** — find:
+
+```jsx
+  // Add admin link if user is admin
+  const menuItems = [...navigationItems];
+```
+
+replace with:
+
+```jsx
+  // Drivers get their own pages first: it is what they open the app for.
+  // isDriver stays false for everyone else, so nothing changes for guests.
+  const { isDriver } = useDriverProfile();
+  const driverItems = isDriver ? [
+    {
+      title: "My rides",
+      url: createPageUrl("DriverRides"),
+      icon: Car,
+      description: "Rides assigned to you"
+    },
+  ] : [];
+
+  // Add admin link if user is admin
+  const menuItems = [...driverItems, ...navigationItems];
+```
+
+- [ ] **Step 8: Lint, parse and build**
+
+Run: `npm run lint`
+
+Expected: no output, exit code 0.
+
+Run: `node_modules/.bin/esbuild base44/functions/getDriverRides/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`, with a `DriverRides-….js` chunk in the list.
+
+- [ ] **Step 9: Look at it**
+
+Run the dev server (`npm run dev`) and open `http://localhost:5173/DriverRides` signed out. Expected: redirect to `/login?from_url=…`. Signed in as a non-driver: the "This page is for UrbanStays drivers" card, readable in light and in dark. Functions do not run locally, so the list itself is checked in the sandbox:
+
+1. Signed in as a linked driver with one upcoming assigned ride: "My rides" is the first item in the sidebar; the ride shows vehicle, time in WAT, pickup, the passenger's name with a Call button, and "₦… held · releases …".
+2. After the ride's end: the card moves under "Past and cancelled", the Call button is gone, and once released the pay line reads "₦… released to your wallet".
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs base44/functions/getDriverRides/entry.ts src/components/driver/DriverRideCard.jsx src/pages/DriverRides.jsx src/pages.config.js src/Layout.jsx
+git commit -m "feat(rides): My rides page for drivers" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+

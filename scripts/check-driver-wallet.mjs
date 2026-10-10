@@ -491,6 +491,67 @@ same('unlinked: the address moves to history so past withdrawals still count',
 same('a new driver saved with no login',
   rides.driverLoginPatch(undefined, ''), { user_email: '', previous_user_emails: [] });
 
+// ── What a driver is shown about a ride ────────────────────────────────────
+console.log('\n— driver ride view —');
+identical('findDriverForUser', FIND_DRIVER_SIG, ['getDriverProfile', 'getDriverRides']);
+identical('rideDurationMs', 'tier, days, hours', ['getRideBookings', 'getDriverRides']);
+identical('windowOf', 'r', ['getRideBookings', 'getDriverRides']);
+identical('computeBucket', 'r, nowMs', ['getRideBookings', 'getDriverRides']);
+identical('safeIso', 'ms', ['assignRideDriver', 'getDriverRides']);
+
+const earningForRide = make('earningForRide', liftSrc('getDriverRides', 'earningForRide', 'rows'));
+check('no earning rows: nothing to show', earningForRide([]), null);
+check('a held row beats an older reversed one',
+  earningForRide([
+    { id: 'old', status: 'reversed', created_date: '2026-08-01T00:00:00.000Z' },
+    { id: 'live', status: 'held', created_date: '2026-08-02T00:00:00.000Z' },
+  ])?.id, 'live');
+check('a released row beats a newer reversed duplicate',
+  earningForRide([
+    { id: 'paid', status: 'released', created_date: '2026-08-01T00:00:00.000Z' },
+    { id: 'dup', status: 'reversed', created_date: '2026-08-02T00:00:00.000Z' },
+  ])?.id, 'paid');
+check('only reversed rows: the latest is shown',
+  earningForRide([
+    { id: 'r1', status: 'reversed', created_date: '2026-08-01T00:00:00.000Z' },
+    { id: 'r2', status: 'reversed', created_date: '2026-08-02T00:00:00.000Z' },
+  ])?.id, 'r2');
+
+const driverRideView = make('driverRideView',
+  liftSrc('getDriverRides', 'safeIso', 'ms'), liftSrc('getDriverRides', 'driverRideView', 'ride, bucket, win, earning'));
+const fullRide = {
+  id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado', vehicle_image: 'https://x/p.jpg',
+  service_date: '2026-08-10', start_time: '09:00', duration_tier: 'hourly', duration_hours: 3,
+  pickup_location: { address: '4 Aso Drive', city: 'Abuja' }, pickup_instructions: 'Gate 2',
+  passengers: 2, special_requests: 'Child seat', status: 'confirmed',
+  guest_name: 'Ada Obi', guest_phone: '+2348010000000', guest_email: 'ada@example.com',
+  total_price: 45000, estimated_price: 45000, transaction_hash: 'T123', admin_response: 'internal',
+};
+const fullEarning = {
+  id: 'e1', amount_ngn: 7500, status: 'held', on_hold: false, release_at: '2026-08-10T13:00:00.000Z',
+  admin_notes: 'internal', hold_reason: 'internal', adjustment_reason: 'internal', rate_ngn: 2500, units: 3,
+};
+const liveWin = { startMs: at('2026-08-10T08:00:00.000Z'), endMs: at('2026-08-10T11:00:00.000Z') };
+const upcomingView = driverRideView(fullRide, 'upcoming', liveWin, fullEarning);
+check('an upcoming ride shows the guest phone', upcomingView.guest_phone, '+2348010000000');
+check('a ride in progress shows the guest phone', driverRideView(fullRide, 'current', liveWin, fullEarning).guest_phone, '+2348010000000');
+check('a past ride no longer shows the guest phone', driverRideView(fullRide, 'past', liveWin, fullEarning).guest_phone, null);
+check('a cancelled ride does not show the guest phone', driverRideView(fullRide, 'cancelled', liveWin, fullEarning).guest_phone, null);
+check('the guest name stays, so a report has a subject', driverRideView(fullRide, 'past', liveWin, fullEarning).guest_name, 'Ada Obi');
+check('instants are returned in UTC', `${upcomingView.start_at}|${upcomingView.end_at}`, '2026-08-10T08:00:00.000Z|2026-08-10T11:00:00.000Z');
+// Allow-list, not a spread: what the guest paid and how to reach them by email
+// are not the driver's to see, and neither are admin's notes on the pay.
+same('exactly these ride fields reach the driver', Object.keys(upcomingView).sort(), [
+  'booking_reference', 'bucket', 'dropoff_location', 'duration_days', 'duration_hours', 'duration_tier',
+  'earning', 'end_at', 'guest_name', 'guest_phone', 'id', 'passengers', 'pickup_instructions',
+  'pickup_location', 'service_date', 'special_requests', 'start_at', 'start_time', 'status',
+  'vehicle_image', 'vehicle_name',
+]);
+same('exactly these pay fields reach the driver', Object.keys(upcomingView.earning).sort(),
+  ['amount_ngn', 'id', 'on_hold', 'release_at', 'released_at', 'status']);
+check('a ride with no earning says so', driverRideView(fullRide, 'upcoming', liveWin, null).earning, null);
+check('an unreadable window gives null instants, not a crash', driverRideView(fullRide, 'upcoming', null, null).start_at, null);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

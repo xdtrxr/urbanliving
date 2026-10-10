@@ -22,6 +22,7 @@ const BankAccounts = lazy(() => import('./pages/BankAccounts'));
 const Withdrawals = lazy(() => import('./pages/Withdrawals'));
 const Landing = lazy(() => import('./pages/Landing'));
 const Install = lazy(() => import('./pages/Install'));
+const DriverRides = lazy(() => import('./pages/DriverRides'));
 
 // Pages that render edge-to-edge without the standard Layout chrome
 // (no sidebar, no floating header). Marketing/install pages only.
@@ -57,6 +58,7 @@ export const PAGES = {
     "PaymentPage": PaymentPage,
     "BankAccounts": BankAccounts,
     "Withdrawals": Withdrawals,
+    "DriverRides": DriverRides,
 }
 
 export const pagesConfig = {
