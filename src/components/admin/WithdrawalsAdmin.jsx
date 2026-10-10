@@ -10,6 +10,7 @@ import {
 import { Loader2, Mail, Wallet, RefreshCw, Send, CheckCircle, XCircle, Clock, AlertTriangle, Landmark } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { base44 } from '@/api/base44Client';
+import { invokeFn } from '@/lib/invokeFn';
 import { useToast } from '@/components/ui/use-toast';
 
 // WithdrawalsAdmin — admin tab for working through pending payouts.
@@ -109,33 +110,25 @@ export default function WithdrawalsAdmin() {
     const target = confirmTarget;
     setProcessingId(target.id);
     setConfirmTarget(null);
-    try {
-      const res = await base44.functions.invoke('processWithdrawal', {
-        withdrawal_request_id: target.id,
-      });
-      if (res?.data?.success) {
-        toast({
-          title: 'Transfer initiated',
-          description: 'Paystack accepted the transfer. Status will flip to Completed when the bank settles.',
-        });
-      } else {
-        toast({
-          title: 'Transfer rejected',
-          description: res?.data?.error || res?.data?.details?.message || 'Paystack rejected the transfer. User balance was refunded.',
-          variant: 'destructive',
-        });
-      }
-    } catch (err) {
-      console.error('processWithdrawal failed:', err);
+    // invokeFn never throws: a refusal arrives as r.error, the server's own
+    // sentence. For a driver-wallet request that includes "The driver's
+    // released earnings do not cover this request", which is the case this
+    // screen most needs to be able to show.
+    const r = await invokeFn('processWithdrawal', { withdrawal_request_id: target.id });
+    if (r.ok) {
       toast({
-        title: 'Something went wrong',
-        description: err?.message || 'Try again in a moment.',
+        title: 'Transfer initiated',
+        description: 'Paystack accepted the transfer. Status will flip to Completed when the bank settles.',
+      });
+    } else {
+      toast({
+        title: r.code === 'NOT_COVERED' ? 'Not paid: the earnings do not cover it' : 'Transfer rejected',
+        description: r.body?.details?.message ? `${r.error}: ${r.body.details.message}` : r.error,
         variant: 'destructive',
       });
-    } finally {
-      setProcessingId(null);
-      await load();
     }
+    setProcessingId(null);
+    await load();
   };
 
   const filtered = filter === 'all' ? requests : requests.filter((r) => r.status === filter);
@@ -212,6 +205,9 @@ export default function WithdrawalsAdmin() {
                         {r.refunded_at && (
                           <Badge variant="outline" className="text-xs">Refunded</Badge>
                         )}
+                        <Badge variant="outline" className="text-xs">
+                          {r.wallet === 'driver' ? 'Driver earnings' : 'Referral'}
+                        </Badge>
                       </div>
                       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-300">
                         <span className="flex items-center gap-1.5 truncate">

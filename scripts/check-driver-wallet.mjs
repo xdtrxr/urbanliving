@@ -889,6 +889,13 @@ const driverWalletSummaries = make('driverWalletSummaries',
 same('no drivers, no lines', driverWalletSummaries([], [], []), []);
 same('nothing at all, no lines', driverWalletSummaries(undefined, undefined, undefined), []);
 
+// ── The admin overview uses the same arithmetic ────────────────────────────
+console.log('\n— admin overview —');
+identical('driverEmails', 'driver', [WALLET_HOME, 'getDashboardStats']);
+identical('driverWithdrawals', 'driver, rows', [WALLET_HOME, 'getDashboardStats']);
+identical('walletTotals', 'earnings, withdrawals', [WALLET_HOME, 'getDashboardStats']);
+identical('driverWalletSummaries', SUMMARY_SIG, [SUMMARY_HOME, 'getDashboardStats']);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

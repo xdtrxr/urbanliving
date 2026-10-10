@@ -7242,3 +7242,363 @@ git add scripts/check-driver-wallet.mjs base44/functions/getDriverEarningsAdmin/
 git commit -m "feat(rides): Earnings tab for admin, with a per-driver summary" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A14: Driver pay on the admin overview, and wallets on the withdrawals list
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (one lockstep block, above `// ---- result ----`)
+- Modify: `base44/functions/getDashboardStats/entry.ts` (four helper copies; two figures in the admin scope)
+- Modify: `src/components/admin/PlatformStatsAdmin.jsx` (one stat)
+- Modify: `src/components/admin/WithdrawalsAdmin.jsx` (wallet badge; show the server's reason when a payout is refused)
+
+**Interfaces:**
+- Consumes: `driverEmails`, `driverWithdrawals`, `walletTotals` (Task A08) and `driverWalletSummaries` (Task A13), all copied character for character; `processWithdrawal`'s `NOT_COVERED` refusal (Task A09); `invokeFn` (Task A10).
+- Produces: `getDashboardStats` admin scope answers `liabilities: { outstandingWalletNGN, driverHeldNGN, driverAvailableNGN, driverShortfallNGN }`. Nothing else in its answer changes.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── The admin overview uses the same arithmetic ────────────────────────────
+console.log('\n— admin overview —');
+identical('driverEmails', 'driver', [WALLET_HOME, 'getDashboardStats']);
+identical('driverWithdrawals', 'driver, rows', [WALLET_HOME, 'getDashboardStats']);
+identical('walletTotals', 'earnings, withdrawals', [WALLET_HOME, 'getDashboardStats']);
+identical('driverWalletSummaries', SUMMARY_SIG, [SUMMARY_HOME, 'getDashboardStats']);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error: could not find driverEmails in base44/functions/getDashboardStats/entry.ts`.
+
+- [ ] **Step 3: Give the overview the wallet arithmetic**
+
+**Edit `base44/functions/getDashboardStats/entry.ts`** — find:
+
+```ts
+        earningsNGN: referrals.reduce((sum: number, r: any) => sum + (Number(r.amount_earned_ngn) || 0), 0),
+    };
+}
+```
+
+replace with:
+
+```ts
+        earningsNGN: referrals.reduce((sum: number, r: any) => sum + (Number(r.amount_earned_ngn) || 0), 0),
+    };
+}
+
+// ── Driver wallet arithmetic — lockstep copies ──────────────────────────────
+// driverEmails, driverWithdrawals and walletTotals live in getDriverWallet;
+// driverWalletSummaries lives in getDriverEarningsAdmin. The overview must
+// report the same numbers those screens show, so it runs the same code, and
+// scripts/check-driver-wallet.mjs fails if a copy differs.
+
+// Every login this driver is, or was, linked to. Lower-cased, once each.
+function driverEmails(driver: any) {
+    const all = [driver && driver.user_email].concat((driver && driver.previous_user_emails) || []);
+    const out = [];
+    for (const raw of all) {
+        const email = String(raw || '').trim().toLowerCase();
+        if (email && !out.includes(email)) out.push(email);
+    }
+    return out;
+}
+
+// The withdrawal rows that count against this driver's balance: driver-wallet
+// rows carrying this driver's id AND made by a login that is, or was, linked
+// to this driver. The second condition is not decoration. Until the staged
+// rule that stops browsers creating WithdrawalRequest rows is live, any
+// signed-in user can create one for their own email with any driver_id on it;
+// the email is the one field the access rule pins to the creator.
+function driverWithdrawals(driver: any, rows: any[]) {
+    if (!driver) return [];
+    const emails = driverEmails(driver);
+    return (rows || []).filter((w) => !!w
+        && w.wallet === 'driver'
+        && w.driver_id === driver.id
+        && emails.includes(String(w.user_email || '').trim().toLowerCase()));
+}
+
+// The driver's position in whole naira. Pass withdrawals through
+// driverWithdrawals first. A failed or reversed transfer counts nowhere, so it
+// needs no refund. If pay is reversed after it was withdrawn, available stops
+// at zero and the difference is carried as shortfall until later pay covers it.
+function walletTotals(earnings: any[], withdrawals: any[]) {
+    const naira = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+    };
+    let held = 0;
+    let released = 0;
+    for (const e of earnings || []) {
+        if (!e) continue;
+        if (e.status === 'held') held += naira(e.amount_ngn);
+        else if (e.status === 'released') released += naira(e.amount_ngn);
+    }
+    let paidOut = 0;
+    let reserved = 0;
+    for (const w of withdrawals || []) {
+        if (!w) continue;
+        if (w.status === 'completed') paidOut += naira(w.amount);
+        else if (w.status === 'pending' || w.status === 'processing') reserved += naira(w.amount);
+    }
+    const net = released - paidOut - reserved;
+    return {
+        held,
+        released,
+        paid_out: paidOut,
+        reserved,
+        available: Math.max(0, net),
+        shortfall: Math.max(0, -net),
+    };
+}
+
+// One line per driver who has any pay or payout on record: the same numbers
+// that driver sees in their own wallet. A shortfall (pay reversed after it was
+// withdrawn) sorts first, because that is money to recover. Lockstep copy in
+// getDashboardStats.
+function driverWalletSummaries(drivers: any[], earnings: any[], withdrawals: any[]) {
+    const out = [];
+    for (const driver of drivers || []) {
+        if (!driver) continue;
+        const theirEarnings = (earnings || []).filter((e) => !!e && e.driver_id === driver.id);
+        const theirWithdrawals = driverWithdrawals(driver, withdrawals);
+        if (theirEarnings.length === 0 && theirWithdrawals.length === 0) continue;
+        const totals = walletTotals(theirEarnings, theirWithdrawals);
+        out.push({
+            driver_id: driver.id,
+            full_name: driver.full_name || 'Driver',
+            has_login: !!String(driver.user_email || '').trim(),
+            held: totals.held,
+            available: totals.available,
+            paid_out: totals.paid_out,
+            reserved: totals.reserved,
+            shortfall: totals.shortfall,
+        });
+    }
+    out.sort((a, b) => (b.shortfall - a.shortfall)
+        || ((b.held + b.available) - (a.held + a.available))
+        || String(a.full_name).localeCompare(String(b.full_name)));
+    return out;
+}
+```
+
+**Edit `base44/functions/getDashboardStats/entry.ts`** — find:
+
+```ts
+        const outstandingWalletNGN = users.reduce(
+            (sum: number, u: any) => sum + (Number(u.referral_balance_ngn) || 0), 0,
+        );
+```
+
+replace with:
+
+```ts
+        const outstandingWalletNGN = users.reduce(
+            (sum: number, u: any) => sum + (Number(u.referral_balance_ngn) || 0), 0,
+        );
+
+        // Driver pay is a liability too: what is held on rides not yet
+        // released, and what drivers could withdraw today. Fetched on its own
+        // so that a problem here cannot take the rest of the overview down.
+        let driverHeldNGN = 0;
+        let driverAvailableNGN = 0;
+        let driverShortfallNGN = 0;
+        try {
+            const [driverEarnings, drivers] = await Promise.all([
+                fetchAll(sr.DriverEarning),
+                fetchAll(sr.Driver),
+            ]);
+            for (const s of driverWalletSummaries(drivers, driverEarnings, withdrawals)) {
+                driverHeldNGN += s.held;
+                driverAvailableNGN += s.available;
+                driverShortfallNGN += s.shortfall;
+            }
+        } catch (err) {
+            console.error('Driver pay summary failed (the rest of the overview is unaffected):', err);
+        }
+```
+
+**Edit `base44/functions/getDashboardStats/entry.ts`** — find:
+
+```ts
+                liabilities: { outstandingWalletNGN },
+```
+
+replace with:
+
+```ts
+                liabilities: { outstandingWalletNGN, driverHeldNGN, driverAvailableNGN, driverShortfallNGN },
+```
+
+- [ ] **Step 4: Run the check and watch it pass**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, with four `ok` lines under `— admin overview —`.
+
+Run: `node_modules/.bin/esbuild base44/functions/getDashboardStats/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+- [ ] **Step 5: Show it on the overview**
+
+`liabilities.driverHeldNGN` is `undefined` until the function is published, so the stat reads the fields defensively.
+
+**Edit `src/components/admin/PlatformStatsAdmin.jsx`** — find:
+
+```jsx
+                ? `${withdrawals.pendingCount} withdrawal${withdrawals.pendingCount === 1 ? '' : 's'} in flight (${ngn(withdrawals.pendingNGN)})`
+                : 'No withdrawals in flight'
+            }
+          />
+```
+
+replace with:
+
+```jsx
+                ? `${withdrawals.pendingCount} withdrawal${withdrawals.pendingCount === 1 ? '' : 's'} in flight (${ngn(withdrawals.pendingNGN)})`
+                : 'No withdrawals in flight'
+            }
+          />
+          <Stat
+            icon={Banknote}
+            tone="amber"
+            label="Driver pay owed"
+            value={ngn((liabilities.driverHeldNGN || 0) + (liabilities.driverAvailableNGN || 0))}
+            sub={
+              (liabilities.driverShortfallNGN || 0) > 0
+                ? `${ngn(liabilities.driverShortfallNGN)} to recover from drivers. See Rides → Earnings`
+                : `${ngn(liabilities.driverHeldNGN || 0)} held on rides · ${ngn(liabilities.driverAvailableNGN || 0)} ready to withdraw`
+            }
+          />
+```
+
+- [ ] **Step 6: Tell the two wallets apart on the withdrawals list, and show why a payout was refused**
+
+**Edit `src/components/admin/WithdrawalsAdmin.jsx`** — find:
+
+```jsx
+import { base44 } from '@/api/base44Client';
+import { useToast } from '@/components/ui/use-toast';
+```
+
+replace with:
+
+```jsx
+import { base44 } from '@/api/base44Client';
+import { invokeFn } from '@/lib/invokeFn';
+import { useToast } from '@/components/ui/use-toast';
+```
+
+`processWithdrawal` refuses a driver-wallet request the ledger does not cover with a 409 and a sentence. The old handler looked for that sentence in a branch a 4xx never reaches.
+
+**Edit `src/components/admin/WithdrawalsAdmin.jsx`** — find:
+
+```jsx
+    try {
+      const res = await base44.functions.invoke('processWithdrawal', {
+        withdrawal_request_id: target.id,
+      });
+      if (res?.data?.success) {
+        toast({
+          title: 'Transfer initiated',
+          description: 'Paystack accepted the transfer. Status will flip to Completed when the bank settles.',
+        });
+      } else {
+        toast({
+          title: 'Transfer rejected',
+          description: res?.data?.error || res?.data?.details?.message || 'Paystack rejected the transfer. User balance was refunded.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      console.error('processWithdrawal failed:', err);
+      toast({
+        title: 'Something went wrong',
+        description: err?.message || 'Try again in a moment.',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessingId(null);
+      await load();
+    }
+```
+
+replace with:
+
+```jsx
+    // invokeFn never throws: a refusal arrives as r.error, the server's own
+    // sentence. For a driver-wallet request that includes "The driver's
+    // released earnings do not cover this request", which is the case this
+    // screen most needs to be able to show.
+    const r = await invokeFn('processWithdrawal', { withdrawal_request_id: target.id });
+    if (r.ok) {
+      toast({
+        title: 'Transfer initiated',
+        description: 'Paystack accepted the transfer. Status will flip to Completed when the bank settles.',
+      });
+    } else {
+      toast({
+        title: r.code === 'NOT_COVERED' ? 'Not paid: the earnings do not cover it' : 'Transfer rejected',
+        description: r.body?.details?.message ? `${r.error}: ${r.body.details.message}` : r.error,
+        variant: 'destructive',
+      });
+    }
+    setProcessingId(null);
+    await load();
+```
+
+**Edit `src/components/admin/WithdrawalsAdmin.jsx`** — find:
+
+```jsx
+                        {r.refunded_at && (
+                          <Badge variant="outline" className="text-xs">Refunded</Badge>
+                        )}
+```
+
+replace with:
+
+```jsx
+                        {r.refunded_at && (
+                          <Badge variant="outline" className="text-xs">Refunded</Badge>
+                        )}
+                        <Badge variant="outline" className="text-xs">
+                          {r.wallet === 'driver' ? 'Driver earnings' : 'Referral'}
+                        </Badge>
+```
+
+- [ ] **Step 7: Lint and build**
+
+Run: `npm run lint`
+
+Expected: no output, exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`.
+
+- [ ] **Step 8: Look at it (sandbox, after the next publish)**
+
+1. Admin → Overview. Expected: "Driver pay owed" beside "Outstanding wallet", its figure equal to the Held plus Available totals on Rides → Earnings.
+2. Admin → Withdrawals. Expected: every row carries "Driver earnings" or "Referral".
+3. Press Process now on the hand-made ₦5,000,000 row from Task A09. Expected: "Not paid: the earnings do not cover it" with the short-by figure.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs base44/functions/getDashboardStats/entry.ts src/components/admin/PlatformStatsAdmin.jsx src/components/admin/WithdrawalsAdmin.jsx
+git commit -m "feat(rides): driver pay owed on the admin overview; wallets told apart on the withdrawals list" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
