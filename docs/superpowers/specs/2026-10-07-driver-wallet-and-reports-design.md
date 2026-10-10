@@ -32,6 +32,7 @@ Found while reading the code the feature has to live in. None changes what a dri
 7. **Admin can read bank account details.** The Withdrawals admin tab looks up the destination account, but the UserBankAccount rule only let the owner read it, which leaves "Process now" disabled. Admin read is added.
 8. **Only a guest's complaint holds the driver's pay.** The first draft froze a ride's pay while any report on it was open. That would have delayed a driver's own money every time they reported an abusive customer, which punishes the behaviour this feature exists to encourage. A report the driver files never touches their pay; a complaint from the guest about the ride holds it until admin closes the report.
 9. **Refusals from the server are shown as written.** The SDK throws on any 4xx, so every screen that looked for the reason in a normal response was showing "Request failed with status code 409" instead. A small helper (`invokeFn`) now returns the server's sentence; the new screens and the ones this feature touches use it.
+10. **A multi-day booking is 1 to 30 whole days on the server too.** The booking form already stopped at 30; the server accepted any number, and that number multiplies into the guest's price, the driver's pay and how long the vehicle is blocked. A hand-made request for a billion days created an unpayable ride that blocked the car until admin rejected it. The computed driver pay also has a ceiling of ₦50,000,000 per ride; past it, admin has to type the figure.
 
 ## Non-goals
 
@@ -152,6 +153,7 @@ New:
 | `getDriverProfile` | any user | Driver row for `user.email`, public fields, or null |
 | `getDriverRides` | driver | rides where `driver_id` is mine, bucketed by the same `computeBucket` as `getRideBookings`, with guest name, guest phone while the ride is upcoming or in progress, pickup, instructions, and the earning row for each |
 | `getDriverWallet` | driver | `available`, `held`, `paid_out`, any withdrawal in flight, ledger rows newest first (no admin notes) |
+| `getDriverEarningsAdmin` | admin | the pay ledger across all drivers, plus one summary line per driver (held, available, paid out, shortfall) computed with the same arithmetic as the driver's own wallet |
 | `settleDriverEarning` | admin | `action: release \| hold \| unhold \| adjust \| reverse` with `reason`; all transitions guarded by current status |
 | `completeRide` | admin | marks a started, paid ride completed now (`completed_by: admin`); does not release money |
 | `createRideReport` | party to the ride | validates window and role, creates the row, Telegram notify |
