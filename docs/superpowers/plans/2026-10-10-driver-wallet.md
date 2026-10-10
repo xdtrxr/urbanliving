@@ -7634,6 +7634,44 @@ driver wallet|getDriverWallet
 readable function refusals|Could not reach the server. Check your connection and try again.
 ```
 
+First, a bug in the script itself. It found the live page chunks (`assets/Admin-….js` and so on), stripped `assets/` from each name to build a local file name, and then requested the stripped name from the site. A path that does not exist is answered with the site's `index.html` and HTTP 200, so the script downloaded the home page fifty times, found none of the page-level markers in it, and reported a build that had been live since 22 September 2026 as never published. Only "nav says Book a Ride" passed, because the navigation lives in the entry chunk. Fix the URL, and make the script refuse to continue if a "chunk" is HTML.
+
+**Edit `scripts/check-deploy.sh`** — find:
+
+```bash
+xargs -P 12 -I{} curl -sL --max-time 30 "$SITE/{}" -o "$TMP/c_{}" < <(sed 's#assets/##' "$TMP/chunks.txt") 2>/dev/null || true
+```
+
+replace with:
+
+```bash
+xargs -P 12 -I{} curl -sL --max-time 30 "$SITE/assets/{}" -o "$TMP/c_{}" < <(sed 's#assets/##' "$TMP/chunks.txt") 2>/dev/null || true
+```
+
+**Edit `scripts/check-deploy.sh`** — find:
+
+```bash
+cat "$TMP"/c_* >> "$TMP/all.js" 2>/dev/null
+```
+
+replace with:
+
+```bash
+# A chunk URL that does not exist is answered with the site's index.html (the
+# SPA fallback) and HTTP 200. Until 2026-10-10 the line above asked for every
+# chunk WITHOUT its assets/ prefix, got fifty copies of the home page, and this
+# script reported every page-level marker as missing on a build that was in
+# fact live. So: if anything that should be JavaScript starts like an HTML
+# document, say so and stop. Every result below would be meaningless.
+html=$(grep -liE '^<!doctype html' "$TMP"/c_* 2>/dev/null | wc -l | tr -d ' ')
+if [ "$html" != "0" ]; then
+  no "$html chunk(s) came back as HTML, not JavaScript: this check cannot see the live code"
+  exit 1
+fi
+ok "every chunk fetched is JavaScript"
+cat "$TMP"/c_* >> "$TMP/all.js" 2>/dev/null
+```
+
 The new ledger table and the six new functions join the lists the script probes. A function that answers 402 is also now reported as a failure: on 2026-10-10 every function on the live app answered 402 because the workspace plan had lost backend functions, and the script called that "ok" because it was not a 404.
 
 **Edit `scripts/check-deploy.sh`** — find:

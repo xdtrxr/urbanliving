@@ -33,7 +33,19 @@ curl -sL --max-time 45 "$SITE/$entry" -o "$TMP/all.js"
 # parallel -- there are ~50 and serial curls take minutes.
 grep -oE 'assets/[A-Za-z0-9_-]+-[A-Za-z0-9_-]+\.js' "$TMP/all.js" | sort -u > "$TMP/chunks.txt"
 printf "  fetching %s chunks\n" "$(wc -l < "$TMP/chunks.txt" | tr -d ' ')"
-xargs -P 12 -I{} curl -sL --max-time 30 "$SITE/{}" -o "$TMP/c_{}" < <(sed 's#assets/##' "$TMP/chunks.txt") 2>/dev/null || true
+xargs -P 12 -I{} curl -sL --max-time 30 "$SITE/assets/{}" -o "$TMP/c_{}" < <(sed 's#assets/##' "$TMP/chunks.txt") 2>/dev/null || true
+# A chunk URL that does not exist is answered with the site's index.html (the
+# SPA fallback) and HTTP 200. Until 2026-10-10 the line above asked for every
+# chunk WITHOUT its assets/ prefix, got fifty copies of the home page, and this
+# script reported every page-level marker as missing on a build that was in
+# fact live. So: if anything that should be JavaScript starts like an HTML
+# document, say so and stop. Every result below would be meaningless.
+html=$(grep -liE '^<!doctype html' "$TMP"/c_* 2>/dev/null | wc -l | tr -d ' ')
+if [ "$html" != "0" ]; then
+  no "$html chunk(s) came back as HTML, not JavaScript: this check cannot see the live code"
+  exit 1
+fi
+ok "every chunk fetched is JavaScript"
 cat "$TMP"/c_* >> "$TMP/all.js" 2>/dev/null
 printf "  fetched %s bytes of live JS\n" "$(wc -c < "$TMP/all.js" | tr -d ' ')"
 
