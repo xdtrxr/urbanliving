@@ -1,0 +1,132 @@
+{
+  "name": "DriverEarning",
+  "type": "object",
+  "description": "One row per driver per ride: what the driver is paid for it and where that money stands. Created HELD by assignRideDriver when a paid ride gets a driver who has a login, RELEASED by the sweep two hours after the booked end time (or by admin), REVERSED when the ride is cancelled or handed to another driver. A driver's available balance is never stored anywhere: it is released rows minus their driver-wallet withdrawals, recomputed on demand by walletTotals, so replaying a release cannot pay twice. Admin-only in every direction because rows carry internal notes; drivers read a trimmed view through getDriverWallet and getDriverRides.",
+  "properties": {
+    "driver_id": {
+      "type": "string",
+      "description": "FK to Driver. The wallet is keyed on this, never on an email, so relinking a driver to a new login keeps their history."
+    },
+    "ride_booking_id": {
+      "type": "string",
+      "description": "FK to RideBooking."
+    },
+    "booking_reference": {
+      "type": "string",
+      "description": "Snapshot of RideBooking.booking_reference (UD-XXXXXX) so the ledger reads without a join."
+    },
+    "vehicle_name": {
+      "type": "string",
+      "description": "Snapshot of RideBooking.vehicle_name."
+    },
+    "service_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Snapshot of RideBooking.service_date."
+    },
+    "end_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Booked end of the ride at the moment of assignment, pinned to WAT like every ride instant."
+    },
+    "amount_ngn": {
+      "type": "number",
+      "description": "The driver's pay for this ride in whole naira."
+    },
+    "basis": {
+      "type": "string",
+      "enum": [
+        "hourly",
+        "daily",
+        "manual"
+      ],
+      "description": "How amount_ngn was reached: rate_ngn x units from the vehicle's costing row, or a figure admin typed."
+    },
+    "rate_ngn": {
+      "type": "number",
+      "description": "The per-hour or per-day driver cost used. Equals amount_ngn for a manual figure."
+    },
+    "units": {
+      "type": "number",
+      "description": "Hours or days multiplied by rate_ngn. 1 for a manual figure."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "held",
+        "released",
+        "reversed"
+      ],
+      "default": "held",
+      "description": "held: counted as pending pay. released: counted toward the withdrawable balance. reversed: counted nowhere."
+    },
+    "on_hold": {
+      "type": "boolean",
+      "default": false,
+      "description": "Admin pause. A held row with on_hold true is skipped by the release pass until admin lifts it."
+    },
+    "hold_reason": {
+      "type": "string",
+      "description": "Why admin paused the release. Not shown to the driver."
+    },
+    "release_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Earliest moment the sweep may release the row: end_at plus two hours."
+    },
+    "held_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "released_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reversed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "adjusted_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Last time admin changed amount_ngn."
+    },
+    "adjustment_reason": {
+      "type": "string",
+      "description": "Mandatory whenever admin changes amount_ngn, mirroring RideBooking.price_adjustment_reason."
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "Internal. Reassignment, cancellation and reversal reasons accumulate here. Never returned to the driver."
+    }
+  },
+  "required": [
+    "driver_id",
+    "ride_booking_id",
+    "amount_ngn",
+    "status",
+    "release_at"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

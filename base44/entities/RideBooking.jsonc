@@ -235,6 +235,19 @@
     "linked_property_booking_id": {
       "type": "string",
       "description": "Optional FK to a Booking row when the ride was added from an existing property stay (Phase 3 hook)"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the ride was marked completed. Set by the sweep once the booked window is over, or by admin through completeRide."
+    },
+    "completed_by": {
+      "type": "string",
+      "enum": [
+        "system",
+        "admin"
+      ],
+      "description": "Who completed it. The driver's pay is deliberately NOT stored on this row: a guest can read their own RideBooking, and the pay lives on DriverEarning."
     }
   },
   "required": [
