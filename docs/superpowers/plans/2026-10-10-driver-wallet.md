@@ -1319,3 +1319,195 @@ git add scripts/check-driver-wallet.mjs base44/functions/assignRideDriver/entry.
 git commit -m "feat(rides): assignRideDriver holds the driver's pay in the earnings ledger" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A04: Cancelling a ride reverses its held pay
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (one lockstep assertion, above `// ---- result ----`)
+- Modify: `base44/functions/cancelRideBooking/entry.ts` (three helpers after the constants; `notifyAdmin` gains a line; the handler)
+
+**Interfaces:**
+- Consumes: `reverseHeldEarnings(sr, rideId, keepDriverId, note, nowIso)` (Task A03, copied here character for character); entity `DriverEarning`; `Driver.user_email`.
+- Produces: no new exports. `cancelRideBooking` keeps its request and response shape. The admin Telegram message gains a "Driver pay reversed" or "Driver pay ALREADY RELEASED" line when there was pay on the ride, and a linked driver gets a "Ride cancelled" push.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Cancellation uses the same reversal as reassignment ────────────────────
+console.log('\n— cancellation —');
+identical('reverseHeldEarnings', 'sr, rideId, keepDriverId, note, nowIso', ['assignRideDriver', 'cancelRideBooking']);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error: could not find reverseHeldEarnings in base44/functions/cancelRideBooking/entry.ts`.
+
+- [ ] **Step 3: Give the function a paginator, a push helper and the reversal**
+
+`cancelRideBooking` has never needed to read more than one row or notify anyone but admin, so it has none of the three.
+
+**Edit `base44/functions/cancelRideBooking/entry.ts`** — find:
+
+```ts
+const HOUR_MS = 60 * 60 * 1000;
+const MIN_NOTICE_MS = 24 * HOUR_MS;
+```
+
+replace with:
+
+```ts
+const HOUR_MS = 60 * 60 * 1000;
+const MIN_NOTICE_MS = 24 * HOUR_MS;
+
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+async function tryPush(sdk: any, opts: Record<string, unknown>) {
+    try {
+        await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
+    } catch (err) {
+        console.warn('tryPush failed (non-fatal):', err);
+    }
+}
+
+// Reverse the pay still HELD on a ride for every driver except keepDriverId
+// (pass '' to reverse all of it). Released rows are never clawed back here;
+// they are totalled so the caller can tell admin. Lockstep copy, see
+// assignRideDriver; scripts/check-driver-wallet.mjs fails if the two differ.
+async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string, note: string, nowIso: string) {
+    const ledger = await fetchAll(sr.DriverEarning, { ride_booking_id: rideId });
+    const out = { reversed_ngn: 0, released_ngn: 0, driver_ids: [] };
+    for (const e of ledger) {
+        if (keepDriverId && e.driver_id === keepDriverId) continue;
+        const amount = Math.max(0, Math.round(Number(e.amount_ngn) || 0));
+        if (e.status === 'held') {
+            await sr.DriverEarning.update(e.id, {
+                status: 'reversed',
+                reversed_at: nowIso,
+                on_hold: false,
+                admin_notes: e.admin_notes ? `${e.admin_notes} | ${note}` : note,
+            });
+            out.reversed_ngn += amount;
+            if (!out.driver_ids.includes(e.driver_id)) out.driver_ids.push(e.driver_id);
+        } else if (e.status === 'released') {
+            out.released_ngn += amount;
+        }
+    }
+    return out;
+}
+```
+
+- [ ] **Step 4: Let the admin message carry a pay line**
+
+**Edit `base44/functions/cancelRideBooking/entry.ts`** — find:
+
+```ts
+async function notifyAdmin(ride: any, byAdmin: boolean) {
+```
+
+replace with:
+
+```ts
+async function notifyAdmin(ride: any, byAdmin: boolean, payLine = '') {
+```
+
+**Edit `base44/functions/cancelRideBooking/entry.ts`** — find:
+
+```ts
+        `The vehicle is free again for that window.`;
+```
+
+replace with:
+
+```ts
+        `The vehicle is free again for that window.` + payLine;
+```
+
+- [ ] **Step 5: Reverse the pay when the ride is cancelled**
+
+**Edit `base44/functions/cancelRideBooking/entry.ts`** — find:
+
+```ts
+        await notifyAdmin(ride, isAdmin && ride.guest_email !== user.email);
+```
+
+replace with:
+
+```ts
+        // The driver's pay follows the ride. A failure here must not undo the
+        // cancellation: the release pass in autoCancelExpiredBookings reverses
+        // any held row whose ride is cancelled, so this is belt and braces.
+        // Only a ride that ever had a driver can have pay on it.
+        let payLine = '';
+        if (ride.driver_id) {
+            try {
+                const sr = base44.asServiceRole.entities;
+                const pay = await reverseHeldEarnings(sr, ride_booking_id, '', 'Ride cancelled', new Date().toISOString());
+                if (pay.reversed_ngn > 0) {
+                    payLine += `\n• Driver pay reversed: ₦${pay.reversed_ngn.toLocaleString()}`;
+                }
+                if (pay.released_ngn > 0) {
+                    payLine += `\n• Driver pay ALREADY RELEASED: ₦${pay.released_ngn.toLocaleString()} — review in Rides → Earnings`;
+                }
+                const driver = await sr.Driver.get(ride.driver_id);
+                const driverEmail = typeof driver?.user_email === 'string' ? driver.user_email.trim().toLowerCase() : '';
+                if (driverEmail) {
+                    await tryPush(base44, {
+                        user_email: driverEmail,
+                        title: '🚫 Ride cancelled',
+                        body: `The ${ride.vehicle_name} booking you were assigned to has been cancelled.`,
+                        url: '/DriverRides',
+                        tag: `driver-cancelled-${ride.id}`,
+                    });
+                }
+            } catch (err) {
+                console.error('Driver pay reversal on cancel failed (the sweep will retry):', err);
+                payLine = '\n• Driver pay could not be reversed just now; the next sweep will do it';
+            }
+        }
+
+        await notifyAdmin(ride, isAdmin && ride.guest_email !== user.email, payLine);
+```
+
+- [ ] **Step 6: Run the checks**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, with `ok   reverseHeldEarnings: cancelRideBooking copy matches assignRideDriver`.
+
+Run: `node_modules/.bin/esbuild base44/functions/cancelRideBooking/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+- [ ] **Step 7: Sandbox checklist (after the next publish)**
+
+1. As admin, cancel a paid ride that has a linked driver and a `held` earning. Expected: the earning is `reversed` with `admin_notes` "Ride cancelled"; the Telegram message ends with "Driver pay reversed: ₦…"; the driver receives "Ride cancelled".
+2. As a guest, cancel an unpaid ride more than 24 hours out. Expected: cancelled exactly as before, no pay line in Telegram.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs base44/functions/cancelRideBooking/entry.ts
+git commit -m "feat(rides): cancelling a ride reverses the driver's held pay" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+

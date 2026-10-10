@@ -257,6 +257,10 @@ const heldRow = (id, driver, extra = {}) => ({
   check('…saying why', base.rows.find((r) => r.id !== 'old').admin_notes, 'Duplicate of old');
 }
 
+// ── Cancellation uses the same reversal as reassignment ────────────────────
+console.log('\n— cancellation —');
+identical('reverseHeldEarnings', 'sr, rideId, keepDriverId, note, nowIso', ['assignRideDriver', 'cancelRideBooking']);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -15,7 +15,53 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 const HOUR_MS = 60 * 60 * 1000;
 const MIN_NOTICE_MS = 24 * HOUR_MS;
 
-async function notifyAdmin(ride: any, byAdmin: boolean) {
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+async function tryPush(sdk: any, opts: Record<string, unknown>) {
+    try {
+        await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
+    } catch (err) {
+        console.warn('tryPush failed (non-fatal):', err);
+    }
+}
+
+// Reverse the pay still HELD on a ride for every driver except keepDriverId
+// (pass '' to reverse all of it). Released rows are never clawed back here;
+// they are totalled so the caller can tell admin. Lockstep copy, see
+// assignRideDriver; scripts/check-driver-wallet.mjs fails if the two differ.
+async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string, note: string, nowIso: string) {
+    const ledger = await fetchAll(sr.DriverEarning, { ride_booking_id: rideId });
+    const out = { reversed_ngn: 0, released_ngn: 0, driver_ids: [] };
+    for (const e of ledger) {
+        if (keepDriverId && e.driver_id === keepDriverId) continue;
+        const amount = Math.max(0, Math.round(Number(e.amount_ngn) || 0));
+        if (e.status === 'held') {
+            await sr.DriverEarning.update(e.id, {
+                status: 'reversed',
+                reversed_at: nowIso,
+                on_hold: false,
+                admin_notes: e.admin_notes ? `${e.admin_notes} | ${note}` : note,
+            });
+            out.reversed_ngn += amount;
+            if (!out.driver_ids.includes(e.driver_id)) out.driver_ids.push(e.driver_id);
+        } else if (e.status === 'released') {
+            out.released_ngn += amount;
+        }
+    }
+    return out;
+}
+
+async function notifyAdmin(ride: any, byAdmin: boolean, payLine = '') {
     const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
     const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
     if (!token || !chatId) return;
@@ -32,7 +78,7 @@ async function notifyAdmin(ride: any, byAdmin: boolean) {
         `• Guest: ${ride.guest_name} (${ride.guest_email})\n` +
         `• Was booked for: ${when}\n` +
         `• Value: ₦${(Number(ride.total_price) || 0).toLocaleString()}\n\n` +
-        `The vehicle is free again for that window.`;
+        `The vehicle is free again for that window.` + payLine;
     try {
         await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: 'POST',
@@ -105,7 +151,39 @@ Deno.serve(async (req) => {
             admin_response: typeof reason === 'string' && reason.trim() ? reason.trim() : undefined,
         });
 
-        await notifyAdmin(ride, isAdmin && ride.guest_email !== user.email);
+        // The driver's pay follows the ride. A failure here must not undo the
+        // cancellation: the release pass in autoCancelExpiredBookings reverses
+        // any held row whose ride is cancelled, so this is belt and braces.
+        // Only a ride that ever had a driver can have pay on it.
+        let payLine = '';
+        if (ride.driver_id) {
+            try {
+                const sr = base44.asServiceRole.entities;
+                const pay = await reverseHeldEarnings(sr, ride_booking_id, '', 'Ride cancelled', new Date().toISOString());
+                if (pay.reversed_ngn > 0) {
+                    payLine += `\n• Driver pay reversed: ₦${pay.reversed_ngn.toLocaleString()}`;
+                }
+                if (pay.released_ngn > 0) {
+                    payLine += `\n• Driver pay ALREADY RELEASED: ₦${pay.released_ngn.toLocaleString()} — review in Rides → Earnings`;
+                }
+                const driver = await sr.Driver.get(ride.driver_id);
+                const driverEmail = typeof driver?.user_email === 'string' ? driver.user_email.trim().toLowerCase() : '';
+                if (driverEmail) {
+                    await tryPush(base44, {
+                        user_email: driverEmail,
+                        title: '🚫 Ride cancelled',
+                        body: `The ${ride.vehicle_name} booking you were assigned to has been cancelled.`,
+                        url: '/DriverRides',
+                        tag: `driver-cancelled-${ride.id}`,
+                    });
+                }
+            } catch (err) {
+                console.error('Driver pay reversal on cancel failed (the sweep will retry):', err);
+                payLine = '\n• Driver pay could not be reversed just now; the next sweep will do it';
+            }
+        }
+
+        await notifyAdmin(ride, isAdmin && ride.guest_email !== user.email, payLine);
 
         return json({ success: true, data: { ride_booking_id, status: 'cancelled' } });
     } catch (error) {
