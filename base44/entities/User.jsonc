@@ -80,6 +80,18 @@
       "default": false,
       "description": "Has the user already been prompted to enter a referral code"
     },
+    "ride_blocked": {
+      "type": "boolean",
+      "default": false,
+      "description": "Set by admin through resolveRideReport when a report against this guest ends in a block. checkRideAvailability refuses a ride request from a blocked account. Admin-write only: a guest must not be able to unblock themselves.",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
+    },
     "nft_tokens": {
       "type": "array",
       "items": {

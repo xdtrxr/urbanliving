@@ -142,6 +142,36 @@ for (const op of ['create', 'update', 'delete']) {
   check(`UserBankAccount ${op} stays owner-only`, JSON.stringify(entities.UserBankAccount?.rls?.[op]) === OWNER);
 }
 
+// ── Ride reports ───────────────────────────────────────────────────────────
+console.log('\n— ride reports —');
+check('RideReport exists', !!entities.RideReport);
+for (const f of [
+  'ride_booking_id', 'booking_reference', 'vehicle_name', 'service_date', 'reporter_email', 'reporter_role',
+  'reporter_name', 'reported_email', 'reported_driver_id', 'reported_name', 'category', 'description',
+  'evidence_urls', 'status', 'action_taken', 'admin_notes', 'resolved_at', 'resolved_by',
+]) {
+  check(`RideReport.${f}`, !!prop('RideReport', f));
+}
+check('RideReport.reporter_role is driver | guest', sameList(prop('RideReport', 'reporter_role')?.enum, ['driver', 'guest']));
+check('RideReport.category has the seven categories',
+  sameList(prop('RideReport', 'category')?.enum, ['rude', 'abusive', 'threatening', 'unsafe', 'no_show', 'damage', 'other']));
+check('RideReport.status is open | reviewing | resolved | dismissed',
+  sameList(prop('RideReport', 'status')?.enum, ['open', 'reviewing', 'resolved', 'dismissed']));
+check('RideReport.status defaults to open', prop('RideReport', 'status')?.default === 'open');
+check('RideReport.action_taken is none | warning | blocked',
+  sameList(prop('RideReport', 'action_taken')?.enum, ['none', 'warning', 'blocked']));
+check('RideReport.evidence_urls is a string array',
+  prop('RideReport', 'evidence_urls')?.type === 'array' && prop('RideReport', 'evidence_urls')?.items?.type === 'string');
+// Rows carry admin notes about real people. Not even the reporter reads them
+// through the API; the ride lists tell them what they need to know.
+for (const op of OPS) {
+  check(`RideReport ${op} is admin-only`, adminOnly(entities.RideReport?.rls?.[op]));
+}
+check('User.ride_blocked is a boolean, off by default',
+  prop('User', 'ride_blocked')?.type === 'boolean' && prop('User', 'ride_blocked')?.default === false);
+// A guest must not be able to unblock themselves with auth.updateMe.
+check('User.ride_blocked is admin-write', adminOnly(prop('User', 'ride_blocked')?.rls?.write));
+
 // ── Rules staged for the next publish ──────────────────────────────────────
 // docs/entity-rules-pending-publish/ holds stricter copies of some schemas.
 // On publish day each one is copied over the live file. A staged copy that is
