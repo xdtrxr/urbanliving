@@ -111,6 +111,20 @@ function walletTotals(earnings: any[], withdrawals: any[]) {
     };
 }
 
+// The rides on which a guest's complaint about THIS driver is still open.
+// Their pay for those rides shows as "under review". A complaint about a
+// driver who was on the ride before them is not theirs. Lockstep copy in
+// getDriverRides; the sweep applies the same rule in hasOpenGuestReport.
+function ridesUnderReviewFor(reports: any[], driverId: string) {
+    const out = [];
+    for (const r of reports || []) {
+        if (!r || r.reporter_role !== 'guest' || r.reported_driver_id !== driverId) continue;
+        if (r.status !== 'open' && r.status !== 'reviewing') continue;
+        if (!out.includes(r.ride_booking_id)) out.push(r.ride_booking_id);
+    }
+    return out;
+}
+
 // One ledger row as the driver sees it. An allow-list: hold reasons, admin
 // notes and the rate behind the figure stay on the server.
 function ledgerView(earning: any, underReview: boolean) {
@@ -162,9 +176,11 @@ Deno.serve(async (req) => {
         const [earnings, withdrawalRows, openReports] = await Promise.all([
             fetchAll(sr.DriverEarning, { driver_id: driver.id }),
             fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
-            fetchAll(sr.RideReport, { reporter_role: 'guest', status: { $in: ['open', 'reviewing'] } }),
+            fetchAll(sr.RideReport, {
+                reporter_role: 'guest', reported_driver_id: driver.id, status: { $in: ['open', 'reviewing'] },
+            }),
         ]);
-        const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
+        const ridesUnderReview = new Set(ridesUnderReviewFor(openReports, driver.id));
         const mine = driverWithdrawals(driver, withdrawalRows);
         const totals = walletTotals(earnings, mine);
 

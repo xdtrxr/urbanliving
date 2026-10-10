@@ -109,14 +109,21 @@ function releaseDecision(earning: any, ride: any) {
     return 'release';
 }
 
-// True while admin has not closed a complaint the GUEST made about this ride.
-// That is a dispute about the service the driver is being paid for, so the
-// pay waits. A report the DRIVER filed about the guest never holds the
-// driver's own pay: that would punish them for speaking up. Lockstep copy,
-// see autoCancelExpiredBookings.
-async function hasOpenGuestReport(sr: any, rideBookingId: string) {
+// True while admin has not closed a complaint the GUEST made about THIS
+// DRIVER on this ride. That is a dispute about the service the driver is
+// being paid for, so the pay waits. It is matched on the driver the report
+// names: if the ride was handed to someone else after the complaint, the
+// complaint is about the first driver, and the second is paid on time. A
+// report the DRIVER filed about the guest never holds the driver's own pay:
+// that would punish them for speaking up. Lockstep copy, see
+// autoCancelExpiredBookings.
+async function hasOpenGuestReport(sr: any, rideBookingId: string, driverId: string) {
+    if (!driverId) return false;
     const open = await sr.RideReport.filter({
-        ride_booking_id: rideBookingId, reporter_role: 'guest', status: { $in: ['open', 'reviewing'] },
+        ride_booking_id: rideBookingId,
+        reporter_role: 'guest',
+        reported_driver_id: driverId,
+        status: { $in: ['open', 'reviewing'] },
     });
     return Array.isArray(open) && open.length > 0;
 }
@@ -201,10 +208,10 @@ Deno.serve(async (req) => {
             }
             // Releasing around an open complaint would make the report
             // pointless. Admin closes it first, in Rides → Reports.
-            if (await hasOpenGuestReport(sr, earning.ride_booking_id)) {
+            if (await hasOpenGuestReport(sr, earning.ride_booking_id, earning.driver_id)) {
                 return json({
                     success: false,
-                    error: 'The guest has an open report on this ride. Resolve or dismiss it under Rides → Reports first.',
+                    error: 'The guest has an open report about this driver on this ride. Resolve or dismiss it under Rides → Reports first.',
                     code: 'OPEN_REPORT',
                 }, 409);
             }

@@ -80,6 +80,20 @@ function reportWindowOpen(ride: any, nowMs: number) {
     return w.startMs <= nowMs && nowMs <= w.endMs + REPORT_WINDOW_AFTER_END_MS;
 }
 
+// The rides on which a guest's complaint about THIS driver is still open.
+// Their pay for those rides shows as "under review". A complaint about a
+// driver who was on the ride before them is not theirs. Lockstep copy, see
+// getDriverWallet.
+function ridesUnderReviewFor(reports: any[], driverId: string) {
+    const out = [];
+    for (const r of reports || []) {
+        if (!r || r.reporter_role !== 'guest' || r.reported_driver_id !== driverId) continue;
+        if (r.status !== 'open' && r.status !== 'reviewing') continue;
+        if (!out.includes(r.ride_booking_id)) out.push(r.ride_booking_id);
+    }
+    return out;
+}
+
 const PAGE = 500;
 async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
     const out: any[] = [];
@@ -191,10 +205,12 @@ Deno.serve(async (req) => {
             fetchAll(sr.RideBooking, { driver_id: driver.id }),
             fetchAll(sr.DriverEarning, { driver_id: driver.id }),
             fetchAll(sr.RideReport, { reporter_email: user.email }),
-            fetchAll(sr.RideReport, { reporter_role: 'guest', status: { $in: ['open', 'reviewing'] } }),
+            fetchAll(sr.RideReport, {
+                reporter_role: 'guest', reported_driver_id: driver.id, status: { $in: ['open', 'reviewing'] },
+            }),
         ]);
         const reportedRides = new Set(myReports.map((r: any) => r.ride_booking_id));
-        const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
+        const ridesUnderReview = new Set(ridesUnderReviewFor(openReports, driver.id));
 
         const earningsByRide = new Map<string, any[]>();
         for (const e of earnings) {

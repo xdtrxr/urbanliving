@@ -99,10 +99,14 @@ identical('rideDurationMs', 'tier, days, hours', ['getRideBookings', 'createRide
 identical('windowOf', 'r', ['getRideBookings', 'createRideReport']);
 identical('findDriverForUser', 'sr, email', ['getDriverProfile', 'createRideReport']);
 identical('notifyAdminLine', 'text', ['autoCancelExpiredBookings', 'createRideReport']);
+identical('isId', 'value', ['processWithdrawal', 'createRideReport']);
+identical('isId', 'value', ['processWithdrawal', 'resolveRideReport']);
 
 const HOME = 'createRideReport';
 const TIME = consts(HOME, ['WAT_OFFSET', 'HOUR_MS', 'DAY_MS', 'MAX_HOURLY', 'REPORT_WINDOW_AFTER_END_MS']);
-const LIMITS = consts(HOME, ['CATEGORIES', 'MIN_DESCRIPTION', 'MAX_DESCRIPTION', 'MAX_EVIDENCE', 'MAX_URL_LENGTH', 'CARD_EXCERPT']);
+const LIMITS = consts(HOME, ['CATEGORIES', 'MIN_DESCRIPTION', 'MAX_DESCRIPTION', 'MAX_EVIDENCE', 'MAX_URL_LENGTH', 'UPLOAD_URL', 'CARD_EXCERPT']);
+// A link shaped like the ones this platform's file store hands back.
+const uploaded = (name) => `https://base44.app/api/apps/69f75159e3beeee0837b5b60/files/mp/public/69f75159e3beeee0837b5b60/${name}`;
 const src = (name, signature) => liftSrc(HOME, name, signature);
 
 // Review focus 3: the window, pinned to exact UTC instants.
@@ -135,7 +139,7 @@ check('no email, no role', reporterRoleFor(booked, '', { id: 'drvA' }), null);
 
 // Review focus 2: nothing but a real upload reaches the table.
 console.log('\n— what a report may contain —');
-const validateReportInput = make('validateReportInput', LIMITS, src('validateReportInput', 'body'));
+const validateReportInput = make('validateReportInput', LIMITS, src('isUploadUrl', 'url'), src('validateReportInput', 'body'));
 const good = { category: 'rude', description: 'He shouted at me the whole trip.' };
 same('a plain report is accepted and trimmed',
   validateReportInput({ ...good, description: '  He shouted at me the whole trip.  ' }),
@@ -152,10 +156,26 @@ check('2001 characters is refused', validateReportInput({ ...good, description: 
 check('spaces do not count toward the minimum', validateReportInput({ ...good, description: '   short    ' }).code, 'DESCRIPTION_LENGTH');
 check('a description that is not text is refused', validateReportInput({ ...good, description: { $ne: '' } }).code, 'DESCRIPTION_LENGTH');
 same('uploaded photos are kept, once each',
-  validateReportInput({ ...good, evidence_urls: ['https://base44.app/files/a.jpg', 'https://base44.app/files/a.jpg', 'https://base44.app/files/b.jpg'] }).value.evidence_urls,
-  ['https://base44.app/files/a.jpg', 'https://base44.app/files/b.jpg']);
+  validateReportInput({ ...good, evidence_urls: [uploaded('a.jpg'), uploaded('a.jpg'), uploaded('b.jpg')] }).value.evidence_urls,
+  [uploaded('a.jpg'), uploaded('b.jpg')]);
 check('a fourth photo is refused',
-  validateReportInput({ ...good, evidence_urls: [1, 2, 3, 4].map((n) => `https://base44.app/files/${n}.jpg`) }).code, 'TOO_MANY_FILES');
+  validateReportInput({ ...good, evidence_urls: [1, 2, 3, 4].map((n) => uploaded(`${n}.jpg`)) }).code, 'TOO_MANY_FILES');
+// Admin's browser fetches every photo on a report. Each of these would let
+// the reporter pick the server it is fetched from, or what comes back.
+for (const [why, bad] of [
+  ['another site', 'https://example.com/a.jpg'],
+  ['a tracking pixel', 'https://evil.example/pixel.gif?report=1'],
+  ['a host that only starts like ours', 'https://base44.app.evil.example/api/apps/69f75159e3beeee0837b5b60/files/a.jpg'],
+  ['our host as a username', 'https://base44.app@evil.example/api/apps/69f75159e3beeee0837b5b60/files/a.jpg'],
+  ['our host, but not the file store', 'https://base44.app/api/apps/69f75159e3beeee0837b5b60/entities/User'],
+  ['our host, some other page', 'https://base44.app/files/a.jpg'],
+  ['a query string on a real upload', `${uploaded('a.jpg')}?x=1`],
+  ['a fragment on a real upload', `${uploaded('a.jpg')}#x`],
+  ['a path that climbs out of the file store', uploaded('../../../entities/User')],
+  ['plain http', uploaded('a.jpg').replace('https:', 'http:')],
+]) {
+  check(`a "photo" from ${why} is refused`, validateReportInput({ ...good, evidence_urls: [bad] }).code, 'BAD_URL');
+}
 for (const bad of [
   'javascript:alert(1)', 'http://example.com/a.jpg', 'data:text/html,<script>1</script>', '//example.com/a.jpg',
   'https://example.com/a b.jpg', 'https://example.com/a.jpg" onerror="x', "https://example.com/a.jpg'", 'https://example.com/<a>',
@@ -163,7 +183,51 @@ for (const bad of [
 ]) {
   check(`a "photo" of ${JSON.stringify(bad).slice(0, 44)} is refused`, validateReportInput({ ...good, evidence_urls: [bad] }).code, 'BAD_URL');
 }
-check('photos that are not a list are refused', validateReportInput({ ...good, evidence_urls: 'https://base44.app/files/a.jpg' }).code, 'BAD_URL');
+check('photos that are not a list are refused', validateReportInput({ ...good, evidence_urls: uploaded('a.jpg') }).code, 'BAD_URL');
+
+// Filing: once per reporter per ride, always under the ride's own id.
+console.log('\n— filing once —');
+const isId = make('isId', src('isId', 'value'));
+// Each of these fetched the same ride as "ride1" and, before this fix, each
+// counted as a ride nobody had reported yet.
+for (const stacked of ['ride1#1', 'ride1#2', 'ride1?again=1', 'ride1/', ' ride1']) {
+  check(`${JSON.stringify(stacked)} is not accepted as a ride id`, isId(stacked), false);
+}
+const fileRideReport = make('fileRideReport', src('fileRideReport', 'sr, ride, reporter, input'));
+const reportedRide = {
+  id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado', service_date: '2026-08-10',
+  guest_email: 'ada@example.com', guest_name: 'Ada Obi', driver_id: 'drvA',
+};
+const asGuest = { email: 'ada@example.com', role: 'guest', name: 'Ada Obi', reported_name: 'Emeka Okafor' };
+const asDriver = { email: 'emeka@work.ng', role: 'driver', name: 'Emeka Okafor', reported_name: 'Ada Obi' };
+const said = { category: 'rude', description: 'He shouted at me the whole trip.', evidence_urls: [] };
+{
+  const sr = { RideReport: fakeEntity([]) };
+  const first = await fileRideReport(sr, reportedRide, asGuest, said);
+  check('a first report is filed', `${first.ok}/${sr.RideReport.rows.length}`, 'true/1');
+  check('…under the ride\'s own id', sr.RideReport.rows[0].ride_booking_id, 'ride1');
+  check('…open, with nothing decided', `${first.row.status}/${first.row.action_taken}`, 'open/none');
+  check('…a guest\'s report names the driver, not an email', `${first.row.reported_driver_id}/${first.row.reported_email}`, 'drvA/');
+  const second = await fileRideReport(sr, reportedRide, asGuest, { ...said, description: 'And another thing entirely.' });
+  check('the same person cannot report the same ride twice', `${second.ok}/${second.code}/${sr.RideReport.rows.length}`, 'false/ALREADY_REPORTED/1');
+  const other = await fileRideReport(sr, reportedRide, asDriver, said);
+  check('the other side of the ride still can', `${other.ok}/${sr.RideReport.rows.length}`, 'true/2');
+  check('…a driver\'s report names the guest, not a driver', `${other.row.reported_email}/${other.row.reported_driver_id}`, 'ada@example.com/');
+}
+{
+  // Two taps on Submit both pass the "already" check. The second to write
+  // sees the first one's row, removes its own, and answers as a duplicate.
+  const sr = { RideReport: fakeEntity([]) };
+  const realCreate = sr.RideReport.create;
+  let twin = true;
+  sr.RideReport.create = async (data) => {
+    if (twin) { twin = false; await realCreate({ ...data, description: 'the other tap' }); }
+    return realCreate(data);
+  };
+  const late = await fileRideReport(sr, reportedRide, asGuest, said);
+  check('two taps on Submit leave one report', `${late.ok}/${late.code}/${sr.RideReport.rows.length}`, 'false/ALREADY_REPORTED/1');
+  check('…the first one', sr.RideReport.rows[0].description, 'the other tap');
+}
 check('no photos is fine', validateReportInput({ ...good, evidence_urls: null }).ok, true);
 
 // Review focus 1: the card admin receives on Telegram.
@@ -249,7 +313,8 @@ check('a missing account row does not block', isRideBlocked(undefined), false);
 // Review focus 5: pay that falls due while a report on its ride is open, and
 // who filed that report.
 console.log('\n— reports and money —');
-identical('hasOpenGuestReport', 'sr, rideBookingId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
+identical('hasOpenGuestReport', 'sr, rideBookingId, driverId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
+identical('ridesUnderReviewFor', 'reports, driverId', ['getDriverWallet', 'getDriverRides']);
 for (const dir of ['getDriverRides', 'getRideBookings']) {
   identical('reportWindowOpen', 'ride, nowMs', [HOME, dir]);
   check(`one reporting window: ${dir} agrees with ${HOME}`,
@@ -257,21 +322,29 @@ for (const dir of ['getDriverRides', 'getRideBookings']) {
 }
 
 const SWEEP = 'autoCancelExpiredBookings';
-const hasOpenGuestReport = make('hasOpenGuestReport', liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId'));
+const hasOpenGuestReport = make('hasOpenGuestReport', liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId, driverId'));
 const reportsOf = (rows) => ({ RideReport: fakeEntity(rows) });
-const filed = (reporter_role, status, ride_booking_id = 'ride1') => ({ id: 'r1', ride_booking_id, reporter_role, status });
-check('an open complaint from the guest holds the ride', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1'), true);
-check('so does one being reviewed', await hasOpenGuestReport(reportsOf([filed('guest', 'reviewing')]), 'ride1'), true);
-check('a resolved one does not', await hasOpenGuestReport(reportsOf([filed('guest', 'resolved')]), 'ride1'), false);
-check('a dismissed one does not', await hasOpenGuestReport(reportsOf([filed('guest', 'dismissed')]), 'ride1'), false);
-check('a complaint about another ride does not', await hasOpenGuestReport(reportsOf([filed('guest', 'open', 'other')]), 'ride1'), false);
+// A guest's report names the driver it is about; a driver's report names nobody's pay.
+const filed = (reporter_role, status, ride_booking_id = 'ride1', reported_driver_id = reporter_role === 'guest' ? 'drvA' : '') => ({
+  id: 'r1', ride_booking_id, reporter_role, status, reported_driver_id,
+});
+check('an open complaint from the guest holds the ride', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1', 'drvA'), true);
+check('so does one being reviewed', await hasOpenGuestReport(reportsOf([filed('guest', 'reviewing')]), 'ride1', 'drvA'), true);
+check('a resolved one does not', await hasOpenGuestReport(reportsOf([filed('guest', 'resolved')]), 'ride1', 'drvA'), false);
+check('a dismissed one does not', await hasOpenGuestReport(reportsOf([filed('guest', 'dismissed')]), 'ride1', 'drvA'), false);
+check('a complaint about another ride does not', await hasOpenGuestReport(reportsOf([filed('guest', 'open', 'other')]), 'ride1', 'drvA'), false);
 // The driver reporting an abusive customer must never delay the driver's own pay.
-check('a report the DRIVER filed never holds the driver\'s pay', await hasOpenGuestReport(reportsOf([filed('driver', 'open')]), 'ride1'), false);
-check('no reports at all', await hasOpenGuestReport(reportsOf([]), 'ride1'), false);
+check('a report the DRIVER filed never holds the driver\'s pay', await hasOpenGuestReport(reportsOf([filed('driver', 'open')]), 'ride1', 'drvA'), false);
+check('no reports at all', await hasOpenGuestReport(reportsOf([]), 'ride1', 'drvA'), false);
+// Review focus 5: the complaint is about one driver, and the ride was then
+// handed to another.
+check('a complaint about driver A does not hold driver B\'s pay', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1', 'drvB'), false);
+check('…it still holds driver A\'s', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1', 'drvA'), true);
+check('an earning with no driver on it is held by nothing', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1', ''), false);
 
 const settleDueEarning = make('settleDueEarning',
   liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),
-  liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'keepReversed', 'sr, earningId'),
+  liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId, driverId'), liftSrc(SWEEP, 'keepReversed', 'sr, earningId'),
   liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
 const DUE = at('2026-08-10T12:00:00.000Z');
 const dueEarning = { id: 'e1', ride_booking_id: 'ride1', driver_id: 'drvA', amount_ngn: 15000, status: 'held', on_hold: false, release_at: '2026-08-10T12:00:00.000Z' };
@@ -307,6 +380,26 @@ const worldWith = (reports, rideOverride = {}) => ({
   const sr = worldWith([filed('guest', 'open', 'someone-elses-ride')]);
   check('a complaint about a different ride holds nothing here', await settleDueEarning(sr, 'e1', DUE), 'released');
 }
+{
+  // The guest complained about the driver who was on the ride first (drvZ).
+  // The ride was then handed to drvA, whose pay this is.
+  const sr = worldWith([filed('guest', 'open', 'ride1', 'drvZ')]);
+  check('a complaint about the driver before them does not delay the driver who took over', await settleDueEarning(sr, 'e1', DUE), 'released');
+}
+
+const ridesUnderReviewFor = make('ridesUnderReviewFor', liftSrc('getDriverWallet', 'ridesUnderReviewFor', 'reports, driverId'));
+same('"under review" is shown for rides where the guest complained about this driver',
+  ridesUnderReviewFor([
+    filed('guest', 'open', 'ride1', 'drvA'),
+    filed('guest', 'reviewing', 'ride2', 'drvA'),
+    filed('guest', 'open', 'ride2', 'drvA'),
+    filed('guest', 'open', 'ride3', 'drvB'),
+    filed('guest', 'resolved', 'ride4', 'drvA'),
+    filed('driver', 'open', 'ride5'),
+    null,
+  ], 'drvA'),
+  ['ride1', 'ride2']);
+same('…and for nobody when there are no reports', ridesUnderReviewFor(undefined, 'drvA'), []);
 
 console.log('\n— what the ride lists say about reports —');
 const driverRideView = make('driverRideView',
@@ -339,7 +432,20 @@ check('most photos', rides.REPORT_LIMITS?.maxPhotos, make('MAX_EVIDENCE', LIMITS
 // ── Photos on the admin inbox ──────────────────────────────────────────────
 // Review focus 2, second line of defence: what the inbox will use as <img src>.
 console.log('\n— photo sources —');
-check('an uploaded photo is shown', rides.safePhotoUrl('https://base44.app/files/a.jpg'), 'https://base44.app/files/a.jpg');
+check('an uploaded photo is shown', rides.safePhotoUrl(uploaded('a.jpg')), uploaded('a.jpg'));
+check('the inbox and the server use one rule for where uploads live', String(rides.UPLOAD_URL), String(make('UPLOAD_URL', LIMITS)));
+const isUploadUrl = make('isUploadUrl', LIMITS, src('isUploadUrl', 'url'));
+// Whatever the server would store, the inbox shows; whatever it would refuse,
+// the inbox will not draw even if the row was typed into the data browser.
+for (const link of [
+  uploaded('a.jpg'), uploaded('IMG_8199.jpeg'), uploaded('05221f132_IMG%209029.jpeg'),
+  'https://example.com/a.jpg', 'https://base44.app/files/a.jpg', `${uploaded('a.jpg')}?x=1`, `${uploaded('a.jpg')}#x`,
+  uploaded('../../../entities/User'), 'https://base44.app.evil.example/api/apps/69f75159e3beeee0837b5b60/files/a.jpg',
+  uploaded(`${'a'.repeat(600)}.jpg`),
+]) {
+  check(`server and inbox agree on ${link.slice(0, 60)}${link.length > 60 ? '…' : ''}`, !!rides.safePhotoUrl(link), isUploadUrl(link));
+}
+check('…and a real upload is one they both accept', isUploadUrl(uploaded('05221f132_IMG_9029.jpeg')), true);
 for (const bad of [
   'javascript:alert(1)', 'JAVASCRIPT:alert(1)', 'http://example.com/a.jpg', 'data:image/png;base64,AAAA',
   '//example.com/a.jpg', ' https://example.com/a.jpg', 'https://example.com/a b.jpg',

@@ -9,7 +9,7 @@ import { Loader2, ImagePlus, X, AlertCircle, Flag } from 'lucide-react';
 import { UploadFile } from '@/api/integrations';
 import { invokeFn } from '@/lib/invokeFn';
 import { fromThrown } from '@/lib/fnResult';
-import { REPORT_CATEGORIES, REPORT_LIMITS } from '@/config/rides';
+import { REPORT_CATEGORIES, REPORT_LIMITS, safePhotoUrl } from '@/config/rides';
 
 // RideReportDialog — one party to a ride tells the team about a problem with
 // the other. The same form serves both sides; only the wording changes.
@@ -89,6 +89,11 @@ export default function RideReportDialog({ open, ride, role, onClose, onSubmitte
     try {
       const { file_url } = await UploadFile({ file });
       if (!file_url) throw new Error('The upload did not return a link.');
+      // The server stores only links to this platform's own file store. Say
+      // so here, rather than refuse the whole report when it is sent.
+      if (!safePhotoUrl(file_url)) {
+        throw new Error('The upload returned a link this form cannot attach. Send the report without the photo and tell the team.');
+      }
       setPhotos((list) => (list.includes(file_url) ? list : [...list, file_url]).slice(0, REPORT_LIMITS.maxPhotos));
     } catch (err) {
       // Show the platform's own reason: an exhausted upload quota will not

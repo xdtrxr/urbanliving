@@ -68,6 +68,15 @@ function guestBlockAfter(reports: any[], thisReportId: string, thisAction: strin
         && r.action_taken === 'blocked');
 }
 
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copy, see processWithdrawal.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
 async function tryPush(sdk: any, opts: Record<string, unknown>) {
     try {
         await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
@@ -94,14 +103,17 @@ Deno.serve(async (req) => {
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
-        const { report_id, status, action_taken, admin_notes } = await req.json().catch(() => ({}));
-        if (!report_id || typeof report_id !== 'string') {
+        const body = await req.json().catch(() => null);
+        const { report_id, status, action_taken, admin_notes } = body || {};
+        if (!isId(report_id)) {
             return json({ success: false, error: 'report_id is required' }, 400);
         }
 
         const sr = base44.asServiceRole.entities;
         const report = await sr.RideReport.get(report_id);
-        if (!report) return json({ success: false, error: 'That report no longer exists.', code: 'NOT_FOUND' }, 404);
+        if (!report || report.id !== report_id) {
+            return json({ success: false, error: 'That report no longer exists.', code: 'NOT_FOUND' }, 404);
+        }
 
         const next = nextReportState(report, { status, action_taken, admin_notes }, user.email, new Date().toISOString());
         if (!next.ok) {
@@ -129,7 +141,7 @@ Deno.serve(async (req) => {
                 effect = shouldBlock ? 'guest_blocked' : 'guest_unblocked';
             }
         } else if (report.reported_driver_id && next.now === 'blocked' && next.was !== 'blocked') {
-            const driver = await sr.Driver.get(report.reported_driver_id);
+            const driver = isId(report.reported_driver_id) ? await sr.Driver.get(report.reported_driver_id) : null;
             if (driver && driver.active !== false) {
                 await sr.Driver.update(driver.id, { active: false });
                 effect = 'driver_deactivated';

@@ -162,14 +162,21 @@ function releaseDecision(earning: any, ride: any) {
     return 'release';
 }
 
-// True while admin has not closed a complaint the GUEST made about this ride.
-// That is a dispute about the service the driver is being paid for, so the
-// pay waits. A report the DRIVER filed about the guest never holds the
-// driver's own pay: that would punish them for speaking up. Lockstep copy in
+// True while admin has not closed a complaint the GUEST made about THIS
+// DRIVER on this ride. That is a dispute about the service the driver is
+// being paid for, so the pay waits. It is matched on the driver the report
+// names: if the ride was handed to someone else after the complaint, the
+// complaint is about the first driver, and the second is paid on time. A
+// report the DRIVER filed about the guest never holds the driver's own pay:
+// that would punish them for speaking up. Lockstep copy in
 // settleDriverEarning.
-async function hasOpenGuestReport(sr: any, rideBookingId: string) {
+async function hasOpenGuestReport(sr: any, rideBookingId: string, driverId: string) {
+    if (!driverId) return false;
     const open = await sr.RideReport.filter({
-        ride_booking_id: rideBookingId, reporter_role: 'guest', status: { $in: ['open', 'reviewing'] },
+        ride_booking_id: rideBookingId,
+        reporter_role: 'guest',
+        reported_driver_id: driverId,
+        status: { $in: ['open', 'reviewing'] },
     });
     return Array.isArray(open) && open.length > 0;
 }
@@ -221,7 +228,7 @@ async function settleDueEarning(sr: any, earningId: string, nowMs: number) {
     }
     // The guest has complained about this ride and admin has not closed it
     // yet. The pay waits; the next tick after the report is closed releases it.
-    if (await hasOpenGuestReport(sr, e.ride_booking_id)) return 'skipped';
+    if (await hasOpenGuestReport(sr, e.ride_booking_id, e.driver_id)) return 'skipped';
     await sr.DriverEarning.update(e.id, {
         status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
     });

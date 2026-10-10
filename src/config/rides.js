@@ -328,9 +328,17 @@ export function noPayLine(bucket) {
 export const REPORT_CATEGORIES = ['rude', 'abusive', 'threatening', 'unsafe', 'no_show', 'damage', 'other'];
 export const REPORT_LIMITS = { minDescription: 10, maxDescription: 2000, maxPhotos: 3 };
 
-// A stored report photo, if it is safe to use as an <img src>: a plain https
-// link with no spaces, quotes or angle brackets. Same rule the server applies
-// when a report is filed; applied again here because a row can also be typed
-// into the data browser. Anything else is simply not shown.
+// Where an uploaded file lives: this platform's file store, under an app id.
+// MIRROR of UPLOAD_URL in base44/functions/createRideReport/entry.ts;
+// scripts/check-ride-reports.mjs fails if the two differ.
+export const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/[A-Za-z0-9._~%\/-]+$/;
+
+// A stored report photo, if it may be used as an <img src>: a link to a file
+// uploaded through this platform, and nothing else. Admin's browser fetches
+// whatever this returns, so any other link would let the person who filed
+// the report choose the server that learns admin opened it. The server
+// applies the same rule when a report is filed; it is applied again here
+// because a row can also be typed into the data browser. Anything else is
+// simply not shown.
 export const safePhotoUrl = (url) =>
-  (typeof url === 'string' && /^https:\/\/[^\s"'<>]+$/.test(url) ? url : null);
+  (typeof url === 'string' && url.length <= 600 && UPLOAD_URL.test(url) && !url.includes('..') ? url : null);
