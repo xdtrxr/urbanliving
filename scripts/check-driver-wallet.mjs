@@ -313,6 +313,133 @@ check('safeIso: NaN is not a date', safeIso(NaN), null);
 console.log('\n— cancellation —');
 identical('reverseHeldEarnings', 'sr, rideId, keepDriverId, note, nowIso', ['assignRideDriver', 'cancelRideBooking']);
 
+// ── Completion ─────────────────────────────────────────────────────────────
+// Review focus 4. Every assertion pins an exact UTC instant: a naive parse
+// resolves to local time, which on a machine in Nigeria coincides with the
+// pinned value, so a wrong implementation would pass there and nowhere else.
+console.log('\n— completion (sweep) —');
+identical('rideDurationMs', 'tier, days, hours', ['getRideBookings', 'assignRideDriver', 'autoCancelExpiredBookings']);
+identical('windowOf', 'r', ['getRideBookings', 'assignRideDriver', 'autoCancelExpiredBookings']);
+const SWEEP_TIME = ['HOUR_MS', 'WAT_OFFSET', 'DAY_MS', 'MAX_HOURLY']
+  .map((name) => constLine('autoCancelExpiredBookings', name)).join(' ');
+const sweepSrc = (name, signature) => liftSrc('autoCancelExpiredBookings', name, signature);
+const rideEnded = make('rideEnded', SWEEP_TIME,
+  sweepSrc('rideDurationMs', 'tier, days, hours'), sweepSrc('windowOf', 'r'), sweepSrc('rideEnded', 'ride, nowMs'));
+const at = (iso) => Date.parse(iso);
+
+const stored = { start_at: '2026-08-10T08:00:00.000Z', end_at: '2026-08-10T10:00:00.000Z' };
+check('not over one millisecond before the booked end', rideEnded(stored, at('2026-08-10T09:59:59.999Z')), false);
+check('over at the booked end', rideEnded(stored, at('2026-08-10T10:00:00.000Z')), true);
+// A row written before start_at and end_at existed. 09:00 WAT is 08:00 UTC,
+// so three hours later is 11:00 UTC.
+const legacy = { service_date: '2026-08-10', start_time: '09:00', duration_tier: 'hourly', duration_hours: 3 };
+check('legacy row: still running at 10:59:59.999 UTC', rideEnded(legacy, at('2026-08-10T10:59:59.999Z')), false);
+check('legacy row: over at 11:00 UTC', rideEnded(legacy, at('2026-08-10T11:00:00.000Z')), true);
+// 22:00 WAT for four hours ends at 02:00 WAT the next day: 01:00 UTC.
+const overnight = { service_date: '2026-08-10', start_time: '22:00', duration_tier: 'hourly', duration_hours: 4 };
+check('overnight ride: still running at 00:59:59.999 UTC', rideEnded(overnight, at('2026-08-11T00:59:59.999Z')), false);
+check('overnight ride: over at 01:00 UTC', rideEnded(overnight, at('2026-08-11T01:00:00.000Z')), true);
+// A 24-hour hire from midnight WAT starts on the previous UTC date.
+const fromMidnight = { service_date: '2026-08-10', start_time: '00:00', duration_tier: '24hr' };
+check('midnight start: still running at 22:59:59.999 UTC', rideEnded(fromMidnight, at('2026-08-10T22:59:59.999Z')), false);
+check('midnight start: over at 23:00 UTC the same date', rideEnded(fromMidnight, at('2026-08-10T23:00:00.000Z')), true);
+const FAR = at('2099-01-01T00:00:00.000Z');
+check('a row with no time on it never completes by itself', rideEnded({}, FAR), false);
+check('an unknown duration tier never completes by itself',
+  rideEnded({ service_date: '2026-08-10', start_time: '09:00', duration_tier: 'fortnight' }, FAR), false);
+check('a garbage date never completes by itself',
+  rideEnded({ service_date: 'soon', start_time: 'late', duration_tier: '24hr' }, FAR), false);
+
+// ── Release ────────────────────────────────────────────────────────────────
+console.log('\n— release (sweep) —');
+const isReleasable = make('isReleasable', sweepSrc('isReleasable', 'earning, nowMs'));
+const releaseDecision = make('releaseDecision', sweepSrc('releaseDecision', 'earning, ride'));
+const DUE = at('2026-08-10T12:00:00.000Z');
+const due = (extra = {}) => ({
+  id: 'e1', ride_booking_id: 'ride1', driver_id: 'drvA', amount_ngn: 15000,
+  status: 'held', on_hold: false, release_at: '2026-08-10T12:00:00.000Z', ...extra,
+});
+const drivenRide = (extra = {}) => ({ id: 'ride1', driver_id: 'drvA', status: 'completed', payment_status: 'paid', ...extra });
+
+check('releasable at the release moment', isReleasable(due(), DUE), true);
+check('not one millisecond before', isReleasable(due(), DUE - 1), false);
+check('not while admin has it on hold', isReleasable(due({ on_hold: true }), DUE), false);
+check('not when already released', isReleasable(due({ status: 'released' }), DUE), false);
+check('not when reversed', isReleasable(due({ status: 'reversed' }), DUE), false);
+check('not without a release time', isReleasable(due({ release_at: '' }), DUE), false);
+check('not for a row that is gone', isReleasable(null, DUE), false);
+
+check('a paid ride with the same driver releases', releaseDecision(due(), drivenRide()), 'release');
+check('…whether or not the sweep has completed it yet', releaseDecision(due(), drivenRide({ status: 'confirmed' })), 'release');
+check('a cancelled ride reverses', releaseDecision(due(), drivenRide({ status: 'cancelled' })), 'reverse:ride cancelled');
+check('a ride handed to another driver reverses', releaseDecision(due(), drivenRide({ driver_id: 'drvB' })), 'reverse:ride reassigned');
+check('a ride that no longer exists reverses', releaseDecision(due(), null), 'reverse:ride no longer exists');
+check('a refunded ride is put on hold for admin', releaseDecision(due(), drivenRide({ payment_status: 'refunded' })), 'hold:ride is not paid');
+
+const settleDueEarning = make('settleDueEarning',
+  sweepSrc('isReleasable', 'earning, nowMs'), sweepSrc('releaseDecision', 'earning, ride'),
+  sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
+const world = (earning, ride) => ({ DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []) });
+{
+  const sr = world(due(), drivenRide());
+  check('a due earning is released', await settleDueEarning(sr, 'e1', DUE), 'released');
+  check('…and stamped', sr.DriverEarning.rows[0].released_at, '2026-08-10T12:00:00.000Z');
+  // The balance is derived from the ledger, so a second run has nothing to add.
+  check('the next sweep tick skips it', await settleDueEarning(sr, 'e1', DUE + 300000), 'skipped');
+  check('…leaving the first release time', sr.DriverEarning.rows[0].released_at, '2026-08-10T12:00:00.000Z');
+}
+{
+  const sr = world(due(), drivenRide());
+  check('an earning that is not due yet is skipped', await settleDueEarning(sr, 'e1', DUE - 1), 'skipped');
+  check('…and stays held', sr.DriverEarning.rows[0].status, 'held');
+}
+{
+  // The page was fetched, then admin paused the row before the sweep reached it.
+  const sr = world(due({ on_hold: true, hold_reason: 'guest disputes the trip' }), drivenRide());
+  check('a row paused since the page was read is skipped', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  check('…and stays held', sr.DriverEarning.rows[0].status, 'held');
+}
+{
+  const sr = world(due({ admin_notes: 'first note' }), drivenRide({ status: 'cancelled' }));
+  check('pay on a cancelled ride is reversed, not released', await settleDueEarning(sr, 'e1', DUE), 'reversed');
+  check('…with the reason appended', sr.DriverEarning.rows[0].admin_notes, 'first note | Sweep: ride cancelled');
+}
+{
+  // Assignment stopped after step 2: the ride is the new driver's, the old row is still held.
+  const sr = world(due(), drivenRide({ driver_id: 'drvB' }));
+  check('pay for a driver no longer on the ride is reversed', await settleDueEarning(sr, 'e1', DUE), 'reversed');
+}
+{
+  const sr = world(due(), drivenRide({ payment_status: 'refunded' }));
+  check('pay on a refunded ride is put on hold', await settleDueEarning(sr, 'e1', DUE), 'held');
+  check('…with the reason', `${sr.DriverEarning.rows[0].on_hold}/${sr.DriverEarning.rows[0].hold_reason}`, 'true/ride is not paid');
+  check('…and is then left for admin', await settleDueEarning(sr, 'e1', DUE + 300000), 'skipped');
+}
+{
+  // A read that fails is not the same as a ride that is gone.
+  const sr = world(due(), drivenRide());
+  sr.RideBooking.get = async () => { throw new Error('network'); };
+  const warn = console.warn;
+  console.warn = () => {}; // the helper logs the failed read; keep this output to results
+  const outcome = await settleDueEarning(sr, 'e1', DUE);
+  console.warn = warn;
+  check('a failed ride read never reverses pay', outcome, 'skipped');
+  check('…the row stays held for the next tick', sr.DriverEarning.rows[0].status, 'held');
+}
+
+// ── A paid ride stays paid ─────────────────────────────────────────────────
+// Review focus 5. Both payment paths used to test "paid AND confirmed", which
+// stopped being the same thing as "paid" the moment rides could be completed.
+console.log('\n— paid stays paid —');
+identical('rideAlreadyPaid', 'ride', ['verifyRidePayment', 'paystackWebhook']);
+const rideAlreadyPaid = make('rideAlreadyPaid', liftSrc('verifyRidePayment', 'rideAlreadyPaid', 'ride'));
+check('paid and confirmed', rideAlreadyPaid({ payment_status: 'paid', status: 'confirmed' }), true);
+check('paid and completed: an old reference must not reopen it', rideAlreadyPaid({ payment_status: 'paid', status: 'completed' }), true);
+check('paid then cancelled by admin: must not be resurrected', rideAlreadyPaid({ payment_status: 'paid', status: 'cancelled' }), true);
+check('approved and unpaid is still payable', rideAlreadyPaid({ payment_status: 'unpaid', status: 'pending' }), false);
+check('refunded is not "paid"', rideAlreadyPaid({ payment_status: 'refunded', status: 'cancelled' }), false);
+check('a missing ride is not "paid"', rideAlreadyPaid(null), false);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

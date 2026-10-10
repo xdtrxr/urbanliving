@@ -1667,3 +1667,536 @@ git add scripts/check-driver-wallet.mjs base44/functions/cancelRideBooking/entry
 git commit -m "feat(rides): cancelling a ride reverses the driver's held pay" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A05: The sweep completes rides and releases pay; a paid ride stays paid
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (completion, release and paid-guard sections, above `// ---- result ----`)
+- Modify: `base44/functions/autoCancelExpiredBookings/entry.ts` (header comment; time model and five helpers after `ARRIVAL_WINDOW_MS`; passes 4 and 5 in `runRideSweep`)
+- Modify: `base44/functions/verifyRidePayment/entry.ts` (the "already paid" guard)
+- Modify: `base44/functions/paystackWebhook/entry.ts` (the same guard in `handleRidePayment`)
+- Modify: `base44/functions/getRideDriverContact/entry.ts` (also serve completed rides)
+
+**Interfaces:**
+- Consumes: entity `DriverEarning`, `RideBooking.completed_at`, `RideBooking.completed_by` (Task A01); `Driver.user_email`; the sweep's existing `fetchAll(entity, query)` and `tryPush(sdk, opts)`; `fakeEntity`, `liftSrc`, `make`, `identical`, `constLine` from the check script (Tasks A02, A03).
+- Produces, in `autoCancelExpiredBookings/entry.ts`: `rideDurationMs`, `windowOf` (lockstep copies), `rideEnded(ride, nowMs) → boolean`, `isReleasable(earning, nowMs) → boolean`, `releaseDecision(earning, ride) → 'release' | 'reverse:<why>' | 'hold:<why>'`, `async settleDueEarning(sr, earningId, nowMs) → 'released' | 'reversed' | 'held' | 'skipped'`, `async notifyAdminLine(text)`. The sweep's response `data.rides` gains `completed`, `released`, `pay_reversed`.
+- Produces, in `verifyRidePayment/entry.ts` and `paystackWebhook/entry.ts`: `rideAlreadyPaid(ride) → boolean`, identical in both.
+- From this task on, `RideBooking.status` really does become `completed`. `getRideDriverContact` serves `confirmed` and `completed` rides.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Completion ─────────────────────────────────────────────────────────────
+// Review focus 4. Every assertion pins an exact UTC instant: a naive parse
+// resolves to local time, which on a machine in Nigeria coincides with the
+// pinned value, so a wrong implementation would pass there and nowhere else.
+console.log('\n— completion (sweep) —');
+identical('rideDurationMs', 'tier, days, hours', ['getRideBookings', 'assignRideDriver', 'autoCancelExpiredBookings']);
+identical('windowOf', 'r', ['getRideBookings', 'assignRideDriver', 'autoCancelExpiredBookings']);
+const SWEEP_TIME = ['HOUR_MS', 'WAT_OFFSET', 'DAY_MS', 'MAX_HOURLY']
+  .map((name) => constLine('autoCancelExpiredBookings', name)).join(' ');
+const sweepSrc = (name, signature) => liftSrc('autoCancelExpiredBookings', name, signature);
+const rideEnded = make('rideEnded', SWEEP_TIME,
+  sweepSrc('rideDurationMs', 'tier, days, hours'), sweepSrc('windowOf', 'r'), sweepSrc('rideEnded', 'ride, nowMs'));
+const at = (iso) => Date.parse(iso);
+
+const stored = { start_at: '2026-08-10T08:00:00.000Z', end_at: '2026-08-10T10:00:00.000Z' };
+check('not over one millisecond before the booked end', rideEnded(stored, at('2026-08-10T09:59:59.999Z')), false);
+check('over at the booked end', rideEnded(stored, at('2026-08-10T10:00:00.000Z')), true);
+// A row written before start_at and end_at existed. 09:00 WAT is 08:00 UTC,
+// so three hours later is 11:00 UTC.
+const legacy = { service_date: '2026-08-10', start_time: '09:00', duration_tier: 'hourly', duration_hours: 3 };
+check('legacy row: still running at 10:59:59.999 UTC', rideEnded(legacy, at('2026-08-10T10:59:59.999Z')), false);
+check('legacy row: over at 11:00 UTC', rideEnded(legacy, at('2026-08-10T11:00:00.000Z')), true);
+// 22:00 WAT for four hours ends at 02:00 WAT the next day: 01:00 UTC.
+const overnight = { service_date: '2026-08-10', start_time: '22:00', duration_tier: 'hourly', duration_hours: 4 };
+check('overnight ride: still running at 00:59:59.999 UTC', rideEnded(overnight, at('2026-08-11T00:59:59.999Z')), false);
+check('overnight ride: over at 01:00 UTC', rideEnded(overnight, at('2026-08-11T01:00:00.000Z')), true);
+// A 24-hour hire from midnight WAT starts on the previous UTC date.
+const fromMidnight = { service_date: '2026-08-10', start_time: '00:00', duration_tier: '24hr' };
+check('midnight start: still running at 22:59:59.999 UTC', rideEnded(fromMidnight, at('2026-08-10T22:59:59.999Z')), false);
+check('midnight start: over at 23:00 UTC the same date', rideEnded(fromMidnight, at('2026-08-10T23:00:00.000Z')), true);
+const FAR = at('2099-01-01T00:00:00.000Z');
+check('a row with no time on it never completes by itself', rideEnded({}, FAR), false);
+check('an unknown duration tier never completes by itself',
+  rideEnded({ service_date: '2026-08-10', start_time: '09:00', duration_tier: 'fortnight' }, FAR), false);
+check('a garbage date never completes by itself',
+  rideEnded({ service_date: 'soon', start_time: 'late', duration_tier: '24hr' }, FAR), false);
+
+// ── Release ────────────────────────────────────────────────────────────────
+console.log('\n— release (sweep) —');
+const isReleasable = make('isReleasable', sweepSrc('isReleasable', 'earning, nowMs'));
+const releaseDecision = make('releaseDecision', sweepSrc('releaseDecision', 'earning, ride'));
+const DUE = at('2026-08-10T12:00:00.000Z');
+const due = (extra = {}) => ({
+  id: 'e1', ride_booking_id: 'ride1', driver_id: 'drvA', amount_ngn: 15000,
+  status: 'held', on_hold: false, release_at: '2026-08-10T12:00:00.000Z', ...extra,
+});
+const drivenRide = (extra = {}) => ({ id: 'ride1', driver_id: 'drvA', status: 'completed', payment_status: 'paid', ...extra });
+
+check('releasable at the release moment', isReleasable(due(), DUE), true);
+check('not one millisecond before', isReleasable(due(), DUE - 1), false);
+check('not while admin has it on hold', isReleasable(due({ on_hold: true }), DUE), false);
+check('not when already released', isReleasable(due({ status: 'released' }), DUE), false);
+check('not when reversed', isReleasable(due({ status: 'reversed' }), DUE), false);
+check('not without a release time', isReleasable(due({ release_at: '' }), DUE), false);
+check('not for a row that is gone', isReleasable(null, DUE), false);
+
+check('a paid ride with the same driver releases', releaseDecision(due(), drivenRide()), 'release');
+check('…whether or not the sweep has completed it yet', releaseDecision(due(), drivenRide({ status: 'confirmed' })), 'release');
+check('a cancelled ride reverses', releaseDecision(due(), drivenRide({ status: 'cancelled' })), 'reverse:ride cancelled');
+check('a ride handed to another driver reverses', releaseDecision(due(), drivenRide({ driver_id: 'drvB' })), 'reverse:ride reassigned');
+check('a ride that no longer exists reverses', releaseDecision(due(), null), 'reverse:ride no longer exists');
+check('a refunded ride is put on hold for admin', releaseDecision(due(), drivenRide({ payment_status: 'refunded' })), 'hold:ride is not paid');
+
+const settleDueEarning = make('settleDueEarning',
+  sweepSrc('isReleasable', 'earning, nowMs'), sweepSrc('releaseDecision', 'earning, ride'),
+  sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
+const world = (earning, ride) => ({ DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []) });
+{
+  const sr = world(due(), drivenRide());
+  check('a due earning is released', await settleDueEarning(sr, 'e1', DUE), 'released');
+  check('…and stamped', sr.DriverEarning.rows[0].released_at, '2026-08-10T12:00:00.000Z');
+  // The balance is derived from the ledger, so a second run has nothing to add.
+  check('the next sweep tick skips it', await settleDueEarning(sr, 'e1', DUE + 300000), 'skipped');
+  check('…leaving the first release time', sr.DriverEarning.rows[0].released_at, '2026-08-10T12:00:00.000Z');
+}
+{
+  const sr = world(due(), drivenRide());
+  check('an earning that is not due yet is skipped', await settleDueEarning(sr, 'e1', DUE - 1), 'skipped');
+  check('…and stays held', sr.DriverEarning.rows[0].status, 'held');
+}
+{
+  // The page was fetched, then admin paused the row before the sweep reached it.
+  const sr = world(due({ on_hold: true, hold_reason: 'guest disputes the trip' }), drivenRide());
+  check('a row paused since the page was read is skipped', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  check('…and stays held', sr.DriverEarning.rows[0].status, 'held');
+}
+{
+  const sr = world(due({ admin_notes: 'first note' }), drivenRide({ status: 'cancelled' }));
+  check('pay on a cancelled ride is reversed, not released', await settleDueEarning(sr, 'e1', DUE), 'reversed');
+  check('…with the reason appended', sr.DriverEarning.rows[0].admin_notes, 'first note | Sweep: ride cancelled');
+}
+{
+  // Assignment stopped after step 2: the ride is the new driver's, the old row is still held.
+  const sr = world(due(), drivenRide({ driver_id: 'drvB' }));
+  check('pay for a driver no longer on the ride is reversed', await settleDueEarning(sr, 'e1', DUE), 'reversed');
+}
+{
+  const sr = world(due(), drivenRide({ payment_status: 'refunded' }));
+  check('pay on a refunded ride is put on hold', await settleDueEarning(sr, 'e1', DUE), 'held');
+  check('…with the reason', `${sr.DriverEarning.rows[0].on_hold}/${sr.DriverEarning.rows[0].hold_reason}`, 'true/ride is not paid');
+  check('…and is then left for admin', await settleDueEarning(sr, 'e1', DUE + 300000), 'skipped');
+}
+{
+  // A read that fails is not the same as a ride that is gone.
+  const sr = world(due(), drivenRide());
+  sr.RideBooking.get = async () => { throw new Error('network'); };
+  const warn = console.warn;
+  console.warn = () => {}; // the helper logs the failed read; keep this output to results
+  const outcome = await settleDueEarning(sr, 'e1', DUE);
+  console.warn = warn;
+  check('a failed ride read never reverses pay', outcome, 'skipped');
+  check('…the row stays held for the next tick', sr.DriverEarning.rows[0].status, 'held');
+}
+
+// ── A paid ride stays paid ─────────────────────────────────────────────────
+// Review focus 5. Both payment paths used to test "paid AND confirmed", which
+// stopped being the same thing as "paid" the moment rides could be completed.
+console.log('\n— paid stays paid —');
+identical('rideAlreadyPaid', 'ride', ['verifyRidePayment', 'paystackWebhook']);
+const rideAlreadyPaid = make('rideAlreadyPaid', liftSrc('verifyRidePayment', 'rideAlreadyPaid', 'ride'));
+check('paid and confirmed', rideAlreadyPaid({ payment_status: 'paid', status: 'confirmed' }), true);
+check('paid and completed: an old reference must not reopen it', rideAlreadyPaid({ payment_status: 'paid', status: 'completed' }), true);
+check('paid then cancelled by admin: must not be resurrected', rideAlreadyPaid({ payment_status: 'paid', status: 'cancelled' }), true);
+check('approved and unpaid is still payable', rideAlreadyPaid({ payment_status: 'unpaid', status: 'pending' }), false);
+check('refunded is not "paid"', rideAlreadyPaid({ payment_status: 'refunded', status: 'cancelled' }), false);
+check('a missing ride is not "paid"', rideAlreadyPaid(null), false);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error: could not find rideDurationMs in base44/functions/autoCancelExpiredBookings/entry.ts`.
+
+- [ ] **Step 3: Say what the sweep now covers**
+
+**Edit `base44/functions/autoCancelExpiredBookings/entry.ts`** — find:
+
+```ts
+// The platform's 5-minute sweep. Despite the name it now covers three things:
+```
+
+replace with:
+
+```ts
+// The platform's 5-minute sweep. Despite the name it now covers five things:
+```
+
+**Edit `base44/functions/autoCancelExpiredBookings/entry.ts`** — find:
+
+```ts
+//   3. Rides  — a driver-arriving-soon push ~30 minutes before pickup.
+```
+
+replace with:
+
+```ts
+//   3. Rides  — a driver-arriving-soon push ~30 minutes before pickup.
+//   4. Rides  — a paid ride whose booked window is over is marked completed.
+//   5. Rides  — driver pay held on a ride is released two hours after its end.
+```
+
+- [ ] **Step 4: Add the time model and the completion and release helpers**
+
+`rideDurationMs` and `windowOf` must match the copies in `getRideBookings` and `assignRideDriver` character for character; the check script compares them.
+
+**Edit `base44/functions/autoCancelExpiredBookings/entry.ts`** — find:
+
+```ts
+const ARRIVAL_WINDOW_MS = 35 * 60 * 1000;
+```
+
+replace with:
+
+```ts
+const ARRIVAL_WINDOW_MS = 35 * 60 * 1000;
+
+// ── Ride time model — lockstep copy, see checkRideAvailability ──────────────
+const WAT_OFFSET = '+01:00';
+const DAY_MS = 24 * HOUR_MS;
+const MAX_HOURLY = 8;
+
+function rideDurationMs(tier: string, days?: number, hours?: number): number {
+    switch (tier) {
+        case 'hourly': return Math.min(MAX_HOURLY, Math.max(1, Number(hours) || 1)) * HOUR_MS;
+        case '12hr': return 12 * HOUR_MS;
+        case '24hr': return DAY_MS;
+        case 'multi_day': return Math.max(1, Number(days) || 1) * DAY_MS;
+        case 'weekly': return 7 * DAY_MS;
+        case 'monthly': return 30 * DAY_MS;
+        default: return NaN;
+    }
+}
+
+// Prefer the stored instants. Fall back to deriving them for any row written
+// before start_at existed, so a legacy ride still completes on time.
+function windowOf(r: any): { startMs: number; endMs: number } | null {
+    let startMs = Date.parse(r.start_at || '');
+    if (Number.isNaN(startMs)) startMs = Date.parse(`${r.service_date}T${r.start_time}:00${WAT_OFFSET}`);
+    if (Number.isNaN(startMs)) return null;
+    let endMs = Date.parse(r.end_at || '');
+    if (Number.isNaN(endMs)) {
+        const dur = rideDurationMs(r.duration_tier, r.duration_days, r.duration_hours);
+        if (Number.isNaN(dur)) return null;
+        endMs = startMs + dur;
+    }
+    return { startMs, endMs };
+}
+
+// ── Completion and driver pay release ───────────────────────────────────────
+// The decisions are separate functions with plain JavaScript bodies so that
+// scripts/check-driver-wallet.mjs can lift them off disk and run them.
+
+// The booked window is over. A row with no readable time is never "over":
+// it waits for admin rather than completing on a guess.
+function rideEnded(ride: any, nowMs: number) {
+    const w = windowOf(ride);
+    return !!w && Number.isFinite(w.endMs) && w.endMs <= nowMs;
+}
+
+// A held earning that has waited out its two hours and is not paused.
+function isReleasable(earning: any, nowMs: number) {
+    if (!earning || earning.status !== 'held' || earning.on_hold) return false;
+    const t = Date.parse(earning.release_at || '');
+    return !Number.isNaN(t) && t <= nowMs;
+}
+
+// What to do with a due earning, given the ride it is for. This is the net
+// under assignRideDriver and cancelRideBooking: if either stopped halfway, the
+// pay they should have reversed is reversed here instead of being released.
+function releaseDecision(earning: any, ride: any) {
+    if (!ride) return 'reverse:ride no longer exists';
+    if (ride.status === 'cancelled') return 'reverse:ride cancelled';
+    if (ride.driver_id !== earning.driver_id) return 'reverse:ride reassigned';
+    if (ride.payment_status !== 'paid') return 'hold:ride is not paid';
+    return 'release';
+}
+
+// Settle one due earning: 'released' | 'reversed' | 'held' | 'skipped'.
+// Re-reads the row first, because admin may have paused, adjusted or reversed
+// it since the page was fetched. Releasing is a status flip and nothing else:
+// the driver's balance is derived from the ledger, so running this twice for
+// the same row cannot pay twice.
+async function settleDueEarning(sr: any, earningId: string, nowMs: number) {
+    const e = await sr.DriverEarning.get(earningId);
+    if (!isReleasable(e, nowMs)) return 'skipped';
+    let ride;
+    try {
+        ride = await sr.RideBooking.get(e.ride_booking_id);
+    } catch (err) {
+        // A read that failed is not a ride that is gone. Never reverse on it.
+        console.warn(`Could not read ride ${e.ride_booking_id} for earning ${e.id}; trying again next tick`, err);
+        return 'skipped';
+    }
+    const nowIso = new Date(nowMs).toISOString();
+    const parts = releaseDecision(e, ride).split(':');
+    if (parts[0] === 'reverse') {
+        const note = `Sweep: ${parts[1]}`;
+        await sr.DriverEarning.update(e.id, {
+            status: 'reversed',
+            reversed_at: nowIso,
+            on_hold: false,
+            admin_notes: e.admin_notes ? `${e.admin_notes} | ${note}` : note,
+        });
+        return 'reversed';
+    }
+    if (parts[0] === 'hold') {
+        await sr.DriverEarning.update(e.id, { on_hold: true, hold_reason: parts[1] });
+        return 'held';
+    }
+    await sr.DriverEarning.update(e.id, {
+        status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
+    });
+    return 'released';
+}
+
+// One plain-text line to the admin group. Plain text on purpose: these
+// messages carry vehicle names and reasons that were never escaped for
+// Markdown, and Telegram drops a message it cannot parse.
+async function notifyAdminLine(text: string) {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
+    if (!token || !chatId) return;
+    try {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text }),
+        });
+    } catch (err) {
+        console.error('Telegram notify failed:', err);
+    }
+}
+```
+
+- [ ] **Step 5: Add the two passes to the ride sweep**
+
+**Edit `base44/functions/autoCancelExpiredBookings/entry.ts`** — find:
+
+```ts
+async function runRideSweep(sdk: any): Promise<{ scanned: number; cancelled: number; warned: number; arriving: number }> {
+    const now = Date.now();
+    let cancelled = 0;
+    let warned = 0;
+    let arriving = 0;
+```
+
+replace with:
+
+```ts
+async function runRideSweep(sdk: any): Promise<Record<string, number>> {
+    const now = Date.now();
+    let cancelled = 0;
+    let warned = 0;
+    let arriving = 0;
+    let completed = 0;
+    let released = 0;
+    let payReversed = 0;
+```
+
+**Edit `base44/functions/autoCancelExpiredBookings/entry.ts`** — find:
+
+```ts
+    return { scanned: pending.length + confirmed.length, cancelled, warned, arriving };
+```
+
+replace with:
+
+```ts
+    // Pass 4 — a paid ride whose booked window is over is completed. Until
+    // this pass existed nothing ever wrote the status; rides aged into "past"
+    // by the clock alone.
+    for (const r of confirmed) {
+        if (!rideEnded(r, now)) continue;
+        try {
+            await sdk.asServiceRole.entities.RideBooking.update(r.id, {
+                status: 'completed',
+                completed_at: new Date().toISOString(),
+                completed_by: 'system',
+            });
+            completed += 1;
+        } catch (err) {
+            console.error(`Failed to complete ride ${r.id}:`, err);
+        }
+    }
+
+    // Pass 5 — release driver pay that has waited out its two hours. Wrapped
+    // as a whole so that a failed page read here cannot cost the counts from
+    // the passes above.
+    try {
+        const sr = sdk.asServiceRole.entities;
+        const held = await fetchAll(sr.DriverEarning, { status: 'held' });
+        for (const row of held) {
+            if (!isReleasable(row, now)) continue;
+            try {
+                const outcome = await settleDueEarning(sr, row.id, now);
+                const amount = `₦${(Number(row.amount_ngn) || 0).toLocaleString()}`;
+                if (outcome === 'reversed') payReversed += 1;
+                if (outcome === 'held') {
+                    await notifyAdminLine(
+                        `⏸ DRIVER PAY ON HOLD\n\n${amount} for ${row.vehicle_name || 'a ride'} (${row.booking_reference || row.ride_booking_id}) ` +
+                        `was due for release, but the ride is not marked paid. Review it in Admin → Rides → Earnings.`,
+                    );
+                }
+                if (outcome !== 'released') continue;
+                released += 1;
+                const driver = await sr.Driver.get(row.driver_id);
+                const driverEmail = typeof driver?.user_email === 'string' ? driver.user_email.trim().toLowerCase() : '';
+                if (driverEmail) {
+                    await tryPush(sdk, {
+                        user_email: driverEmail,
+                        title: `💸 ${amount} is now available`,
+                        body: `Your pay for the ${row.vehicle_name || 'ride'}${row.service_date ? ` on ${row.service_date}` : ''} has been released to your wallet.`,
+                        url: '/DriverWallet',
+                        tag: `driver-released-${row.id}`,
+                    });
+                }
+            } catch (err) {
+                console.error(`Failed to settle driver earning ${row.id}:`, err);
+            }
+        }
+    } catch (err) {
+        console.error('Driver pay release pass failed:', err);
+    }
+
+    return {
+        scanned: pending.length + confirmed.length,
+        cancelled, warned, arriving, completed, released, pay_reversed: payReversed,
+    };
+```
+
+- [ ] **Step 6: A paid ride stays paid, in both payment paths**
+
+Both functions decided "nothing to do" with `payment_status === 'paid' && status === 'confirmed'`. That was the same as "paid" only while every paid ride stayed confirmed forever. With pass 4 writing `completed`, an old Paystack reference sent to `verifyRidePayment` would have passed the guard, verified successfully, set the ride back to `confirmed`, moved `paid_at` to today and re-sent the "ride paid, assign a driver" notifications. The same replay already worked on a ride admin had cancelled after payment. The helper is identical in both files.
+
+**Edit `base44/functions/verifyRidePayment/entry.ts`** — find:
+
+```ts
+const GUEST_RIDE_POINTS = 500;
+```
+
+replace with:
+
+```ts
+const GUEST_RIDE_POINTS = 500;
+
+// A ride that has been paid stays paid, whatever happened to it afterwards.
+// The guard used to be "paid AND confirmed", which let an old Paystack
+// reference walk straight past it on a ride that had since been completed by
+// the sweep or cancelled by admin, and flip that ride back to confirmed.
+// Lockstep copy in verifyRidePayment and paystackWebhook.
+function rideAlreadyPaid(ride: any) {
+    return !!ride && ride.payment_status === 'paid';
+}
+```
+
+**Edit `base44/functions/verifyRidePayment/entry.ts`** — find:
+
+```ts
+        if (ride.payment_status === 'paid' && ride.status === 'confirmed') {
+```
+
+replace with:
+
+```ts
+        if (rideAlreadyPaid(ride)) {
+```
+
+**Edit `base44/functions/paystackWebhook/entry.ts`** — find:
+
+```ts
+const GUEST_RIDE_POINTS = 500;
+```
+
+replace with:
+
+```ts
+const GUEST_RIDE_POINTS = 500;
+
+// A ride that has been paid stays paid, whatever happened to it afterwards.
+// The guard used to be "paid AND confirmed", which let an old Paystack
+// reference walk straight past it on a ride that had since been completed by
+// the sweep or cancelled by admin, and flip that ride back to confirmed.
+// Lockstep copy in verifyRidePayment and paystackWebhook.
+function rideAlreadyPaid(ride: any) {
+    return !!ride && ride.payment_status === 'paid';
+}
+```
+
+**Edit `base44/functions/paystackWebhook/entry.ts`** — find:
+
+```ts
+    if (ride.payment_status === 'paid' && ride.status === 'confirmed') {
+```
+
+replace with:
+
+```ts
+    if (rideAlreadyPaid(ride)) {
+```
+
+- [ ] **Step 7: Keep the driver card reachable after the ride is completed**
+
+The guest's driver card is how they will report a problem with the driver after the trip. It asked for `status === 'confirmed'`, which until now every paid ride kept for ever.
+
+**Edit `base44/functions/getRideDriverContact/entry.ts`** — find:
+
+```ts
+        // 2. Paid and confirmed
+        if (ride.status !== 'confirmed' || ride.payment_status !== 'paid') {
+```
+
+replace with:
+
+```ts
+        // 2. Paid, and either still to happen or already driven. A completed
+        // ride stays readable so the guest can reach this card after the trip.
+        if ((ride.status !== 'confirmed' && ride.status !== 'completed') || ride.payment_status !== 'paid') {
+```
+
+- [ ] **Step 8: Run the checks**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, including every line under `— completion (sweep) —`, `— release (sweep) —` and `— paid stays paid —`.
+
+Run: `for f in autoCancelExpiredBookings verifyRidePayment paystackWebhook getRideDriverContact; do node_modules/.bin/esbuild base44/functions/$f/entry.ts --format=esm --target=esnext --outfile=/dev/null || echo "PARSE FAIL $f"; done`
+
+Expected: no `PARSE FAIL` line.
+
+- [ ] **Step 9: Sandbox checklist (after the next publish)**
+
+1. Book, approve, pay and assign a one-hour test ride starting a few minutes from now, with a linked driver.
+2. Three hours and a few minutes after its start, POST to `autoCancelExpiredBookings` as admin. Expected response `data.rides.completed >= 1` and `data.rides.released >= 1`; the ride's `status` is `completed` with `completed_by: system`; the earning is `released`; the driver receives "₦… is now available".
+3. POST again straight away. Expected: `completed: 0`, `released: 0`.
+4. From the guest's browser console, call `base44.functions.invoke('verifyRidePayment', { ride_booking_id: '<that ride>', reference: '<its transaction_hash>' })`. Expected: `{ success: true, data: { already_paid: true } }` and the ride is still `completed`.
+5. Open the guest's Bookings page. Expected: the completed ride still shows the driver card.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs base44/functions/autoCancelExpiredBookings/entry.ts base44/functions/verifyRidePayment/entry.ts base44/functions/paystackWebhook/entry.ts base44/functions/getRideDriverContact/entry.ts
+git commit -m "feat(rides): the sweep completes rides and releases held driver pay" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+

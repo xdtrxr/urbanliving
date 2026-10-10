@@ -20,6 +20,15 @@ const REFERRAL_RATE = 0.05;
 const REFERRER_LOYALTY_BONUS = 250;
 const GUEST_RIDE_POINTS = 500;
 
+// A ride that has been paid stays paid, whatever happened to it afterwards.
+// The guard used to be "paid AND confirmed", which let an old Paystack
+// reference walk straight past it on a ride that had since been completed by
+// the sweep or cancelled by admin, and flip that ride back to confirmed.
+// Lockstep copy in verifyRidePayment and paystackWebhook.
+function rideAlreadyPaid(ride: any) {
+    return !!ride && ride.payment_status === 'paid';
+}
+
 const APP_BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://urbanstays.io';
 const rideLink = (id: string) => `${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(id)}#ride-${encodeURIComponent(id)}`;
 
@@ -151,7 +160,7 @@ Deno.serve(async (req) => {
         if (ride.guest_email !== user.email && user.role !== 'admin') {
             return json({ success: false, error: 'Not your booking' }, 403);
         }
-        if (ride.payment_status === 'paid' && ride.status === 'confirmed') {
+        if (rideAlreadyPaid(ride)) {
             return json({ success: true, data: { already_paid: true, ride_booking_id } });
         }
 
