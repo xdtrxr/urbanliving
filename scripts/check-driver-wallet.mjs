@@ -61,8 +61,17 @@ const identical = (fnName, signature, dirs) => {
   }
 };
 
+// One shipped `const NAME = …;` line, so the helpers run against the real
+// limits rather than against numbers retyped here.
+function constLine(fnDir, name) {
+  const file = FN(fnDir);
+  const line = fs.readFileSync(file, 'utf8').split('\n').find((l) => l.startsWith(`const ${name} = `));
+  if (!line) throw new Error(`could not find const ${name} in ${path.relative(ROOT, file)}`);
+  return line;
+}
+
 const TIME = 'const WAT_OFFSET = "+01:00"; const HOUR_MS = 3600000; const DAY_MS = 86400000; const MAX_HOURLY = 8;';
-const PAY = `${TIME} const RELEASE_BUFFER_MS = 2 * HOUR_MS; const MAX_PAYOUT_NGN = 50000000;`;
+const PAY = `${TIME} ${constLine('assignRideDriver', 'RELEASE_BUFFER_MS')} ${constLine('assignRideDriver', 'MAX_PAYOUT_NGN')}`;
 
 // ── Pay table: server vs the client mirror ─────────────────────────────────
 // Admin sees the client figure in the Assign driver dialog; assignRideDriver
@@ -102,6 +111,32 @@ check('day ride, no daily driver cost, client', rides.driverPayoutFor({ driver_c
 check('zero rate is "not set", not free labour', driverPayoutFor({ driver_cost_per_hour_ngn: 0 }, 'hourly', 2), null);
 check('negative rate is refused', driverPayoutFor({ driver_cost_per_day_ngn: -1 }, '24hr'), null);
 check('rates stored as strings still work', driverPayoutFor({ driver_cost_per_hour_ngn: '2500' }, 'hourly', 2)?.amount, 5000);
+// The duration is whatever the guest typed when booking. It must not be able
+// to multiply the driver's pay into nonsense.
+check('a duration of Infinity days gives no figure', driverPayoutFor(costing, 'multi_day', undefined, Infinity), null);
+check('…client mirror', rides.driverPayoutFor(costing, 'multi_day', { days: Infinity }), null);
+check('a duration that multiplies past the ceiling gives no figure', driverPayoutFor(costing, 'multi_day', undefined, 1e6), null);
+check('…client mirror', rides.driverPayoutFor(costing, 'multi_day', { days: 1e6 }), null);
+check('a mistyped rate past the ceiling gives no figure', driverPayoutFor({ driver_cost_per_day_ngn: 1e12 }, '24hr'), null);
+check('…client mirror', rides.driverPayoutFor({ driver_cost_per_day_ngn: 1e12 }, '24hr'), null);
+check('the ceiling itself is payable', driverPayoutFor({ driver_cost_per_day_ngn: 50000000 }, '24hr')?.amount, 50000000);
+check('client ceiling is the server ceiling', rides.MAX_PAYOUT_NGN, make('MAX_PAYOUT_NGN', PAY));
+
+// ── The booked duration, where the guest types it ──────────────────────────
+// Everything above multiplies by a day count that arrives in a request body.
+console.log('\n— booked duration —');
+const multiDaysOk = make('multiDaysOk', constLine('checkRideAvailability', 'MAX_MULTI_DAYS'),
+  liftSrc('checkRideAvailability', 'multiDaysOk', 'days'));
+check('1 day is a booking', multiDaysOk(1), true);
+check('30 days is the most the form offers', multiDaysOk(30), true);
+check('31 days is refused', multiDaysOk(31), false);
+check('a billion days is refused', multiDaysOk(1e9), false);
+check('Infinity is refused', multiDaysOk(Infinity), false);
+check('half days are refused', multiDaysOk(2.5), false);
+check('zero is refused', multiDaysOk(0), false);
+check('negative is refused', multiDaysOk(-3), false);
+check('missing is refused', multiDaysOk(undefined), false);
+check('a numeric string from a form still counts', multiDaysOk('7'), true);
 
 // ── Release moment ─────────────────────────────────────────────────────────
 console.log('\n— release moment —');
@@ -111,6 +146,8 @@ check('two hours after the booked end', releaseAtFor('2026-08-10T10:00:00.000Z')
 check('crosses midnight cleanly', releaseAtFor('2026-08-10T23:30:00+01:00'), '2026-08-11T00:30:00.000Z');
 check('unreadable end gives no release time', releaseAtFor('not a date'), null);
 check('missing end gives no release time', releaseAtFor(''), null);
+// The last representable instant parses; two hours after it does not exist.
+check('an end at the edge of the calendar gives none, without throwing', releaseAtFor('+275760-09-13T00:00:00.000Z'), null);
 check('client constant agrees with the server buffer',
   (Date.parse(releaseAtFor('2026-08-10T10:00:00.000Z')) - Date.parse('2026-08-10T10:00:00.000Z')) / 3600000,
   rides.RELEASE_BUFFER_HOURS);
@@ -135,6 +172,9 @@ same('"25,000" is refused, not read as 25', parsePayoutOverride('25,000'), REFUS
 same('negative is refused', parsePayoutOverride(-5), REFUSED);
 same('words are refused', parsePayoutOverride('abc'), REFUSED);
 same('9e12 is refused', parsePayoutOverride(9e12), REFUSED);
+same('"1e3" is refused, digits only', parsePayoutOverride('1e3'), REFUSED);
+same('"0x10" is refused', parsePayoutOverride('0x10'), REFUSED);
+same('"+5" is refused', parsePayoutOverride('+5'), REFUSED);
 same('NaN is refused', parsePayoutOverride(NaN), REFUSED);
 same('Infinity is refused', parsePayoutOverride(Infinity), REFUSED);
 same('true is refused', parsePayoutOverride(true), REFUSED);
@@ -256,6 +296,18 @@ const heldRow = (id, driver, extra = {}) => ({
   check('…and reverses the twin', base.rows.filter((r) => r.status === 'held').length, 1);
   check('…saying why', base.rows.find((r) => r.id !== 'old').admin_notes, 'Duplicate of old');
 }
+{
+  // A ride whose end is not a real date has no moment to release at.
+  const sr = { DriverEarning: fakeEntity() };
+  let threw = false;
+  try { await holdEarning(sr, rideA, 'drvA', dayPay, 'not a date', NOW); } catch { threw = true; }
+  check('an unreadable ride end is refused loudly', threw, true);
+  check('…and writes nothing', sr.DriverEarning.rows.length, 0);
+}
+const safeIso = make('safeIso', liftSrc('assignRideDriver', 'safeIso', 'ms'));
+check('safeIso: a real instant round-trips', safeIso(Date.parse(END)), END);
+check('safeIso: Infinity is not a date', safeIso(Infinity), null);
+check('safeIso: NaN is not a date', safeIso(NaN), null);
 
 // ── Cancellation uses the same reversal as reassignment ────────────────────
 console.log('\n— cancellation —');

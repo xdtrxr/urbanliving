@@ -40,6 +40,15 @@ const DAY_MS = 24 * HOUR_MS;
 const PAYMENT_WINDOW_MS = 1 * HOUR_MS;
 const MAX_OPEN_REQUESTS = 3;
 const MAX_HOURLY = 8;
+// The booking form stops at 30 days (longer hires go by the week or month).
+// The server has to say so too: the day count multiplies straight into the
+// price, the driver's pay and the length of time the vehicle is blocked.
+const MAX_MULTI_DAYS = 30;
+
+function multiDaysOk(days: unknown) {
+    const d = Number(days);
+    return Number.isInteger(d) && d >= 1 && d <= MAX_MULTI_DAYS;
+}
 
 // Turnaround was a flat 2h constant until hourly hire landed. Two hours of
 // clearance either side of a one-hour booking would cap a car at roughly three
@@ -295,8 +304,12 @@ Deno.serve(async (req) => {
         if (!user.phone_number && !body.guest_phone) {
             return json({ success: false, error: 'A phone number is required to book a ride', code: 'PHONE_REQUIRED' }, 400);
         }
-        if (duration_tier === 'multi_day' && (!Number(duration_days) || Number(duration_days) < 1)) {
-            return json({ success: false, error: 'multi_day bookings need duration_days of at least 1' }, 400);
+        if (duration_tier === 'multi_day' && !multiDaysOk(duration_days)) {
+            return json({
+                success: false,
+                error: `Multi-day bookings are for 1 to ${MAX_MULTI_DAYS} whole days. For longer, book by the week or the month.`,
+                code: 'INVALID_DAYS',
+            }, 400);
         }
         if (duration_tier === 'hourly') {
             const h = Number(duration_hours);

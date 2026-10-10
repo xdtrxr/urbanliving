@@ -101,13 +101,23 @@ function driverPayoutFor(costing: any, tier: string, hours?: number, days?: numb
     }
     // Zero means "nobody entered a driver cost", never "this driver is free".
     if (rate <= 0) return null;
-    return { amount: rate * units, basis, rate, units };
+    // The booked duration is whatever the guest typed at request time and the
+    // rate is whatever admin typed. A product that is not a finite amount
+    // under the ceiling is not a pay figure: return nothing, so the dialog
+    // asks admin to type one.
+    const amount = rate * units;
+    if (!Number.isFinite(amount) || amount > MAX_PAYOUT_NGN) return null;
+    return { amount, basis, rate, units };
 }
 
 function releaseAtFor(endAtIso: string) {
     const endMs = Date.parse(endAtIso || '');
     if (Number.isNaN(endMs)) return null;
-    return new Date(endMs + RELEASE_BUFFER_MS).toISOString();
+    // An end at the very edge of the representable range parses, but two
+    // hours later does not exist and toISOString would throw on it.
+    const release = new Date(endMs + RELEASE_BUFFER_MS);
+    if (Number.isNaN(release.getTime())) return null;
+    return release.toISOString();
 }
 
 // The pay figure admin typed, if any. { ok: true, value: null } means nothing
@@ -117,6 +127,8 @@ function releaseAtFor(endAtIso: string) {
 function parsePayoutOverride(raw: unknown) {
     if (raw === undefined || raw === null) return { ok: true, value: null };
     if (typeof raw === 'string' && raw.trim() === '') return { ok: true, value: null };
+    // Plain digits only. Number() would also swallow "1e3", "0x10" and "+5".
+    if (typeof raw === 'string' && !/^\d{1,9}(\.\d+)?$/.test(raw.trim())) return { ok: false, value: null };
     const n = typeof raw === 'string' ? Number(raw.trim()) : raw;
     if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > MAX_PAYOUT_NGN) {
         return { ok: false, value: null };
@@ -140,6 +152,14 @@ async function fetchAll(entity: any, query: Record<string, unknown>): Promise<an
 // Bodies are plain JavaScript on purpose: scripts/check-driver-wallet.mjs
 // lifts these two off disk and runs them against an in-memory ledger.
 
+// ISO string for an instant, or null when it is not a representable date. A
+// ride's end is derived from the duration the guest booked, so it is checked
+// before anything calls toISOString on it.
+function safeIso(ms: number) {
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 // Hold the new driver's pay. Returns the earning that now stands for this
 // driver on this ride, or null when there is nothing to hold. Safe to call
 // twice: a standing row is returned as it is, never duplicated or repriced.
@@ -148,6 +168,10 @@ async function holdEarning(sr: any, ride: any, driverId: string, payout: any, en
     const standing = ledger.find((e) => e.driver_id === driverId && e.status !== 'reversed');
     if (standing) return standing;
     if (!payout || !(payout.amount > 0)) return null;
+    // No readable end means no moment to release at. Refuse loudly rather
+    // than write a row that could never be paid out.
+    const releaseAt = releaseAtFor(endAtIso);
+    if (!releaseAt) throw new Error('holdEarning: this ride has no readable end time');
     await sr.DriverEarning.create({
         driver_id: driverId,
         ride_booking_id: ride.id,
@@ -161,7 +185,7 @@ async function holdEarning(sr: any, ride: any, driverId: string, payout: any, en
         units: payout.units,
         status: 'held',
         on_hold: false,
-        release_at: releaseAtFor(endAtIso),
+        release_at: releaseAt,
         held_at: nowIso,
     });
     // Two admins assigning in the same second would both reach this line. The
@@ -286,8 +310,8 @@ Deno.serve(async (req) => {
                     code: 'DRIVER_DOUBLE_BOOKED',
                     conflict: {
                         ride_booking_id: other.id,
-                        start_at: new Date(ow.startMs).toISOString(),
-                        end_at: new Date(ow.endMs).toISOString(),
+                        start_at: safeIso(ow.startMs),
+                        end_at: safeIso(ow.endMs),
                     },
                 }, 409);
             }
@@ -327,8 +351,16 @@ Deno.serve(async (req) => {
             }
         }
 
+        // The ride's end comes from what the guest booked. One that is not a
+        // real date cannot be released against, so stop here with a message
+        // rather than let toISOString throw further down.
+        const endAtIso = safeIso(win.endMs);
+        if (linkedEmail && (!endAtIso || !releaseAtFor(endAtIso))) {
+            return json({ success: false, error: 'This ride has an unreadable time window', code: 'BAD_WINDOW' }, 409);
+        }
+
         const earning = linkedEmail
-            ? await holdEarning(sr, ride, driver_id, payout, new Date(win.endMs).toISOString(), nowIso)
+            ? await holdEarning(sr, ride, driver_id, payout, endAtIso, nowIso)
             : null;
 
         await sr.RideBooking.update(ride_booking_id, {

@@ -144,6 +144,10 @@ export function markupFor(vehicle, costing) {
 // Held pay becomes releasable this long after the booked end of the ride.
 export const RELEASE_BUFFER_HOURS = 2;
 
+// No single ride pays a driver more than this. Mirror of MAX_PAYOUT_NGN in
+// assignRideDriver; the check script compares the two.
+export const MAX_PAYOUT_NGN = 50000000;
+
 const MAX_HOURLY_HOURS = 8;
 
 export function driverPayoutFor(costing, tier, { hours, days } = {}) {
@@ -176,7 +180,12 @@ export function driverPayoutFor(costing, tier, { hours, days } = {}) {
   }
   // Zero means "nobody entered a driver cost", never "this driver is free".
   if (rate <= 0) return null;
-  return { amount: rate * units, basis, rate, units };
+  // A booked duration or a mistyped rate that multiplies past the ceiling is
+  // not a pay figure. Same rule as the server, so the dialog shows "enter the
+  // pay" in exactly the cases the server would refuse.
+  const amount = rate * units;
+  if (!Number.isFinite(amount) || amount > MAX_PAYOUT_NGN) return null;
+  return { amount, basis, rate, units };
 }
 
 // ── Legacy compatibility ────────────────────────────────────────────────────

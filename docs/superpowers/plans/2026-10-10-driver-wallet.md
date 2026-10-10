@@ -520,14 +520,16 @@ git commit -m "feat(rides): driver earnings ledger entity and schema checks" -m 
 **Files:**
 - Create: `scripts/check-driver-wallet.mjs`
 - Modify: `base44/functions/assignRideDriver/entry.ts` (three pure helpers after `windowsOverlap`; not wired into the handler yet)
+- Modify: `base44/functions/checkRideAvailability/entry.ts` (cap on multi-day bookings)
 - Modify: `src/config/rides.js` (client mirror after `markupFor`)
 - Modify: `package.json` (the `check` script)
 
 **Interfaces:**
 - Consumes: `VehicleCosting.driver_cost_per_hour_ngn`, `VehicleCosting.driver_cost_per_day_ngn` (existing).
 - Produces, in `assignRideDriver/entry.ts`: `const RELEASE_BUFFER_MS`, `const MAX_PAYOUT_NGN`, `driverPayoutFor(costing, tier, hours, days) → { amount, basis: 'hourly'|'daily', rate, units } | null`, `releaseAtFor(endAtIso) → ISO string | null`, `parsePayoutOverride(raw) → { ok: boolean, value: number | null }` (`value: null` with `ok: true` means "nothing typed").
-- Produces, in `src/config/rides.js`: `export const RELEASE_BUFFER_HOURS = 2`, `export function driverPayoutFor(costing, tier, { hours, days } = {})` with the same return shape.
-- Produces, in `scripts/check-driver-wallet.mjs`: helpers `liftSrc(fnDir, fnName, signature)` (handles `function` and `async function`), `make(name, ...sources)`, `identical(fnName, signature, dirs)`, `check(name, got, want)`, `same(name, got, want)`, the constant strings `TIME` and `PAY`, and the marker line `// ---- result ----` that later tasks insert their sections above.
+- Produces, in `src/config/rides.js`: `export const RELEASE_BUFFER_HOURS = 2`, `export const MAX_PAYOUT_NGN = 50000000`, `export function driverPayoutFor(costing, tier, { hours, days } = {})` with the same return shape.
+- Produces, in `checkRideAvailability/entry.ts`: `const MAX_MULTI_DAYS = 30`, `multiDaysOk(days) → boolean`, and the refusal `INVALID_DAYS` (400) for a multi-day request outside 1–30 whole days.
+- Produces, in `scripts/check-driver-wallet.mjs`: `constLine(fnDir, name)`, helpers `liftSrc(fnDir, fnName, signature)` (handles `function` and `async function`), `make(name, ...sources)`, `identical(fnName, signature, dirs)`, `check(name, got, want)`, `same(name, got, want)`, the constant strings `TIME` and `PAY`, and the marker line `// ---- result ----` that later tasks insert their sections above.
 
 - [ ] **Step 1: Write the failing check**
 
@@ -597,8 +599,17 @@ const identical = (fnName, signature, dirs) => {
   }
 };
 
+// One shipped `const NAME = …;` line, so the helpers run against the real
+// limits rather than against numbers retyped here.
+function constLine(fnDir, name) {
+  const file = FN(fnDir);
+  const line = fs.readFileSync(file, 'utf8').split('\n').find((l) => l.startsWith(`const ${name} = `));
+  if (!line) throw new Error(`could not find const ${name} in ${path.relative(ROOT, file)}`);
+  return line;
+}
+
 const TIME = 'const WAT_OFFSET = "+01:00"; const HOUR_MS = 3600000; const DAY_MS = 86400000; const MAX_HOURLY = 8;';
-const PAY = `${TIME} const RELEASE_BUFFER_MS = 2 * HOUR_MS; const MAX_PAYOUT_NGN = 50000000;`;
+const PAY = `${TIME} ${constLine('assignRideDriver', 'RELEASE_BUFFER_MS')} ${constLine('assignRideDriver', 'MAX_PAYOUT_NGN')}`;
 
 // ── Pay table: server vs the client mirror ─────────────────────────────────
 // Admin sees the client figure in the Assign driver dialog; assignRideDriver
@@ -638,6 +649,32 @@ check('day ride, no daily driver cost, client', rides.driverPayoutFor({ driver_c
 check('zero rate is "not set", not free labour', driverPayoutFor({ driver_cost_per_hour_ngn: 0 }, 'hourly', 2), null);
 check('negative rate is refused', driverPayoutFor({ driver_cost_per_day_ngn: -1 }, '24hr'), null);
 check('rates stored as strings still work', driverPayoutFor({ driver_cost_per_hour_ngn: '2500' }, 'hourly', 2)?.amount, 5000);
+// The duration is whatever the guest typed when booking. It must not be able
+// to multiply the driver's pay into nonsense.
+check('a duration of Infinity days gives no figure', driverPayoutFor(costing, 'multi_day', undefined, Infinity), null);
+check('…client mirror', rides.driverPayoutFor(costing, 'multi_day', { days: Infinity }), null);
+check('a duration that multiplies past the ceiling gives no figure', driverPayoutFor(costing, 'multi_day', undefined, 1e6), null);
+check('…client mirror', rides.driverPayoutFor(costing, 'multi_day', { days: 1e6 }), null);
+check('a mistyped rate past the ceiling gives no figure', driverPayoutFor({ driver_cost_per_day_ngn: 1e12 }, '24hr'), null);
+check('…client mirror', rides.driverPayoutFor({ driver_cost_per_day_ngn: 1e12 }, '24hr'), null);
+check('the ceiling itself is payable', driverPayoutFor({ driver_cost_per_day_ngn: 50000000 }, '24hr')?.amount, 50000000);
+check('client ceiling is the server ceiling', rides.MAX_PAYOUT_NGN, make('MAX_PAYOUT_NGN', PAY));
+
+// ── The booked duration, where the guest types it ──────────────────────────
+// Everything above multiplies by a day count that arrives in a request body.
+console.log('\n— booked duration —');
+const multiDaysOk = make('multiDaysOk', constLine('checkRideAvailability', 'MAX_MULTI_DAYS'),
+  liftSrc('checkRideAvailability', 'multiDaysOk', 'days'));
+check('1 day is a booking', multiDaysOk(1), true);
+check('30 days is the most the form offers', multiDaysOk(30), true);
+check('31 days is refused', multiDaysOk(31), false);
+check('a billion days is refused', multiDaysOk(1e9), false);
+check('Infinity is refused', multiDaysOk(Infinity), false);
+check('half days are refused', multiDaysOk(2.5), false);
+check('zero is refused', multiDaysOk(0), false);
+check('negative is refused', multiDaysOk(-3), false);
+check('missing is refused', multiDaysOk(undefined), false);
+check('a numeric string from a form still counts', multiDaysOk('7'), true);
 
 // ── Release moment ─────────────────────────────────────────────────────────
 console.log('\n— release moment —');
@@ -647,6 +684,8 @@ check('two hours after the booked end', releaseAtFor('2026-08-10T10:00:00.000Z')
 check('crosses midnight cleanly', releaseAtFor('2026-08-10T23:30:00+01:00'), '2026-08-11T00:30:00.000Z');
 check('unreadable end gives no release time', releaseAtFor('not a date'), null);
 check('missing end gives no release time', releaseAtFor(''), null);
+// The last representable instant parses; two hours after it does not exist.
+check('an end at the edge of the calendar gives none, without throwing', releaseAtFor('+275760-09-13T00:00:00.000Z'), null);
 check('client constant agrees with the server buffer',
   (Date.parse(releaseAtFor('2026-08-10T10:00:00.000Z')) - Date.parse('2026-08-10T10:00:00.000Z')) / 3600000,
   rides.RELEASE_BUFFER_HOURS);
@@ -671,6 +710,9 @@ same('"25,000" is refused, not read as 25', parsePayoutOverride('25,000'), REFUS
 same('negative is refused', parsePayoutOverride(-5), REFUSED);
 same('words are refused', parsePayoutOverride('abc'), REFUSED);
 same('9e12 is refused', parsePayoutOverride(9e12), REFUSED);
+same('"1e3" is refused, digits only', parsePayoutOverride('1e3'), REFUSED);
+same('"0x10" is refused', parsePayoutOverride('0x10'), REFUSED);
+same('"+5" is refused', parsePayoutOverride('+5'), REFUSED);
 same('NaN is refused', parsePayoutOverride(NaN), REFUSED);
 same('Infinity is refused', parsePayoutOverride(Infinity), REFUSED);
 same('true is refused', parsePayoutOverride(true), REFUSED);
@@ -686,7 +728,7 @@ process.exit(fail === 0 ? 0 : 1);
 
 Run: `node scripts/check-driver-wallet.mjs`
 
-Expected: it stops with `Error: could not find driverPayoutFor in base44/functions/assignRideDriver/entry.ts` and a non-zero exit code. That is the right failure: the helper does not exist yet.
+Expected: it stops with `Error: could not find const RELEASE_BUFFER_MS in base44/functions/assignRideDriver/entry.ts` and a non-zero exit code. That is the right failure: nothing of the pay model exists yet.
 
 - [ ] **Step 3: Add the three helpers to the function**
 
@@ -749,13 +791,23 @@ function driverPayoutFor(costing: any, tier: string, hours?: number, days?: numb
     }
     // Zero means "nobody entered a driver cost", never "this driver is free".
     if (rate <= 0) return null;
-    return { amount: rate * units, basis, rate, units };
+    // The booked duration is whatever the guest typed at request time and the
+    // rate is whatever admin typed. A product that is not a finite amount
+    // under the ceiling is not a pay figure: return nothing, so the dialog
+    // asks admin to type one.
+    const amount = rate * units;
+    if (!Number.isFinite(amount) || amount > MAX_PAYOUT_NGN) return null;
+    return { amount, basis, rate, units };
 }
 
 function releaseAtFor(endAtIso: string) {
     const endMs = Date.parse(endAtIso || '');
     if (Number.isNaN(endMs)) return null;
-    return new Date(endMs + RELEASE_BUFFER_MS).toISOString();
+    // An end at the very edge of the representable range parses, but two
+    // hours later does not exist and toISOString would throw on it.
+    const release = new Date(endMs + RELEASE_BUFFER_MS);
+    if (Number.isNaN(release.getTime())) return null;
+    return release.toISOString();
 }
 
 // The pay figure admin typed, if any. { ok: true, value: null } means nothing
@@ -765,6 +817,8 @@ function releaseAtFor(endAtIso: string) {
 function parsePayoutOverride(raw: unknown) {
     if (raw === undefined || raw === null) return { ok: true, value: null };
     if (typeof raw === 'string' && raw.trim() === '') return { ok: true, value: null };
+    // Plain digits only. Number() would also swallow "1e3", "0x10" and "+5".
+    if (typeof raw === 'string' && !/^\d{1,9}(\.\d+)?$/.test(raw.trim())) return { ok: false, value: null };
     const n = typeof raw === 'string' ? Number(raw.trim()) : raw;
     if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > MAX_PAYOUT_NGN) {
         return { ok: false, value: null };
@@ -801,6 +855,10 @@ replace with:
 // Held pay becomes releasable this long after the booked end of the ride.
 export const RELEASE_BUFFER_HOURS = 2;
 
+// No single ride pays a driver more than this. Mirror of MAX_PAYOUT_NGN in
+// assignRideDriver; the check script compares the two.
+export const MAX_PAYOUT_NGN = 50000000;
+
 const MAX_HOURLY_HOURS = 8;
 
 export function driverPayoutFor(costing, tier, { hours, days } = {}) {
@@ -833,11 +891,61 @@ export function driverPayoutFor(costing, tier, { hours, days } = {}) {
   }
   // Zero means "nobody entered a driver cost", never "this driver is free".
   if (rate <= 0) return null;
-  return { amount: rate * units, basis, rate, units };
+  // A booked duration or a mistyped rate that multiplies past the ceiling is
+  // not a pay figure. Same rule as the server, so the dialog shows "enter the
+  // pay" in exactly the cases the server would refuse.
+  const amount = rate * units;
+  if (!Number.isFinite(amount) || amount > MAX_PAYOUT_NGN) return null;
+  return { amount, basis, rate, units };
 }
 ```
 
-- [ ] **Step 5: Put the script in the check chain**
+- [ ] **Step 5: Bound the booked duration where the guest types it**
+
+The driver's pay, the guest's price and the length of time the vehicle is blocked all multiply by `duration_days`, which arrives in a request body. The booking form stops at 30 (`max={30}` on the days input in `src/pages/RideCheckout.jsx`); the server accepted any number of 1 or more, so a hand-made request for a billion days produced an unpayable ride that blocked the vehicle until admin rejected it.
+
+**Edit `base44/functions/checkRideAvailability/entry.ts`** — find:
+
+```ts
+const MAX_HOURLY = 8;
+```
+
+replace with:
+
+```ts
+const MAX_HOURLY = 8;
+// The booking form stops at 30 days (longer hires go by the week or month).
+// The server has to say so too: the day count multiplies straight into the
+// price, the driver's pay and the length of time the vehicle is blocked.
+const MAX_MULTI_DAYS = 30;
+
+function multiDaysOk(days: unknown) {
+    const d = Number(days);
+    return Number.isInteger(d) && d >= 1 && d <= MAX_MULTI_DAYS;
+}
+```
+
+**Edit `base44/functions/checkRideAvailability/entry.ts`** — find:
+
+```ts
+        if (duration_tier === 'multi_day' && (!Number(duration_days) || Number(duration_days) < 1)) {
+            return json({ success: false, error: 'multi_day bookings need duration_days of at least 1' }, 400);
+        }
+```
+
+replace with:
+
+```ts
+        if (duration_tier === 'multi_day' && !multiDaysOk(duration_days)) {
+            return json({
+                success: false,
+                error: `Multi-day bookings are for 1 to ${MAX_MULTI_DAYS} whole days. For longer, book by the week or the month.`,
+                code: 'INVALID_DAYS',
+            }, 400);
+        }
+```
+
+- [ ] **Step 6: Put the script in the check chain**
 
 **Edit `package.json`** — find:
 
@@ -851,20 +959,20 @@ replace with:
  && node scripts/check-entities.mjs && node scripts/check-driver-wallet.mjs",
 ```
 
-- [ ] **Step 6: Run it and watch it pass**
+- [ ] **Step 7: Run it and watch it pass**
 
 Run: `npm run check`
 
 Expected: four `PASS` lines, the last one from `check-driver-wallet` with `0 failed`.
 
-Run: `node_modules/.bin/esbuild base44/functions/assignRideDriver/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+Run: `for f in assignRideDriver checkRideAvailability; do node_modules/.bin/esbuild base44/functions/$f/entry.ts --format=esm --target=esnext --outfile=/dev/null || echo "PARSE FAIL $f"; done`
 
-Expected: exit code 0, no output on stderr beyond esbuild's one-line summary.
+Expected: no `PARSE FAIL` line.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add scripts/check-driver-wallet.mjs base44/functions/assignRideDriver/entry.ts src/config/rides.js package.json
+git add scripts/check-driver-wallet.mjs base44/functions/assignRideDriver/entry.ts base44/functions/checkRideAvailability/entry.ts src/config/rides.js package.json
 git commit -m "feat(rides): driver pay model with a server and client copy held in lockstep" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
@@ -876,8 +984,8 @@ git commit -m "feat(rides): driver pay model with a server and client copy held 
 
 **Interfaces:**
 - Consumes: `driverPayoutFor`, `releaseAtFor`, `parsePayoutOverride`, `RELEASE_BUFFER_MS` (Task A02); entity `DriverEarning`, `Driver.user_email` (Task A01); the file's existing `fetchAll(entity, query)`, `windowOf(ride)`, `tryPush(sdk, opts)`.
-- Produces, in `assignRideDriver/entry.ts`: `async holdEarning(sr, ride, driverId, payout, endAtIso, nowIso) → DriverEarning row | null` and `async reverseHeldEarnings(sr, rideId, keepDriverId, note, nowIso) → { reversed_ngn, released_ngn, driver_ids }` (pass `''` as `keepDriverId` to reverse every held row on the ride).
-- Request body gains optional `driver_payout_ngn`. New refusals: `INVALID_PAYOUT` (400), `PAYOUT_REQUIRED` (409). Success `data` gains `pay_tracked: boolean`, `driver_payout_ngn: number | null`, `payout_basis: 'hourly'|'daily'|'manual'|null`, `earning_id: string | null`, `previous_earning_released: boolean`.
+- Produces, in `assignRideDriver/entry.ts`: `safeIso(ms) → ISO string | null`, `async holdEarning(sr, ride, driverId, payout, endAtIso, nowIso) → DriverEarning row | null` (throws when `endAtIso` is unreadable) and `async reverseHeldEarnings(sr, rideId, keepDriverId, note, nowIso) → { reversed_ngn, released_ngn, driver_ids }` (pass `''` as `keepDriverId` to reverse every held row on the ride).
+- Request body gains optional `driver_payout_ngn`. New refusals: `INVALID_PAYOUT` (400), `PAYOUT_REQUIRED` (409), `BAD_WINDOW` (409). Success `data` gains `pay_tracked: boolean`, `driver_payout_ngn: number | null`, `payout_basis: 'hourly'|'daily'|'manual'|null`, `earning_id: string | null`, `previous_earning_released: boolean`.
 - Produces, in `scripts/check-driver-wallet.mjs`: `fakeEntity(seed)` and the constant string `FETCH_ALL`, reused by later tasks.
 
 - [ ] **Step 1: Write the failing check**
@@ -1006,6 +1114,18 @@ const heldRow = (id, driver, extra = {}) => ({
   check('…and reverses the twin', base.rows.filter((r) => r.status === 'held').length, 1);
   check('…saying why', base.rows.find((r) => r.id !== 'old').admin_notes, 'Duplicate of old');
 }
+{
+  // A ride whose end is not a real date has no moment to release at.
+  const sr = { DriverEarning: fakeEntity() };
+  let threw = false;
+  try { await holdEarning(sr, rideA, 'drvA', dayPay, 'not a date', NOW); } catch { threw = true; }
+  check('an unreadable ride end is refused loudly', threw, true);
+  check('…and writes nothing', sr.DriverEarning.rows.length, 0);
+}
+const safeIso = make('safeIso', liftSrc('assignRideDriver', 'safeIso', 'ms'));
+check('safeIso: a real instant round-trips', safeIso(Date.parse(END)), END);
+check('safeIso: Infinity is not a date', safeIso(Infinity), null);
+check('safeIso: NaN is not a date', safeIso(NaN), null);
 
 // ---- result ----
 ```
@@ -1063,6 +1183,14 @@ replace with:
 // Bodies are plain JavaScript on purpose: scripts/check-driver-wallet.mjs
 // lifts these two off disk and runs them against an in-memory ledger.
 
+// ISO string for an instant, or null when it is not a representable date. A
+// ride's end is derived from the duration the guest booked, so it is checked
+// before anything calls toISOString on it.
+function safeIso(ms: number) {
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 // Hold the new driver's pay. Returns the earning that now stands for this
 // driver on this ride, or null when there is nothing to hold. Safe to call
 // twice: a standing row is returned as it is, never duplicated or repriced.
@@ -1071,6 +1199,10 @@ async function holdEarning(sr: any, ride: any, driverId: string, payout: any, en
     const standing = ledger.find((e) => e.driver_id === driverId && e.status !== 'reversed');
     if (standing) return standing;
     if (!payout || !(payout.amount > 0)) return null;
+    // No readable end means no moment to release at. Refuse loudly rather
+    // than write a row that could never be paid out.
+    const releaseAt = releaseAtFor(endAtIso);
+    if (!releaseAt) throw new Error('holdEarning: this ride has no readable end time');
     await sr.DriverEarning.create({
         driver_id: driverId,
         ride_booking_id: ride.id,
@@ -1084,7 +1216,7 @@ async function holdEarning(sr: any, ride: any, driverId: string, payout: any, en
         units: payout.units,
         status: 'held',
         on_hold: false,
-        release_at: releaseAtFor(endAtIso),
+        release_at: releaseAt,
         held_at: nowIso,
     });
     // Two admins assigning in the same second would both reach this line. The
@@ -1191,13 +1323,37 @@ replace with:
             }
         }
 
+        // The ride's end comes from what the guest booked. One that is not a
+        // real date cannot be released against, so stop here with a message
+        // rather than let toISOString throw further down.
+        const endAtIso = safeIso(win.endMs);
+        if (linkedEmail && (!endAtIso || !releaseAtFor(endAtIso))) {
+            return json({ success: false, error: 'This ride has an unreadable time window', code: 'BAD_WINDOW' }, 409);
+        }
+
         const earning = linkedEmail
-            ? await holdEarning(sr, ride, driver_id, payout, new Date(win.endMs).toISOString(), nowIso)
+            ? await holdEarning(sr, ride, driver_id, payout, endAtIso, nowIso)
             : null;
 
         await sr.RideBooking.update(ride_booking_id, {
             driver_id,
             driver_assigned_at: nowIso,
+```
+
+The double-booking refusal a few lines above builds its `conflict` object with `toISOString()` on another ride's window. A corrupt row there would turn a clear 409 into a 500, so it uses `safeIso` too.
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+                        start_at: new Date(ow.startMs).toISOString(),
+                        end_at: new Date(ow.endMs).toISOString(),
+```
+
+replace with:
+
+```ts
+                        start_at: safeIso(ow.startMs),
+                        end_at: safeIso(ow.endMs),
 ```
 
 - [ ] **Step 7: Reverse what the previous driver was holding**
