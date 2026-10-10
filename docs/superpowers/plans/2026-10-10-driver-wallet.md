@@ -2200,3 +2200,463 @@ git add scripts/check-driver-wallet.mjs base44/functions/autoCancelExpiredBookin
 git commit -m "feat(rides): the sweep completes rides and releases held driver pay" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A06: Drivers can sign in — the link, the lookup and the hook
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (driver sign-in section, above `// ---- result ----`)
+- Create: `base44/functions/getDriverProfile/entry.ts`
+- Modify: `src/config/rides.js` (three small email helpers, appended)
+- Create: `src/lib/useDriverProfile.js`
+- Create: `src/components/driver/DriverNotice.jsx`
+- Modify: `src/components/admin/DriversAdmin.jsx` (login email field, validation, history, roster badge)
+
+**Interfaces:**
+- Consumes: `Driver.user_email`, `Driver.previous_user_emails` (Task A01); `useAuth()` from `@/lib/AuthContext` (`{ user, isAuthenticated, isLoadingAuth }`); the `QueryClientProvider` already wrapping the app in `src/App.jsx`.
+- Produces, server: function `getDriverProfile` — body `{}`, answers `{ success: true, data: null }` or `{ success: true, data: { id, full_name, photo, city, active, admin_approved } }`. Helper `async findDriverForUser(sr, email) → Driver row | null`, which Tasks A07, A08 and A09 copy character for character.
+- Produces, client: `normaliseEmail(raw) → string`, `looksLikeEmail(raw) → boolean`, `driverLoginPatch(driver, typedEmail) → { user_email, previous_user_emails }` in `src/config/rides.js`; `useDriverProfile() → { driver, isDriver, isLoading, refetch }` in `src/lib/useDriverProfile.js` (`isDriver` is true for any linked driver, active or not: deactivating stops new assignments, never access to earned money); default export `DriverNotice` in `src/components/driver/DriverNotice.jsx`.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Driver sign-in ─────────────────────────────────────────────────────────
+// Review focus 1: an email typed with capitals or a stray space must still
+// find its driver, and changing a driver's login must keep the old address.
+console.log('\n— driver sign-in —');
+const FIND_DRIVER_SIG = 'sr, email';
+const findDriverForUser = make('findDriverForUser', liftSrc('getDriverProfile', 'findDriverForUser', FIND_DRIVER_SIG));
+const roster = (rows) => ({ Driver: fakeEntity(rows) });
+{
+  const sr = roster([{ id: 'd1', created_date: '2026-01-02T00:00:00.000Z', user_email: 'emeka@gmail.com' }]);
+  check('a login with capitals and a trailing space finds its driver', (await findDriverForUser(sr, 'Emeka@Gmail.com '))?.id, 'd1');
+  check('an exact login finds its driver', (await findDriverForUser(sr, 'emeka@gmail.com'))?.id, 'd1');
+  check('someone else finds nothing', await findDriverForUser(sr, 'ada@gmail.com'), null);
+  check('no email finds nothing', await findDriverForUser(sr, ''), null);
+  check('an undefined email finds nothing', await findDriverForUser(sr, undefined), null);
+}
+{
+  // A row typed straight into the data browser, capitals and all.
+  const sr = roster([{ id: 'd2', created_date: '2026-01-02T00:00:00.000Z', user_email: 'Emeka@Gmail.com' }]);
+  check('a row stored with capitals is still found by the same login', (await findDriverForUser(sr, 'Emeka@Gmail.com'))?.id, 'd2');
+}
+{
+  // Two rows on one login is an admin mistake. The answer must not flip between calls.
+  const sr = roster([
+    { id: 'newer', created_date: '2026-03-01T00:00:00.000Z', user_email: 'emeka@gmail.com' },
+    { id: 'older', created_date: '2026-01-01T00:00:00.000Z', user_email: 'emeka@gmail.com' },
+  ]);
+  check('two rows on one login: the oldest wins', (await findDriverForUser(sr, 'emeka@gmail.com'))?.id, 'older');
+}
+
+check('normaliseEmail trims and lower-cases', rides.normaliseEmail('  Emeka@Gmail.COM '), 'emeka@gmail.com');
+check('normaliseEmail of nothing is empty', rides.normaliseEmail(undefined), '');
+check('looksLikeEmail accepts an address', rides.looksLikeEmail('emeka@gmail.com'), true);
+check('looksLikeEmail refuses a name', rides.looksLikeEmail('emeka'), false);
+check('looksLikeEmail refuses a space inside', rides.looksLikeEmail('emeka okafor@gmail.com'), false);
+same('first link: stored lower-cased, no history',
+  rides.driverLoginPatch({}, ' Emeka@Gmail.com '), { user_email: 'emeka@gmail.com', previous_user_emails: [] });
+same('same address retyped with capitals: nothing moves to history',
+  rides.driverLoginPatch({ user_email: 'emeka@gmail.com' }, 'EMEKA@gmail.com'),
+  { user_email: 'emeka@gmail.com', previous_user_emails: [] });
+same('changed address: the old one is remembered',
+  rides.driverLoginPatch({ user_email: 'emeka@gmail.com' }, 'emeka@work.ng'),
+  { user_email: 'emeka@work.ng', previous_user_emails: ['emeka@gmail.com'] });
+same('changed twice: both are remembered, once each',
+  rides.driverLoginPatch({ user_email: 'emeka@work.ng', previous_user_emails: ['emeka@gmail.com'] }, 'e@new.ng'),
+  { user_email: 'e@new.ng', previous_user_emails: ['emeka@gmail.com', 'emeka@work.ng'] });
+same('unlinked: the address moves to history so past withdrawals still count',
+  rides.driverLoginPatch({ user_email: 'emeka@gmail.com' }, ''),
+  { user_email: '', previous_user_emails: ['emeka@gmail.com'] });
+same('a new driver saved with no login',
+  rides.driverLoginPatch(undefined, ''), { user_email: '', previous_user_emails: [] });
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error: ENOENT: no such file or directory, open '…/base44/functions/getDriverProfile/entry.ts'`. The function does not exist yet.
+
+- [ ] **Step 3: Create the lookup function**
+
+**Create `base44/functions/getDriverProfile/entry.ts`:**
+
+```ts
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+// getDriverProfile
+// ----------------------------------------------------------------------------
+// Answers one question for the signed-in user: "am I a driver here?"
+//
+// There is no driver role. A driver is an ordinary account whose email admin
+// has written on a Driver row (Driver.user_email). The Driver entity is
+// admin-only at the API, so the browser cannot look itself up; this function
+// does it under the service role and returns a handful of harmless fields, or
+// null. The navigation calls it once per session to decide whether to show
+// "My rides" and "Wallet".
+//
+// A deactivated or unapproved driver still gets their profile back: those
+// switches stop new assignments (assignRideDriver enforces them), they must
+// never lock someone out of pay they have already earned.
+
+// The Driver row this login belongs to, or null. The Drivers admin form stores
+// emails trimmed and lower-cased; the second lookup covers a row typed
+// straight into the data browser with capitals. Two rows on one login is an
+// admin mistake: the oldest wins, so the answer never flips between calls.
+// Lockstep copies in getDriverRides, getDriverWallet and
+// createWithdrawalRequest; scripts/check-driver-wallet.mjs compares them.
+async function findDriverForUser(sr: any, email: string) {
+    const raw = String(email || '').trim();
+    const lower = raw.toLowerCase();
+    if (!lower) return null;
+    let rows = await sr.Driver.filter({ user_email: lower });
+    if ((!rows || rows.length === 0) && raw !== lower) rows = await sr.Driver.filter({ user_email: raw });
+    if (!rows || rows.length === 0) return null;
+    rows.sort((a, b) => String(a.created_date || '').localeCompare(String(b.created_date || '')));
+    return rows[0];
+}
+
+Deno.serve(async (req) => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+    const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers });
+
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+    if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
+
+    try {
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
+        if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+
+        const driver = await findDriverForUser(base44.asServiceRole.entities, user.email);
+        if (!driver) return json({ success: true, data: null });
+
+        // Explicit allow-list: licence details, phone and the login history
+        // stay on the server.
+        return json({
+            success: true,
+            data: {
+                id: driver.id,
+                full_name: driver.full_name || '',
+                photo: driver.photo || null,
+                city: driver.city || null,
+                active: driver.active !== false,
+                admin_approved: driver.admin_approved !== false,
+            },
+        });
+    } catch (error) {
+        console.error('getDriverProfile error:', error);
+        return json({ success: false, error: 'Internal server error', details: (error as Error).message }, 500);
+    }
+});
+```
+
+- [ ] **Step 4: Add the email helpers the admin form will use**
+
+**Edit `src/config/rides.js`** — find:
+
+```js
+export const needsCategoryMigration = (vehicle) =>
+  !vehicle?.category && !!vehicle?.vehicle_type;
+```
+
+replace with:
+
+```js
+export const needsCategoryMigration = (vehicle) =>
+  !vehicle?.category && !!vehicle?.vehicle_type;
+
+// ── Driver logins ───────────────────────────────────────────────────────────
+// The server matches a driver to a login by exact string, so the address is
+// stored one way only: trimmed and lower-cased.
+export const normaliseEmail = (raw) => String(raw || '').trim().toLowerCase();
+
+export const looksLikeEmail = (raw) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(raw || '').trim());
+
+// What to write on a Driver row when admin sets or changes its login email.
+// The address being replaced moves into previous_user_emails, because a
+// withdrawal only counts against a driver's balance when it was made by a
+// login that is, or was, linked to that driver. Forget the old address and
+// the money already paid out under it would look withdrawable again.
+export function driverLoginPatch(driver, typedEmail) {
+  const next = normaliseEmail(typedEmail);
+  const current = normaliseEmail(driver?.user_email);
+  const previous = Array.isArray(driver?.previous_user_emails)
+    ? driver.previous_user_emails.map(normaliseEmail).filter(Boolean)
+    : [];
+  const history = current && current !== next && !previous.includes(current)
+    ? [...previous, current]
+    : previous;
+  return { user_email: next, previous_user_emails: history };
+}
+```
+
+- [ ] **Step 5: Run the check and watch it pass**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, including every line under `— driver sign-in —`.
+
+- [ ] **Step 6: Create the hook**
+
+`src/lib` is where `AuthContext` lives. The query is disabled until auth has resolved, so a signed-out visitor on a public page never calls the function, and any failure reads as "not a driver" rather than an error.
+
+**Create `src/lib/useDriverProfile.js`:**
+
+```js
+import { useQuery } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
+
+// useDriverProfile — "is the signed-in user a driver, and which one?"
+//
+// There is no driver role. getDriverProfile looks the caller up on the Driver
+// roster under the service role (the entity is admin-only at the API) and
+// returns a few public fields, or null.
+//
+// isDriver is true for ANY linked driver, active or not. Deactivating a driver
+// stops new assignments; it must not hide money they have already earned.
+export function useDriverProfile() {
+  const { user, isAuthenticated, isLoadingAuth } = useAuth();
+  const enabled = !isLoadingAuth && !!isAuthenticated;
+
+  const query = useQuery({
+    queryKey: ['driverProfile', user?.email || null],
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+    queryFn: async () => {
+      try {
+        const res = await base44.functions.invoke('getDriverProfile', {});
+        return res?.data?.success ? (res.data.data || null) : null;
+      } catch (err) {
+        // A failed lookup is "not a driver" for navigation purposes. The
+        // driver pages make their own calls and show their own errors.
+        console.warn('getDriverProfile failed:', err);
+        return null;
+      }
+    },
+  });
+
+  const driver = query.data || null;
+  return {
+    driver,
+    isDriver: !!driver,
+    isLoading: isLoadingAuth || (enabled && query.isLoading),
+    refetch: query.refetch,
+  };
+}
+```
+
+- [ ] **Step 7: Create the notice shown to non-drivers**
+
+**Create `src/components/driver/DriverNotice.jsx`:**
+
+```jsx
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { Car } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { createPageUrl } from '@/utils';
+
+// Shown on the driver pages to a signed-in user who has no driver profile.
+// The pages are reachable by URL, so this is what a curious guest sees.
+export default function DriverNotice() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center p-4">
+      <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
+        <CardContent className="p-8 text-center">
+          <Car className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+          <h1 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+            This page is for UrbanStays drivers
+          </h1>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
+            If you drive for us, ask the team to link this email to your driver profile.
+            Your rides and pay appear here as soon as they do.
+          </p>
+          <Link to={createPageUrl('Dashboard')}>
+            <Button className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">
+              Back to my dashboard
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 8: Give the Drivers admin form a login email**
+
+**Edit `src/components/admin/DriversAdmin.jsx`** — find:
+
+```jsx
+  AlertCircle, Phone, RefreshCw,
+} from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { CITIES } from '@/config/rides';
+```
+
+replace with:
+
+```jsx
+  AlertCircle, Phone, RefreshCw, Mail,
+} from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { CITIES, normaliseEmail, looksLikeEmail, driverLoginPatch } from '@/config/rides';
+```
+
+**Edit `src/components/admin/DriversAdmin.jsx`** — find:
+
+```jsx
+const EMPTY = {
+  full_name: '',
+  phone: '',
+```
+
+replace with:
+
+```jsx
+const EMPTY = {
+  full_name: '',
+  phone: '',
+  // The login the driver signs in with. Empty means their pay is not tracked.
+  user_email: '',
+```
+
+**Edit `src/components/admin/DriversAdmin.jsx`** — find:
+
+```jsx
+      full_name: d.full_name || '',
+      phone: d.phone || '',
+```
+
+replace with:
+
+```jsx
+      full_name: d.full_name || '',
+      phone: d.phone || '',
+      user_email: d.user_email || '',
+```
+
+**Edit `src/components/admin/DriversAdmin.jsx`** — find:
+
+```jsx
+    setSaving(true);
+    try {
+      const payload = {
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim(),
+```
+
+replace with:
+
+```jsx
+    const loginEmail = normaliseEmail(form.user_email);
+    if (loginEmail && !looksLikeEmail(loginEmail)) {
+      setError('That login email does not look like an email address.');
+      return;
+    }
+    // One login is one driver. getDriverProfile would otherwise have to pick.
+    if (loginEmail && drivers.some((d) => d.id !== editingId && normaliseEmail(d.user_email) === loginEmail)) {
+      setError('Another driver is already linked to that login email.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim(),
+        // user_email plus previous_user_emails: changing a login keeps the old
+        // address on the row so withdrawals made under it still count.
+        ...driverLoginPatch(drivers.find((d) => d.id === editingId), form.user_email),
+```
+
+**Edit `src/components/admin/DriversAdmin.jsx`** — find:
+
+```jsx
+                    placeholder="English, Igbo, Pidgin" className="mt-1 rounded-xl" />
+                </div>
+```
+
+replace with:
+
+```jsx
+                    placeholder="English, Igbo, Pidgin" className="mt-1 rounded-xl" />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="d-email" className="flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" /> Login email
+                  </Label>
+                  <Input id="d-email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off"
+                    spellCheck={false} value={form.user_email}
+                    onChange={(e) => set('user_email', e.target.value)}
+                    placeholder="emeka@example.com" className="mt-1 rounded-xl" />
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    The driver signs in with this email to see rides and pay. Leave it empty and
+                    they are assigned as before, with their pay kept outside the app.
+                  </p>
+                </div>
+```
+
+**Edit `src/components/admin/DriversAdmin.jsx`** — find:
+
+```jsx
+                    <Badge className="bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-0">Licence expiring</Badge>
+                  )}
+```
+
+replace with:
+
+```jsx
+                    <Badge className="bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200 border-0">Licence expiring</Badge>
+                  )}
+                  {d.user_email ? (
+                    <Badge variant="outline" className="text-xs">Has login</Badge>
+                  ) : (
+                    <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-0 text-xs">No login · pay not tracked</Badge>
+                  )}
+```
+
+- [ ] **Step 9: Lint, parse and build**
+
+Run: `npm run lint`
+
+Expected: no output, exit code 0.
+
+Run: `node_modules/.bin/esbuild base44/functions/getDriverProfile/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`.
+
+- [ ] **Step 10: Sandbox checklist (after the next publish)**
+
+1. Admin → Rides → Drivers → edit a driver → type `Test.Driver@Example.com ` in Login email → Save. Expected: saved; the Driver row holds `test.driver@example.com`; the roster shows "Has login".
+2. Edit a second driver and type the same address. Expected: "Another driver is already linked to that login email."
+3. Signed in as that address, run `await base44.functions.invoke('getDriverProfile', {})` in the browser console. Expected: `data.data.id` is the driver's id. Signed in as anyone else: `data.data` is `null`.
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs base44/functions/getDriverProfile/entry.ts src/config/rides.js src/lib/useDriverProfile.js src/components/driver/DriverNotice.jsx src/components/admin/DriversAdmin.jsx
+git commit -m "feat(rides): link a driver to a login and look the driver up for the signed-in user" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+

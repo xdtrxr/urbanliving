@@ -440,6 +440,57 @@ check('approved and unpaid is still payable', rideAlreadyPaid({ payment_status: 
 check('refunded is not "paid"', rideAlreadyPaid({ payment_status: 'refunded', status: 'cancelled' }), false);
 check('a missing ride is not "paid"', rideAlreadyPaid(null), false);
 
+// ── Driver sign-in ─────────────────────────────────────────────────────────
+// Review focus 1: an email typed with capitals or a stray space must still
+// find its driver, and changing a driver's login must keep the old address.
+console.log('\n— driver sign-in —');
+const FIND_DRIVER_SIG = 'sr, email';
+const findDriverForUser = make('findDriverForUser', liftSrc('getDriverProfile', 'findDriverForUser', FIND_DRIVER_SIG));
+const roster = (rows) => ({ Driver: fakeEntity(rows) });
+{
+  const sr = roster([{ id: 'd1', created_date: '2026-01-02T00:00:00.000Z', user_email: 'emeka@gmail.com' }]);
+  check('a login with capitals and a trailing space finds its driver', (await findDriverForUser(sr, 'Emeka@Gmail.com '))?.id, 'd1');
+  check('an exact login finds its driver', (await findDriverForUser(sr, 'emeka@gmail.com'))?.id, 'd1');
+  check('someone else finds nothing', await findDriverForUser(sr, 'ada@gmail.com'), null);
+  check('no email finds nothing', await findDriverForUser(sr, ''), null);
+  check('an undefined email finds nothing', await findDriverForUser(sr, undefined), null);
+}
+{
+  // A row typed straight into the data browser, capitals and all.
+  const sr = roster([{ id: 'd2', created_date: '2026-01-02T00:00:00.000Z', user_email: 'Emeka@Gmail.com' }]);
+  check('a row stored with capitals is still found by the same login', (await findDriverForUser(sr, 'Emeka@Gmail.com'))?.id, 'd2');
+}
+{
+  // Two rows on one login is an admin mistake. The answer must not flip between calls.
+  const sr = roster([
+    { id: 'newer', created_date: '2026-03-01T00:00:00.000Z', user_email: 'emeka@gmail.com' },
+    { id: 'older', created_date: '2026-01-01T00:00:00.000Z', user_email: 'emeka@gmail.com' },
+  ]);
+  check('two rows on one login: the oldest wins', (await findDriverForUser(sr, 'emeka@gmail.com'))?.id, 'older');
+}
+
+check('normaliseEmail trims and lower-cases', rides.normaliseEmail('  Emeka@Gmail.COM '), 'emeka@gmail.com');
+check('normaliseEmail of nothing is empty', rides.normaliseEmail(undefined), '');
+check('looksLikeEmail accepts an address', rides.looksLikeEmail('emeka@gmail.com'), true);
+check('looksLikeEmail refuses a name', rides.looksLikeEmail('emeka'), false);
+check('looksLikeEmail refuses a space inside', rides.looksLikeEmail('emeka okafor@gmail.com'), false);
+same('first link: stored lower-cased, no history',
+  rides.driverLoginPatch({}, ' Emeka@Gmail.com '), { user_email: 'emeka@gmail.com', previous_user_emails: [] });
+same('same address retyped with capitals: nothing moves to history',
+  rides.driverLoginPatch({ user_email: 'emeka@gmail.com' }, 'EMEKA@gmail.com'),
+  { user_email: 'emeka@gmail.com', previous_user_emails: [] });
+same('changed address: the old one is remembered',
+  rides.driverLoginPatch({ user_email: 'emeka@gmail.com' }, 'emeka@work.ng'),
+  { user_email: 'emeka@work.ng', previous_user_emails: ['emeka@gmail.com'] });
+same('changed twice: both are remembered, once each',
+  rides.driverLoginPatch({ user_email: 'emeka@work.ng', previous_user_emails: ['emeka@gmail.com'] }, 'e@new.ng'),
+  { user_email: 'e@new.ng', previous_user_emails: ['emeka@gmail.com', 'emeka@work.ng'] });
+same('unlinked: the address moves to history so past withdrawals still count',
+  rides.driverLoginPatch({ user_email: 'emeka@gmail.com' }, ''),
+  { user_email: '', previous_user_emails: ['emeka@gmail.com'] });
+same('a new driver saved with no login',
+  rides.driverLoginPatch(undefined, ''), { user_email: '', previous_user_emails: [] });
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -219,3 +219,27 @@ export const effectiveCategory = (vehicle) =>
 // use this to show what still needs migrating.
 export const needsCategoryMigration = (vehicle) =>
   !vehicle?.category && !!vehicle?.vehicle_type;
+
+// ── Driver logins ───────────────────────────────────────────────────────────
+// The server matches a driver to a login by exact string, so the address is
+// stored one way only: trimmed and lower-cased.
+export const normaliseEmail = (raw) => String(raw || '').trim().toLowerCase();
+
+export const looksLikeEmail = (raw) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(raw || '').trim());
+
+// What to write on a Driver row when admin sets or changes its login email.
+// The address being replaced moves into previous_user_emails, because a
+// withdrawal only counts against a driver's balance when it was made by a
+// login that is, or was, linked to that driver. Forget the old address and
+// the money already paid out under it would look withdrawable again.
+export function driverLoginPatch(driver, typedEmail) {
+  const next = normaliseEmail(typedEmail);
+  const current = normaliseEmail(driver?.user_email);
+  const previous = Array.isArray(driver?.previous_user_emails)
+    ? driver.previous_user_emails.map(normaliseEmail).filter(Boolean)
+    : [];
+  const history = current && current !== next && !previous.includes(current)
+    ? [...previous, current]
+    : previous;
+  return { user_email: next, previous_user_emails: history };
+}
