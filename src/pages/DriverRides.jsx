@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, RefreshCw, Car, ChevronDown, AlertCircle } from 'lucide-react';
+import { Loader2, RefreshCw, Car, ChevronDown, AlertCircle, Banknote } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { createPageUrl } from '@/utils';
 import { useDriverProfile } from '@/lib/useDriverProfile';
 import DriverNotice from '@/components/driver/DriverNotice';
 import DriverRideCard from '@/components/driver/DriverRideCard';
@@ -89,6 +90,11 @@ export default function DriverRidesPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <Link to={createPageUrl('DriverWallet')}>
+              <Button variant="outline" size="sm" className="rounded-xl">
+                <Banknote className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Wallet</span>
+              </Button>
+            </Link>
             <Button
               variant="outline" size="icon" onClick={() => load(true)} disabled={refreshing}
               className="rounded-xl" aria-label="Refresh"

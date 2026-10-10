@@ -552,6 +552,92 @@ same('exactly these pay fields reach the driver', Object.keys(upcomingView.earni
 check('a ride with no earning says so', driverRideView(fullRide, 'upcoming', liveWin, null).earning, null);
 check('an unreadable window gives null instants, not a crash', driverRideView(fullRide, 'upcoming', null, null).start_at, null);
 
+// ── Wallet arithmetic ──────────────────────────────────────────────────────
+// A driver's balance is never stored. It is these three functions applied to
+// the ledger, every time, in every function that needs the number.
+console.log('\n— wallet arithmetic —');
+identical('findDriverForUser', FIND_DRIVER_SIG, ['getDriverProfile', 'getDriverWallet']);
+const WALLET_HOME = 'getDriverWallet';
+const walletSrc = (name, signature) => liftSrc(WALLET_HOME, name, signature);
+const driverEmails = make('driverEmails', walletSrc('driverEmails', 'driver'));
+const driverWithdrawals = make('driverWithdrawals',
+  walletSrc('driverEmails', 'driver'), walletSrc('driverWithdrawals', 'driver, rows'));
+const walletTotals = make('walletTotals', walletSrc('walletTotals', 'earnings, withdrawals'));
+
+// Review focus 1: logins are matched however they were typed.
+same('current and previous logins, lower-cased, once each',
+  driverEmails({ user_email: ' Emeka@Gmail.com ', previous_user_emails: ['OLD@x.ng', 'old@x.ng', '', null] }),
+  ['emeka@gmail.com', 'old@x.ng']);
+same('a driver with no login has no emails', driverEmails({ id: 'd1' }), []);
+same('no driver has no emails', driverEmails(null), []);
+
+const emeka = { id: 'drvA', user_email: 'emeka@work.ng', previous_user_emails: ['emeka@gmail.com'] };
+const wd = (id, extra = {}) => ({
+  id, wallet: 'driver', driver_id: 'drvA', user_email: 'emeka@work.ng', amount: 10000, status: 'completed', ...extra,
+});
+same('which withdrawal rows count against a driver',
+  driverWithdrawals(emeka, [
+    wd('current-login'),
+    wd('capitals-in-email', { user_email: 'Emeka@Work.NG ' }),
+    wd('made-under-the-old-login', { user_email: 'emeka@gmail.com' }),
+    wd('another-driver', { driver_id: 'drvB' }),
+    // Anyone signed in can create a WithdrawalRequest row for their own email
+    // and write any driver_id on it. It must not touch this driver's balance.
+    wd('forged-by-a-stranger', { user_email: 'mallory@evil.ng' }),
+    wd('referral-wallet-row', { wallet: 'referral' }),
+    wd('row-from-before-wallets-existed', { wallet: undefined }),
+    null,
+  ]).map((w) => w.id),
+  ['current-login', 'capitals-in-email', 'made-under-the-old-login']);
+same('no driver, no rows', driverWithdrawals(null, [wd('x')]), []);
+same('no rows at all', driverWithdrawals(emeka, undefined), []);
+
+const ZERO = { held: 0, released: 0, paid_out: 0, reserved: 0, available: 0, shortfall: 0 };
+const earn = (status, amount_ngn) => ({ status, amount_ngn });
+same('an empty wallet', walletTotals([], []), ZERO);
+same('nothing at all', walletTotals(undefined, undefined), ZERO);
+same('held is not available; reversed counts nowhere',
+  walletTotals([earn('held', 15000), earn('released', 20000), earn('reversed', 9999)], []),
+  { ...ZERO, held: 15000, released: 20000, available: 20000 });
+same('paid out and in-flight withdrawals both come off the balance',
+  walletTotals([earn('released', 30000)], [wd('a', { amount: 10000 }), wd('b', { amount: 12000, status: 'pending' })]),
+  { ...ZERO, released: 30000, paid_out: 10000, reserved: 12000, available: 8000 });
+same('a processing withdrawal is still in flight',
+  walletTotals([earn('released', 30000)], [wd('b', { amount: 12000, status: 'processing' })]),
+  { ...ZERO, released: 30000, reserved: 12000, available: 18000 });
+// No refund step exists for the driver wallet: a failed transfer just stops counting.
+same('failed and reversed transfers put the money back by themselves',
+  walletTotals([earn('released', 30000)], [wd('f', { amount: 30000, status: 'failed' }), wd('r', { amount: 30000, status: 'reversed' })]),
+  { ...ZERO, released: 30000, available: 30000 });
+// Review focus 2: pay reversed after it was withdrawn.
+same('pay reversed after it was withdrawn: ₦0 available, never negative, shortfall recorded',
+  walletTotals([earn('reversed', 10000)], [wd('a', { amount: 10000 })]),
+  { ...ZERO, paid_out: 10000, available: 0, shortfall: 10000 });
+same('…and the next released pay nets against that shortfall',
+  walletTotals([earn('reversed', 10000), earn('released', 15000)], [wd('a', { amount: 10000 })]),
+  { ...ZERO, released: 15000, paid_out: 10000, available: 5000, shortfall: 0 });
+same('amounts stored as strings still count',
+  walletTotals([earn('released', '20000')], [wd('a', { amount: '5000' })]),
+  { ...ZERO, released: 20000, paid_out: 5000, available: 15000 });
+same('kobo are rounded away', walletTotals([earn('released', 15000.4)], []), { ...ZERO, released: 15000, available: 15000 });
+same('garbage, negative and infinite amounts count as nothing, never as NaN',
+  walletTotals(
+    [earn('released', 'abc'), earn('released', -500), earn('released', Infinity), earn('released', 1000)],
+    [wd('a', { amount: NaN }), wd('b', { amount: Infinity, status: 'pending' }), wd('c', { amount: -1 })],
+  ),
+  { ...ZERO, released: 1000, available: 1000 });
+
+const ledgerView = make('ledgerView', walletSrc('ledgerView', 'earning'));
+same('exactly these ledger fields reach the driver',
+  Object.keys(ledgerView({
+    id: 'e1', driver_id: 'drvA', ride_booking_id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado',
+    service_date: '2026-08-10', amount_ngn: 15000, status: 'held', on_hold: true, hold_reason: 'internal',
+    admin_notes: 'internal', adjustment_reason: 'internal', rate_ngn: 15000, units: 1, basis: 'daily',
+    release_at: '2026-08-10T12:00:00.000Z', held_at: '2026-08-09T09:00:00.000Z',
+  })).sort(),
+  ['amount_ngn', 'booking_reference', 'held_at', 'id', 'on_hold', 'release_at', 'released_at', 'reversed_at',
+    'ride_booking_id', 'service_date', 'status', 'vehicle_name']);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

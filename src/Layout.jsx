@@ -127,6 +127,12 @@ export default function Layout({ children, currentPageName }) {
       icon: Car,
       description: "Rides assigned to you"
     },
+    {
+      title: "Wallet",
+      url: createPageUrl("DriverWallet"),
+      icon: Banknote,
+      description: "Held and available pay"
+    },
   ] : [];
 
   // Add admin link if user is admin

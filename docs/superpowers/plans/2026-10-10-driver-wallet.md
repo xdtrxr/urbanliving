@@ -3449,3 +3449,742 @@ git add scripts/check-driver-wallet.mjs base44/functions/getDriverRides/entry.ts
 git commit -m "feat(rides): My rides page for drivers" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A08: The wallet — balance arithmetic, `getDriverWallet` and the page
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (wallet arithmetic section, above `// ---- result ----`)
+- Create: `base44/functions/getDriverWallet/entry.ts`
+- Create: `src/pages/DriverWallet.jsx`
+- Modify: `src/pages.config.js` (register the page)
+- Modify: `src/Layout.jsx` (second navigation item for drivers)
+- Modify: `src/pages/DriverRides.jsx` (link to the wallet)
+
+**Interfaces:**
+- Consumes: `findDriverForUser(sr, email)` (Task A06, copied); entities `DriverEarning`, `WithdrawalRequest.wallet`, `WithdrawalRequest.driver_id`, `Driver.previous_user_emails` (Task A01); `useDriverProfile()`, `DriverNotice` (Task A06).
+- Produces, server, in `getDriverWallet/entry.ts` — the origin of the wallet arithmetic that Tasks A09 and A14 copy character for character:
+  - `const WITHDRAWAL_THRESHOLD_NGN = 10000`
+  - `driverEmails(driver) → string[]` (current and previous logins, lower-cased, de-duplicated)
+  - `driverWithdrawals(driver, rows) → rows` (only rows with `wallet === 'driver'`, this driver's id, made by one of the driver's logins)
+  - `walletTotals(earnings, withdrawals) → { held, released, paid_out, reserved, available, shortfall }` (pass withdrawals through `driverWithdrawals` first)
+  - `ledgerView(earning) → { id, ride_booking_id, booking_reference, vehicle_name, service_date, amount_ngn, status, on_hold, release_at, held_at, released_at, reversed_at }`
+- Produces: function `getDriverWallet` — body `{}`; `403 NOT_A_DRIVER`; otherwise `data: { available_ngn, held_ngn, paid_out_ngn, reserved_ngn, shortfall_ngn, threshold_ngn, pending_withdrawal: { id, amount, status, requested_at } | null, ledger: LedgerRow[], ledger_truncated: boolean }`.
+- Produces, client: page `DriverWallet`, registered under that key; its Withdraw button links to `/withdrawals?wallet=driver` (Task A10 makes that page understand the parameter).
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Wallet arithmetic ──────────────────────────────────────────────────────
+// A driver's balance is never stored. It is these three functions applied to
+// the ledger, every time, in every function that needs the number.
+console.log('\n— wallet arithmetic —');
+identical('findDriverForUser', FIND_DRIVER_SIG, ['getDriverProfile', 'getDriverWallet']);
+const WALLET_HOME = 'getDriverWallet';
+const walletSrc = (name, signature) => liftSrc(WALLET_HOME, name, signature);
+const driverEmails = make('driverEmails', walletSrc('driverEmails', 'driver'));
+const driverWithdrawals = make('driverWithdrawals',
+  walletSrc('driverEmails', 'driver'), walletSrc('driverWithdrawals', 'driver, rows'));
+const walletTotals = make('walletTotals', walletSrc('walletTotals', 'earnings, withdrawals'));
+
+// Review focus 1: logins are matched however they were typed.
+same('current and previous logins, lower-cased, once each',
+  driverEmails({ user_email: ' Emeka@Gmail.com ', previous_user_emails: ['OLD@x.ng', 'old@x.ng', '', null] }),
+  ['emeka@gmail.com', 'old@x.ng']);
+same('a driver with no login has no emails', driverEmails({ id: 'd1' }), []);
+same('no driver has no emails', driverEmails(null), []);
+
+const emeka = { id: 'drvA', user_email: 'emeka@work.ng', previous_user_emails: ['emeka@gmail.com'] };
+const wd = (id, extra = {}) => ({
+  id, wallet: 'driver', driver_id: 'drvA', user_email: 'emeka@work.ng', amount: 10000, status: 'completed', ...extra,
+});
+same('which withdrawal rows count against a driver',
+  driverWithdrawals(emeka, [
+    wd('current-login'),
+    wd('capitals-in-email', { user_email: 'Emeka@Work.NG ' }),
+    wd('made-under-the-old-login', { user_email: 'emeka@gmail.com' }),
+    wd('another-driver', { driver_id: 'drvB' }),
+    // Anyone signed in can create a WithdrawalRequest row for their own email
+    // and write any driver_id on it. It must not touch this driver's balance.
+    wd('forged-by-a-stranger', { user_email: 'mallory@evil.ng' }),
+    wd('referral-wallet-row', { wallet: 'referral' }),
+    wd('row-from-before-wallets-existed', { wallet: undefined }),
+    null,
+  ]).map((w) => w.id),
+  ['current-login', 'capitals-in-email', 'made-under-the-old-login']);
+same('no driver, no rows', driverWithdrawals(null, [wd('x')]), []);
+same('no rows at all', driverWithdrawals(emeka, undefined), []);
+
+const ZERO = { held: 0, released: 0, paid_out: 0, reserved: 0, available: 0, shortfall: 0 };
+const earn = (status, amount_ngn) => ({ status, amount_ngn });
+same('an empty wallet', walletTotals([], []), ZERO);
+same('nothing at all', walletTotals(undefined, undefined), ZERO);
+same('held is not available; reversed counts nowhere',
+  walletTotals([earn('held', 15000), earn('released', 20000), earn('reversed', 9999)], []),
+  { ...ZERO, held: 15000, released: 20000, available: 20000 });
+same('paid out and in-flight withdrawals both come off the balance',
+  walletTotals([earn('released', 30000)], [wd('a', { amount: 10000 }), wd('b', { amount: 12000, status: 'pending' })]),
+  { ...ZERO, released: 30000, paid_out: 10000, reserved: 12000, available: 8000 });
+same('a processing withdrawal is still in flight',
+  walletTotals([earn('released', 30000)], [wd('b', { amount: 12000, status: 'processing' })]),
+  { ...ZERO, released: 30000, reserved: 12000, available: 18000 });
+// No refund step exists for the driver wallet: a failed transfer just stops counting.
+same('failed and reversed transfers put the money back by themselves',
+  walletTotals([earn('released', 30000)], [wd('f', { amount: 30000, status: 'failed' }), wd('r', { amount: 30000, status: 'reversed' })]),
+  { ...ZERO, released: 30000, available: 30000 });
+// Review focus 2: pay reversed after it was withdrawn.
+same('pay reversed after it was withdrawn: ₦0 available, never negative, shortfall recorded',
+  walletTotals([earn('reversed', 10000)], [wd('a', { amount: 10000 })]),
+  { ...ZERO, paid_out: 10000, available: 0, shortfall: 10000 });
+same('…and the next released pay nets against that shortfall',
+  walletTotals([earn('reversed', 10000), earn('released', 15000)], [wd('a', { amount: 10000 })]),
+  { ...ZERO, released: 15000, paid_out: 10000, available: 5000, shortfall: 0 });
+same('amounts stored as strings still count',
+  walletTotals([earn('released', '20000')], [wd('a', { amount: '5000' })]),
+  { ...ZERO, released: 20000, paid_out: 5000, available: 15000 });
+same('kobo are rounded away', walletTotals([earn('released', 15000.4)], []), { ...ZERO, released: 15000, available: 15000 });
+same('garbage, negative and infinite amounts count as nothing, never as NaN',
+  walletTotals(
+    [earn('released', 'abc'), earn('released', -500), earn('released', Infinity), earn('released', 1000)],
+    [wd('a', { amount: NaN }), wd('b', { amount: Infinity, status: 'pending' }), wd('c', { amount: -1 })],
+  ),
+  { ...ZERO, released: 1000, available: 1000 });
+
+const ledgerView = make('ledgerView', walletSrc('ledgerView', 'earning'));
+same('exactly these ledger fields reach the driver',
+  Object.keys(ledgerView({
+    id: 'e1', driver_id: 'drvA', ride_booking_id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado',
+    service_date: '2026-08-10', amount_ngn: 15000, status: 'held', on_hold: true, hold_reason: 'internal',
+    admin_notes: 'internal', adjustment_reason: 'internal', rate_ngn: 15000, units: 1, basis: 'daily',
+    release_at: '2026-08-10T12:00:00.000Z', held_at: '2026-08-09T09:00:00.000Z',
+  })).sort(),
+  ['amount_ngn', 'booking_reference', 'held_at', 'id', 'on_hold', 'release_at', 'released_at', 'reversed_at',
+    'ride_booking_id', 'service_date', 'status', 'vehicle_name']);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error: ENOENT: no such file or directory, open '…/base44/functions/getDriverWallet/entry.ts'`.
+
+- [ ] **Step 3: Create the function**
+
+**Create `base44/functions/getDriverWallet/entry.ts`:**
+
+```ts
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+// getDriverWallet
+// ----------------------------------------------------------------------------
+// The signed-in driver's money: what is held, what is available to withdraw,
+// what has been paid out, and the ledger behind those three numbers.
+//
+// NOTHING HERE IS STORED. There is no balance column to drift or to tamper
+// with. The balance is walletTotals() over the driver's DriverEarning rows and
+// their own driver-wallet withdrawals, computed on every call. That is what
+// makes release idempotent (flipping a row to released twice adds nothing)
+// and makes a failed transfer refund itself (a failed row stops counting).
+//
+// This file is the HOME of the wallet arithmetic. createWithdrawalRequest,
+// processWithdrawal and getDashboardStats carry lockstep copies of
+// driverEmails, driverWithdrawals and walletTotals, and
+// scripts/check-driver-wallet.mjs fails if any copy differs by a character.
+
+const WITHDRAWAL_THRESHOLD_NGN = 10000;
+const LEDGER_LIMIT = 200;
+
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+// The Driver row this login belongs to, or null. Lockstep copy, see
+// getDriverProfile.
+async function findDriverForUser(sr: any, email: string) {
+    const raw = String(email || '').trim();
+    const lower = raw.toLowerCase();
+    if (!lower) return null;
+    let rows = await sr.Driver.filter({ user_email: lower });
+    if ((!rows || rows.length === 0) && raw !== lower) rows = await sr.Driver.filter({ user_email: raw });
+    if (!rows || rows.length === 0) return null;
+    rows.sort((a, b) => String(a.created_date || '').localeCompare(String(b.created_date || '')));
+    return rows[0];
+}
+
+// ── Wallet arithmetic ───────────────────────────────────────────────────────
+// Bodies are plain JavaScript: the check script lifts and runs them.
+
+// Every login this driver is, or was, linked to. Lower-cased, once each.
+function driverEmails(driver: any) {
+    const all = [driver && driver.user_email].concat((driver && driver.previous_user_emails) || []);
+    const out = [];
+    for (const raw of all) {
+        const email = String(raw || '').trim().toLowerCase();
+        if (email && !out.includes(email)) out.push(email);
+    }
+    return out;
+}
+
+// The withdrawal rows that count against this driver's balance: driver-wallet
+// rows carrying this driver's id AND made by a login that is, or was, linked
+// to this driver. The second condition is not decoration. Until the staged
+// rule that stops browsers creating WithdrawalRequest rows is live, any
+// signed-in user can create one for their own email with any driver_id on it;
+// the email is the one field the access rule pins to the creator.
+function driverWithdrawals(driver: any, rows: any[]) {
+    if (!driver) return [];
+    const emails = driverEmails(driver);
+    return (rows || []).filter((w) => !!w
+        && w.wallet === 'driver'
+        && w.driver_id === driver.id
+        && emails.includes(String(w.user_email || '').trim().toLowerCase()));
+}
+
+// The driver's position in whole naira. Pass withdrawals through
+// driverWithdrawals first. A failed or reversed transfer counts nowhere, so it
+// needs no refund. If pay is reversed after it was withdrawn, available stops
+// at zero and the difference is carried as shortfall until later pay covers it.
+function walletTotals(earnings: any[], withdrawals: any[]) {
+    const naira = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+    };
+    let held = 0;
+    let released = 0;
+    for (const e of earnings || []) {
+        if (!e) continue;
+        if (e.status === 'held') held += naira(e.amount_ngn);
+        else if (e.status === 'released') released += naira(e.amount_ngn);
+    }
+    let paidOut = 0;
+    let reserved = 0;
+    for (const w of withdrawals || []) {
+        if (!w) continue;
+        if (w.status === 'completed') paidOut += naira(w.amount);
+        else if (w.status === 'pending' || w.status === 'processing') reserved += naira(w.amount);
+    }
+    const net = released - paidOut - reserved;
+    return {
+        held,
+        released,
+        paid_out: paidOut,
+        reserved,
+        available: Math.max(0, net),
+        shortfall: Math.max(0, -net),
+    };
+}
+
+// One ledger row as the driver sees it. An allow-list: hold reasons, admin
+// notes and the rate behind the figure stay on the server.
+function ledgerView(earning: any) {
+    return {
+        id: earning.id,
+        ride_booking_id: earning.ride_booking_id,
+        booking_reference: earning.booking_reference || null,
+        vehicle_name: earning.vehicle_name || 'Ride',
+        service_date: earning.service_date || null,
+        amount_ngn: Math.max(0, Math.round(Number(earning.amount_ngn) || 0)),
+        status: earning.status,
+        on_hold: !!earning.on_hold,
+        release_at: earning.release_at || null,
+        held_at: earning.held_at || earning.created_date || null,
+        released_at: earning.released_at || null,
+        reversed_at: earning.reversed_at || null,
+    };
+}
+
+Deno.serve(async (req) => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+    const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers });
+
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+    if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
+
+    try {
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
+        if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+
+        const sr = base44.asServiceRole.entities;
+        const driver = await findDriverForUser(sr, user.email);
+        if (!driver) {
+            return json({
+                success: false,
+                error: 'This account is not linked to a driver profile.',
+                code: 'NOT_A_DRIVER',
+            }, 403);
+        }
+
+        const [earnings, withdrawalRows] = await Promise.all([
+            fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+            fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
+        ]);
+        const mine = driverWithdrawals(driver, withdrawalRows);
+        const totals = walletTotals(earnings, mine);
+
+        const newestFirst = (a: any, b: any) =>
+            String(b.held_at || b.created_date || '').localeCompare(String(a.held_at || a.created_date || ''));
+        const inFlight = mine
+            .filter((w) => w.status === 'pending' || w.status === 'processing')
+            .sort((a, b) => String(b.created_date || '').localeCompare(String(a.created_date || '')))[0] || null;
+
+        return json({
+            success: true,
+            data: {
+                available_ngn: totals.available,
+                held_ngn: totals.held,
+                paid_out_ngn: totals.paid_out,
+                reserved_ngn: totals.reserved,
+                shortfall_ngn: totals.shortfall,
+                threshold_ngn: WITHDRAWAL_THRESHOLD_NGN,
+                pending_withdrawal: inFlight ? {
+                    id: inFlight.id,
+                    amount: Math.max(0, Math.round(Number(inFlight.amount) || 0)),
+                    status: inFlight.status,
+                    requested_at: inFlight.requested_at || inFlight.created_date || null,
+                } : null,
+                ledger: earnings.slice().sort(newestFirst).slice(0, LEDGER_LIMIT).map(ledgerView),
+                ledger_truncated: earnings.length > LEDGER_LIMIT,
+            },
+        });
+    } catch (error) {
+        console.error('getDriverWallet error:', error);
+        return json({ success: false, error: 'Internal server error', details: (error as Error).message }, 500);
+    }
+});
+```
+
+- [ ] **Step 4: Run the check and watch it pass**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, including every line under `— wallet arithmetic —`.
+
+- [ ] **Step 5: Create the page**
+
+**Create `src/pages/DriverWallet.jsx`:**
+
+```jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Loader2, RefreshCw, Wallet, Clock, CheckCircle, Send, CreditCard, AlertCircle, Car, Undo2, PauseCircle,
+} from 'lucide-react';
+import { base44 } from '@/api/base44Client';
+import { createPageUrl } from '@/utils';
+import { useDriverProfile } from '@/lib/useDriverProfile';
+import DriverNotice from '@/components/driver/DriverNotice';
+
+// DriverWallet — the driver's money in three numbers and the ledger behind them.
+//
+// Every figure comes from getDriverWallet, which computes it from the ledger
+// on each call. This page adds nothing up and stores nothing.
+
+const ngn = (n) => `₦${(Number(n) || 0).toLocaleString()}`;
+
+const fmtWhen = (iso) => {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('en-GB', {
+      timeZone: 'Africa/Lagos', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    });
+  } catch { return ''; }
+};
+
+const fmtDay = (isoDate) => {
+  if (!isoDate) return '';
+  try {
+    return new Date(`${isoDate}T12:00:00+01:00`).toLocaleDateString('en-GB', {
+      timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', year: 'numeric',
+    });
+  } catch { return isoDate; }
+};
+
+// How one ledger row reads. The server has already decided the state.
+function rowState(row) {
+  if (row.status === 'released') {
+    return {
+      label: 'Released', icon: CheckCircle, note: row.released_at ? fmtWhen(row.released_at) : '',
+      className: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900',
+    };
+  }
+  if (row.status === 'reversed') {
+    return {
+      label: 'Reversed', icon: Undo2, note: 'This ride no longer pays',
+      className: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700',
+    };
+  }
+  if (row.on_hold || row.under_review) {
+    return {
+      label: 'Under review', icon: PauseCircle, note: 'The team is looking at this ride',
+      className: 'bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-900',
+    };
+  }
+  return {
+    label: 'Held', icon: Clock, note: row.release_at ? `Releases ${fmtWhen(row.release_at)}` : '',
+    className: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900',
+  };
+}
+
+function Tile({ label, value, sub, emphasis }) {
+  return (
+    <div className={`rounded-2xl p-4 sm:p-5 border ${
+      emphasis
+        ? 'bg-gradient-to-br from-slate-900 to-slate-800 border-slate-800 text-white'
+        : 'bg-white/90 dark:bg-slate-900/90 border-slate-200 dark:border-slate-800'
+    }`}>
+      <p className={`text-xs sm:text-sm mb-1 ${emphasis ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>{label}</p>
+      <p className={`text-xl sm:text-2xl font-bold break-words ${emphasis ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{value}</p>
+      {sub ? (
+        <p className={`text-xs mt-1 ${emphasis ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>{sub}</p>
+      ) : null}
+    </div>
+  );
+}
+
+export default function DriverWalletPage() {
+  const { isDriver, isLoading: profileLoading } = useDriverProfile();
+  const [wallet, setWallet] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true);
+    try {
+      const res = await base44.functions.invoke('getDriverWallet', {});
+      if (res?.data?.success) {
+        setWallet(res.data.data);
+        setError(null);
+      } else {
+        setError(res?.data?.error || 'Could not load your wallet.');
+      }
+    } catch (err) {
+      console.error('getDriverWallet failed:', err);
+      setError(err?.message || 'Could not load your wallet.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isDriver) load();
+  }, [isDriver, load]);
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-slate-400 dark:text-slate-500" />
+      </div>
+    );
+  }
+  if (!isDriver) return <DriverNotice />;
+
+  const available = wallet?.available_ngn || 0;
+  const threshold = wallet?.threshold_ngn || 10000;
+  const pending = wallet?.pending_withdrawal || null;
+  const shortfall = wallet?.shortfall_ngn || 0;
+  const ledger = wallet?.ledger || [];
+  const canWithdraw = !pending && available >= threshold;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-start justify-between gap-3 mb-6">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-1">Wallet</h1>
+            <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-base">
+              Pay is held when you are assigned to a ride and released two hours after it ends.
+            </p>
+          </div>
+          <Button
+            variant="outline" size="icon" onClick={() => load(true)} disabled={refreshing}
+            className="rounded-xl flex-shrink-0" aria-label="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+
+        {error && (
+          <div className="mb-4 flex items-start gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+              <button type="button" onClick={() => load(true)} className="text-sm font-medium text-red-700 dark:text-red-300 underline mt-1">
+                Try again
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-400 dark:text-slate-500" />
+          </div>
+        ) : wallet ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <Tile label="Available" value={ngn(available)} sub="Ready to withdraw" emphasis />
+              <Tile label="Held" value={ngn(wallet.held_ngn)} sub="Releases after each ride" />
+              <Tile label="Paid out" value={ngn(wallet.paid_out_ngn)} sub="Sent to your bank" />
+            </div>
+
+            {pending && (
+              <div className="mb-4 flex items-start gap-2 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl p-3">
+                <Send className="w-4 h-4 text-blue-700 dark:text-blue-300 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  A withdrawal of {ngn(pending.amount)} is {pending.status === 'processing' ? 'on its way to your bank' : 'waiting to be processed'}.
+                  It is already taken off your available balance.
+                </p>
+              </div>
+            )}
+
+            {shortfall > 0 && (
+              <div className="mb-4 flex items-start gap-2 bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-900 rounded-xl p-3">
+                <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-orange-900 dark:text-orange-100">
+                  {ngn(shortfall)} of pay was reversed after you had withdrawn it. It will come off your next released pay.
+                  Contact the team if this looks wrong.
+                </p>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3 mb-2">
+              {canWithdraw ? (
+                <Link to={`${createPageUrl('Withdrawals')}?wallet=driver`} className="flex-1">
+                  <Button className="w-full rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">
+                    <Send className="w-4 h-4 mr-2" /> Withdraw to my bank
+                  </Button>
+                </Link>
+              ) : (
+                <Button disabled className="flex-1 rounded-xl">
+                  <Send className="w-4 h-4 mr-2" /> Withdraw to my bank
+                </Button>
+              )}
+              <Link to={createPageUrl('BankAccounts')} className="flex-1">
+                <Button variant="outline" className="w-full rounded-xl">
+                  <CreditCard className="w-4 h-4 mr-2" /> Bank accounts
+                </Button>
+              </Link>
+            </div>
+            {!canWithdraw && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
+                {pending
+                  ? 'You can request another withdrawal once this one has finished.'
+                  : `You can withdraw once ${ngn(threshold)} is available. You have ${ngn(available)}.`}
+              </p>
+            )}
+
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mt-6 mb-3">
+              Pay by ride
+            </h2>
+
+            {ledger.length === 0 ? (
+              <Card className="bg-white/90 dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
+                <CardContent className="py-10 text-center">
+                  <Wallet className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-1">No pay recorded yet</h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-300 max-w-sm mx-auto">
+                    When you are assigned to a paid ride, your pay for it shows here as held.
+                    Two hours after the ride ends it moves to available.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {ledger.map((row) => {
+                  const state = rowState(row);
+                  const StateIcon = state.icon;
+                  return (
+                    <div
+                      key={row.id}
+                      className="flex items-center gap-3 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 bg-white/80 dark:bg-slate-900/80"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+                        <Car className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">
+                          {row.vehicle_name}
+                          {row.booking_reference ? (
+                            <span className="ml-2 font-mono font-normal text-xs text-slate-500 dark:text-slate-400">{row.booking_reference}</span>
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                          {[fmtDay(row.service_date), state.note].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className={`font-bold text-sm sm:text-base ${row.status === 'reversed' ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-slate-900 dark:text-white'}`}>
+                          {ngn(row.amount_ngn)}
+                        </p>
+                        <Badge className={`${state.className} border font-medium mt-1`}>
+                          <StateIcon className="w-3 h-3 mr-1" />
+                          {state.label}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+                {wallet.ledger_truncated && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center pt-2">
+                    Showing your most recent 200 rides. The totals above count all of them.
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+```
+
+- [ ] **Step 6: Register the page, add it to the navigation, link it from My rides**
+
+**Edit `src/pages.config.js`** — find:
+
+```js
+const DriverRides = lazy(() => import('./pages/DriverRides'));
+```
+
+replace with:
+
+```js
+const DriverRides = lazy(() => import('./pages/DriverRides'));
+const DriverWallet = lazy(() => import('./pages/DriverWallet'));
+```
+
+**Edit `src/pages.config.js`** — find:
+
+```js
+    "DriverRides": DriverRides,
+}
+```
+
+replace with:
+
+```js
+    "DriverRides": DriverRides,
+    "DriverWallet": DriverWallet,
+}
+```
+
+**Edit `src/Layout.jsx`** — find:
+
+```jsx
+      description: "Rides assigned to you"
+    },
+  ] : [];
+```
+
+replace with:
+
+```jsx
+      description: "Rides assigned to you"
+    },
+    {
+      title: "Wallet",
+      url: createPageUrl("DriverWallet"),
+      icon: Banknote,
+      description: "Held and available pay"
+    },
+  ] : [];
+```
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+import { useLocation } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Loader2, RefreshCw, Car, ChevronDown, AlertCircle } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
+```
+
+replace with:
+
+```jsx
+import { Link, useLocation } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Loader2, RefreshCw, Car, ChevronDown, AlertCircle, Banknote } from 'lucide-react';
+import { base44 } from '@/api/base44Client';
+import { createPageUrl } from '@/utils';
+```
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="outline" size="icon" onClick={() => load(true)} disabled={refreshing}
+```
+
+replace with:
+
+```jsx
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link to={createPageUrl('DriverWallet')}>
+              <Button variant="outline" size="sm" className="rounded-xl">
+                <Banknote className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Wallet</span>
+              </Button>
+            </Link>
+            <Button
+              variant="outline" size="icon" onClick={() => load(true)} disabled={refreshing}
+```
+
+- [ ] **Step 7: Lint, parse and build**
+
+Run: `npm run lint`
+
+Expected: no output, exit code 0.
+
+Run: `node_modules/.bin/esbuild base44/functions/getDriverWallet/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`, with a `DriverWallet-….js` chunk in the list.
+
+- [ ] **Step 8: Look at it (sandbox, after the next publish)**
+
+1. Signed in as a linked driver with one held and one released earning: "Wallet" is the second sidebar item; the three tiles read Available = the released amount, Held = the held amount, Paid out = ₦0; the ledger shows both rows, the held one with "Releases <weekday, date, time>".
+2. With less than ₦10,000 available the Withdraw button is disabled and the line under it says how much is needed.
+3. Signed in as a non-driver, open `/DriverWallet`. Expected: the "This page is for UrbanStays drivers" card.
+4. Switch to dark mode on both states. Expected: no white panels, the Available tile stays dark with white text in both themes by design.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs base44/functions/getDriverWallet/entry.ts src/pages/DriverWallet.jsx src/pages/DriverRides.jsx src/pages.config.js src/Layout.jsx
+git commit -m "feat(rides): driver wallet with a balance derived from the earnings ledger" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
