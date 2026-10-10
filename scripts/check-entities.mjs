@@ -121,6 +121,18 @@ check('WithdrawalRequest.driver_id', prop('WithdrawalRequest', 'driver_id')?.typ
 check('WithdrawalRequest.transfer_reference', prop('WithdrawalRequest', 'transfer_reference')?.type === 'string');
 check('WithdrawalRequest update is admin-only', adminOnly(entities.WithdrawalRequest?.rls?.update));
 
+// The referral balance's paper trail. Admin-only in every direction: it is
+// the one record of a withdrawal that cannot be typed in from a browser.
+check('WithdrawalLedger exists', !!entities.WithdrawalLedger);
+for (const f of ['withdrawal_request_id', 'user_email', 'kind', 'state', 'amount_ngn']) {
+  check(`WithdrawalLedger.${f}`, !!prop('WithdrawalLedger', f));
+}
+check('WithdrawalLedger.kind is debit | attempt | refund',
+  sameList(prop('WithdrawalLedger', 'kind')?.enum, ['debit', 'attempt', 'refund']));
+for (const op of OPS) {
+  check(`WithdrawalLedger ${op} is admin-only`, adminOnly(entities.WithdrawalLedger?.rls?.[op]));
+}
+
 check('Driver.user_email', prop('Driver', 'user_email')?.type === 'string');
 check('Driver.previous_user_emails is a string array',
   prop('Driver', 'previous_user_emails')?.type === 'array'

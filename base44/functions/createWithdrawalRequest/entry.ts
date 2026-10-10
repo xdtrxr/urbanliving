@@ -262,6 +262,22 @@ Deno.serve(async (req) => {
             await sr.User.update(referralUser.id, {
                 referral_balance_ngn: (Number(referralUser.referral_balance_ngn) || 0) - amount,
             });
+            // Put the debit on record where a browser cannot write. It is
+            // what lets processWithdrawal tell this request from a row typed
+            // into the database by hand, and what a failed payout is credited
+            // back against. If this write fails the request still stands,
+            // and admin is asked to confirm it before it is sent.
+            try {
+                await sr.WithdrawalLedger.create({
+                    withdrawal_request_id: withdrawalRequest.id,
+                    user_email: user.email,
+                    kind: 'debit',
+                    state: 'recorded',
+                    amount_ngn: amount,
+                });
+            } catch (err) {
+                console.error(`Could not record the debit for withdrawal ${withdrawalRequest.id}:`, err);
+            }
         }
 
         return Response.json({
