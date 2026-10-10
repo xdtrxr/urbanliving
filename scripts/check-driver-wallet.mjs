@@ -760,6 +760,69 @@ check('an error page instead of JSON falls back to the transport message',
 check('nothing at all still gives a sentence', typeof fromThrown(undefined).error, 'string');
 check('a malformed success is not ok', fromResponse({ status: 200, data: null }).ok, false);
 
+// ── Admin settlement ───────────────────────────────────────────────────────
+console.log('\n— admin settlement —');
+identical('releaseDecision', 'earning, ride', ['autoCancelExpiredBookings', 'settleDriverEarning']);
+check('one pay ceiling: settleDriverEarning agrees with assignRideDriver',
+  constLine('settleDriverEarning', 'MAX_PAYOUT_NGN'), constLine('assignRideDriver', 'MAX_PAYOUT_NGN'));
+const nextEarningState = make('nextEarningState',
+  constLine('settleDriverEarning', 'MAX_PAYOUT_NGN'), constLine('settleDriverEarning', 'MAX_REASON_LENGTH'),
+  liftSrc('settleDriverEarning', 'nextEarningState', 'action, earning, input, nowIso'));
+const AT = '2026-08-10T12:00:00.000Z';
+const heldE = { id: 'e1', status: 'held', amount_ngn: 15000, on_hold: false };
+const refusal = (code) => ({ ok: false, code });
+
+same('release: held becomes released and any pause is lifted',
+  nextEarningState('release', { ...heldE, on_hold: true, hold_reason: 'dispute' }, {}, AT),
+  { ok: true, patch: { status: 'released', released_at: AT, on_hold: false, hold_reason: '' } });
+same('release: a released row cannot be released again', nextEarningState('release', { ...heldE, status: 'released' }, {}, AT), refusal('NOT_HELD'));
+same('hold: needs a reason', nextEarningState('hold', heldE, { reason: '  ' }, AT), refusal('REASON_REQUIRED'));
+same('hold: pauses with the reason',
+  nextEarningState('hold', heldE, { reason: ' Guest disputes the trip ' }, AT),
+  { ok: true, patch: { on_hold: true, hold_reason: 'Guest disputes the trip' } });
+same('hold: only held pay can be paused', nextEarningState('hold', { ...heldE, status: 'released' }, { reason: 'x' }, AT), refusal('NOT_HELD'));
+same('unhold: lifts the pause',
+  nextEarningState('unhold', { ...heldE, on_hold: true }, {}, AT), { ok: true, patch: { on_hold: false, hold_reason: '' } });
+same('adjust: changes the figure and records why',
+  nextEarningState('adjust', heldE, { amount_ngn: 20000.4, reason: 'Two extra hours' }, AT),
+  { ok: true, patch: { amount_ngn: 20000, basis: 'manual', rate_ngn: 20000, units: 1, adjustment_reason: 'Two extra hours', adjusted_at: AT } });
+same('adjust: zero is allowed', nextEarningState('adjust', heldE, { amount_ngn: 0, reason: 'Driver did not show' }, AT).ok, true);
+same('adjust: needs a reason', nextEarningState('adjust', heldE, { amount_ngn: 20000 }, AT), refusal('REASON_REQUIRED'));
+for (const bad of [-1, 50000001, NaN, Infinity, '20000', null, undefined]) {
+  same(`adjust: an amount of ${JSON.stringify(bad) ?? String(bad)} is refused`,
+    nextEarningState('adjust', heldE, { amount_ngn: bad, reason: 'x' }, AT), refusal('INVALID_AMOUNT'));
+}
+same('adjust: released pay cannot be repriced', nextEarningState('adjust', { ...heldE, status: 'released' }, { amount_ngn: 1, reason: 'x' }, AT), refusal('NOT_HELD'));
+same('reverse: held pay is reversed with the reason on record',
+  nextEarningState('reverse', heldE, { reason: 'Ride did not happen' }, AT),
+  { ok: true, patch: { status: 'reversed', reversed_at: AT, on_hold: false, admin_notes: 'Ride did not happen' } });
+same('reverse: released pay can be reversed too, keeping earlier notes',
+  nextEarningState('reverse', { ...heldE, status: 'released', admin_notes: 'Reassigned to Ada' }, { reason: 'Paid in error' }, AT),
+  { ok: true, patch: { status: 'reversed', reversed_at: AT, on_hold: false, admin_notes: 'Reassigned to Ada | Paid in error' } });
+same('reverse: needs a reason', nextEarningState('reverse', heldE, {}, AT), refusal('REASON_REQUIRED'));
+for (const action of ['release', 'hold', 'unhold', 'adjust', 'reverse']) {
+  same(`${action}: nothing can be done to reversed pay`,
+    nextEarningState(action, { ...heldE, status: 'reversed' }, { reason: 'x', amount_ngn: 1 }, AT), refusal('ALREADY_REVERSED'));
+}
+same('an unknown action is refused', nextEarningState('delete', heldE, { reason: 'x' }, AT), refusal('INVALID_ACTION'));
+same('a reason is cut at 500 characters',
+  nextEarningState('hold', heldE, { reason: 'x'.repeat(900) }, AT).patch.hold_reason.length, 500);
+
+identical('rideDurationMs', 'tier, days, hours', ['getRideBookings', 'completeRide']);
+identical('windowOf', 'r', ['getRideBookings', 'completeRide']);
+const completionProblem = make('completionProblem',
+  ['HOUR_MS', 'WAT_OFFSET', 'DAY_MS', 'MAX_HOURLY'].map((n) => constLine('completeRide', n)).join(' '),
+  liftSrc('completeRide', 'rideDurationMs', 'tier, days, hours'), liftSrc('completeRide', 'windowOf', 'r'),
+  liftSrc('completeRide', 'completionProblem', 'ride, nowMs'));
+const live = { status: 'confirmed', payment_status: 'paid', start_at: '2026-08-10T08:00:00.000Z', end_at: '2026-08-10T10:00:00.000Z' };
+check('a paid ride that has started can be completed', completionProblem(live, at('2026-08-10T08:30:00.000Z')), '');
+check('…or one that is already over', completionProblem(live, at('2026-08-11T00:00:00.000Z')), '');
+check('a ride that has not started cannot', completionProblem(live, at('2026-08-10T07:59:59.999Z')), 'NOT_STARTED');
+check('a ride with no readable time can: this is what admin is for', completionProblem({ status: 'confirmed', payment_status: 'paid' }, FAR), '');
+check('an already completed ride says so', completionProblem({ ...live, status: 'completed' }, FAR), 'ALREADY');
+check('a cancelled ride cannot be completed', completionProblem({ ...live, status: 'cancelled' }, FAR), 'CANCELLED');
+check('an unpaid ride cannot be completed', completionProblem({ ...live, status: 'pending', payment_status: 'unpaid' }, FAR), 'NOT_PAID');
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
