@@ -141,6 +141,122 @@ same('true is refused', parsePayoutOverride(true), REFUSED);
 same('an array is refused', parsePayoutOverride([25000]), REFUSED);
 same('an object is refused', parsePayoutOverride({ amount: 25000 }), REFUSED);
 
+// ── Assignment ledger ──────────────────────────────────────────────────────
+// holdEarning and reverseHeldEarnings are the only code that creates or
+// cancels a driver's pay at assignment time, so they run here against an
+// in-memory stand-in for the DriverEarning entity.
+
+// Just enough of one Base44 entity for the ledger helpers: exact-match filter
+// (plus { $in: [...] }), create, update, get.
+function fakeEntity(seed = []) {
+  let n = 0;
+  const rows = seed.map((r) => ({ ...r }));
+  const matches = (row, query) => Object.entries(query || {}).every(([k, v]) => (
+    v && typeof v === 'object' && Array.isArray(v.$in) ? v.$in.includes(row[k]) : row[k] === v
+  ));
+  return {
+    rows,
+    async filter(query, _sort, limit = 50, skip = 0) {
+      return rows.filter((r) => matches(r, query)).slice(skip, skip + limit).map((r) => ({ ...r }));
+    },
+    async create(data) {
+      n += 1;
+      const row = { id: `new${n}`, created_date: new Date(Date.UTC(2026, 0, 1, 0, 0, n)).toISOString(), ...data };
+      rows.push(row);
+      return { ...row };
+    },
+    async update(id, patch) {
+      const row = rows.find((r) => r.id === id);
+      if (!row) throw new Error(`no row ${id}`);
+      Object.assign(row, patch);
+      return { ...row };
+    },
+    async get(id) {
+      const row = rows.find((r) => r.id === id);
+      return row ? { ...row } : null;
+    },
+  };
+}
+// The shipped fetchAll carries type annotations in its body, so the lifted
+// helpers get this equivalent instead. It is glue, not the code under test.
+const FETCH_ALL = 'async function fetchAll(entity, query) { const out = []; for (let skip = 0; ; skip += 500) { const page = await entity.filter(query, undefined, 500, skip); out.push(...page); if (page.length < 500) break; } return out; }';
+
+console.log('\n— assignment ledger —');
+const holdEarning = make('holdEarning', PAY, FETCH_ALL,
+  liftSrc('assignRideDriver', 'releaseAtFor', 'endAtIso'),
+  liftSrc('assignRideDriver', 'holdEarning', 'sr, ride, driverId, payout, endAtIso, nowIso'));
+const reverseHeldEarnings = make('reverseHeldEarnings', FETCH_ALL,
+  liftSrc('assignRideDriver', 'reverseHeldEarnings', 'sr, rideId, keepDriverId, note, nowIso'));
+
+const rideA = { id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado', service_date: '2026-08-10' };
+const END = '2026-08-10T10:00:00.000Z';
+const NOW = '2026-08-09T09:00:00.000Z';
+const dayPay = { amount: 15000, basis: 'daily', rate: 15000, units: 1 };
+const heldRow = (id, driver, extra = {}) => ({
+  id, created_date: '2025-12-31T00:00:00.000Z', ride_booking_id: 'ride1', driver_id: driver,
+  amount_ngn: 15000, status: 'held', ...extra,
+});
+
+{
+  const sr = { DriverEarning: fakeEntity() };
+  const e = await holdEarning(sr, rideA, 'drvA', dayPay, END, NOW);
+  check('first assignment writes one row', sr.DriverEarning.rows.length, 1);
+  check('…held', e.status, 'held');
+  check('…for the pay figure', e.amount_ngn, 15000);
+  check('…with the audit trail', `${e.basis}/${e.rate_ngn}/${e.units}`, 'daily/15000/1');
+  check('…releasable two hours after the booked end', e.release_at, '2026-08-10T12:00:00.000Z');
+  check('…snapshotting the ride', `${e.booking_reference}/${e.vehicle_name}/${e.service_date}`, 'UD-AAA111/Prado/2026-08-10');
+  const again = await holdEarning(sr, rideA, 'drvA', { ...dayPay, amount: 99999 }, END, NOW);
+  check('assigning the same driver again writes no second row', sr.DriverEarning.rows.length, 1);
+  check('…and the first figure stands', again.amount_ngn, 15000);
+}
+{
+  const sr = { DriverEarning: fakeEntity() };
+  check('a ₦0 figure holds nothing', await holdEarning(sr, rideA, 'drvA', { ...dayPay, amount: 0 }, END, NOW), null);
+  check('no figure holds nothing', await holdEarning(sr, rideA, 'drvA', null, END, NOW), null);
+  check('…and neither writes a row', sr.DriverEarning.rows.length, 0);
+}
+{
+  // Reassignment: A was holding, B takes the ride.
+  const sr = { DriverEarning: fakeEntity([heldRow('a1', 'drvA'), heldRow('x1', 'drvA', { ride_booking_id: 'other-ride' })]) };
+  const b = await holdEarning(sr, rideA, 'drvB', dayPay, END, NOW);
+  const out = await reverseHeldEarnings(sr, 'ride1', 'drvB', 'Reassigned to B', NOW);
+  const row = (id) => sr.DriverEarning.rows.find((r) => r.id === id);
+  check('reassignment holds pay for the new driver', b.status, 'held');
+  check('…reverses the previous driver', row('a1').status, 'reversed');
+  check('…stamps when and why', `${row('a1').reversed_at}|${row('a1').admin_notes}`, `${NOW}|Reassigned to B`);
+  check('…leaves the new driver held', row(b.id).status, 'held');
+  check('…never touches another ride', row('x1').status, 'held');
+  same('…and reports what moved', out, { reversed_ngn: 15000, released_ngn: 0, driver_ids: ['drvA'] });
+}
+{
+  // The previous driver's pay had already been released: it is not clawed back
+  // silently, it is reported so admin can decide.
+  const sr = { DriverEarning: fakeEntity([heldRow('a1', 'drvA', { status: 'released' })]) };
+  const out = await reverseHeldEarnings(sr, 'ride1', 'drvB', 'Reassigned to B', NOW);
+  check('a released row is left alone on reassignment', sr.DriverEarning.rows[0].status, 'released');
+  same('…and reported', out, { reversed_ngn: 0, released_ngn: 15000, driver_ids: [] });
+}
+{
+  // Cancellation passes '' and reverses everyone still holding.
+  const sr = { DriverEarning: fakeEntity([heldRow('a1', 'drvA'), heldRow('b1', 'drvB', { amount_ngn: 20000, admin_notes: 'earlier note' })]) };
+  const out = await reverseHeldEarnings(sr, 'ride1', '', 'Ride cancelled', NOW);
+  check('cancel reverses every held row', sr.DriverEarning.rows.every((r) => r.status === 'reversed'), true);
+  check('…keeping earlier notes', sr.DriverEarning.rows[1].admin_notes, 'earlier note | Ride cancelled');
+  same('…and totals it', out, { reversed_ngn: 35000, released_ngn: 0, driver_ids: ['drvA', 'drvB'] });
+}
+{
+  // Two admins assign in the same second: this call's first read is stale, so
+  // it creates a twin. The oldest row must stand and the twin be reversed.
+  const base = fakeEntity([heldRow('old', 'drvB')]);
+  let stale = true;
+  const racy = { ...base, filter: async (...a) => { if (stale) { stale = false; return []; } return base.filter(...a); } };
+  const kept = await holdEarning({ DriverEarning: racy }, rideA, 'drvB', dayPay, END, NOW);
+  check('a simultaneous double assign keeps the oldest row', kept.id, 'old');
+  check('…and reverses the twin', base.rows.filter((r) => r.status === 'held').length, 1);
+  check('…saying why', base.rows.find((r) => r.id !== 'old').admin_notes, 'Duplicate of old');
+}
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

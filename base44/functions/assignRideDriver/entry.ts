@@ -9,6 +9,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 // Enforces driver availability with the same overlap rule used for vehicles,
 // filtered on driver_id — a driver cannot be in two cars at once any more than
 // a car can be in two places.
+//
+// Also the moment the driver's pay is HELD. For a driver who has a login
+// (Driver.user_email), a DriverEarning row is written for the pay figure —
+// what admin typed, or the vehicle's driver cost for the booked duration.
+// The sweep releases it two hours after the booked end. A driver without a
+// login is assigned exactly as before and nothing is recorded.
 
 // ── Ride time model — lockstep copy, see checkRideAvailability ──────────────
 const WAT_OFFSET = '+01:00';
@@ -130,6 +136,73 @@ async function fetchAll(entity: any, query: Record<string, unknown>): Promise<an
     return out;
 }
 
+// ── Driver earnings ledger ──────────────────────────────────────────────────
+// Bodies are plain JavaScript on purpose: scripts/check-driver-wallet.mjs
+// lifts these two off disk and runs them against an in-memory ledger.
+
+// Hold the new driver's pay. Returns the earning that now stands for this
+// driver on this ride, or null when there is nothing to hold. Safe to call
+// twice: a standing row is returned as it is, never duplicated or repriced.
+async function holdEarning(sr: any, ride: any, driverId: string, payout: any, endAtIso: string, nowIso: string) {
+    const ledger = await fetchAll(sr.DriverEarning, { ride_booking_id: ride.id });
+    const standing = ledger.find((e) => e.driver_id === driverId && e.status !== 'reversed');
+    if (standing) return standing;
+    if (!payout || !(payout.amount > 0)) return null;
+    await sr.DriverEarning.create({
+        driver_id: driverId,
+        ride_booking_id: ride.id,
+        booking_reference: ride.booking_reference || '',
+        vehicle_name: ride.vehicle_name || '',
+        service_date: ride.service_date,
+        end_at: endAtIso,
+        amount_ngn: payout.amount,
+        basis: payout.basis,
+        rate_ngn: payout.rate,
+        units: payout.units,
+        status: 'held',
+        on_hold: false,
+        release_at: releaseAtFor(endAtIso),
+        held_at: nowIso,
+    });
+    // Two admins assigning in the same second would both reach this line. The
+    // oldest held row for this driver and ride stands; any twin is reversed.
+    const twins = await fetchAll(sr.DriverEarning, { ride_booking_id: ride.id, driver_id: driverId, status: 'held' });
+    twins.sort((a, b) => String(a.created_date || '').localeCompare(String(b.created_date || ''))
+        || String(a.id).localeCompare(String(b.id)));
+    for (const extra of twins.slice(1)) {
+        await sr.DriverEarning.update(extra.id, {
+            status: 'reversed', reversed_at: nowIso, admin_notes: `Duplicate of ${twins[0].id}`,
+        });
+    }
+    return twins[0] || null;
+}
+
+// Reverse the pay still HELD on a ride for every driver except keepDriverId
+// (pass '' to reverse all of it). Released rows are never clawed back here;
+// they are totalled so the caller can tell admin. Lockstep copy in
+// cancelRideBooking.
+async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string, note: string, nowIso: string) {
+    const ledger = await fetchAll(sr.DriverEarning, { ride_booking_id: rideId });
+    const out = { reversed_ngn: 0, released_ngn: 0, driver_ids: [] };
+    for (const e of ledger) {
+        if (keepDriverId && e.driver_id === keepDriverId) continue;
+        const amount = Math.max(0, Math.round(Number(e.amount_ngn) || 0));
+        if (e.status === 'held') {
+            await sr.DriverEarning.update(e.id, {
+                status: 'reversed',
+                reversed_at: nowIso,
+                on_hold: false,
+                admin_notes: e.admin_notes ? `${e.admin_notes} | ${note}` : note,
+            });
+            out.reversed_ngn += amount;
+            if (!out.driver_ids.includes(e.driver_id)) out.driver_ids.push(e.driver_id);
+        } else if (e.status === 'released') {
+            out.released_ngn += amount;
+        }
+    }
+    return out;
+}
+
 async function tryPush(sdk: any, opts: Record<string, unknown>) {
     try {
         await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
@@ -156,7 +229,7 @@ Deno.serve(async (req) => {
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
-        const { ride_booking_id, driver_id, pickup_instructions } = await req.json().catch(() => ({}));
+        const { ride_booking_id, driver_id, pickup_instructions, driver_payout_ngn } = await req.json().catch(() => ({}));
         if (!ride_booking_id || !driver_id) {
             return json({ success: false, error: 'ride_booking_id and driver_id are required' }, 400);
         }
@@ -220,10 +293,47 @@ Deno.serve(async (req) => {
             }
         }
 
+        const sr = base44.asServiceRole.entities;
         const reassigning = !!ride.driver_id && ride.driver_id !== driver_id;
-        await base44.asServiceRole.entities.RideBooking.update(ride_booking_id, {
+        const nowIso = new Date().toISOString();
+
+        // ── Driver pay ──────────────────────────────────────────────────
+        // Tracked only for a driver who has a login to see it with. ₦0 is a
+        // real answer ("paid inside the partner's rate") and holds nothing;
+        // no figure at all is refused so nobody drives for an unknown amount.
+        const linkedEmail = typeof driver.user_email === 'string' ? driver.user_email.trim().toLowerCase() : '';
+        let payout: any = null;
+        if (linkedEmail) {
+            const typed = parsePayoutOverride(driver_payout_ngn);
+            if (!typed.ok) {
+                return json({
+                    success: false,
+                    error: 'Driver pay must be a whole naira amount between 0 and 50,000,000.',
+                    code: 'INVALID_PAYOUT',
+                }, 400);
+            }
+            if (typed.value !== null) {
+                payout = { amount: typed.value, basis: 'manual', rate: typed.value, units: 1 };
+            } else {
+                const costings = await sr.VehicleCosting.filter({ vehicle_id: ride.vehicle_id });
+                payout = driverPayoutFor(costings?.[0] || null, ride.duration_tier, ride.duration_hours, ride.duration_days);
+                if (!payout) {
+                    return json({
+                        success: false,
+                        error: 'No driver cost is set for this vehicle. Enter the pay for this ride, or set it under Vehicles → Internal costing.',
+                        code: 'PAYOUT_REQUIRED',
+                    }, 409);
+                }
+            }
+        }
+
+        const earning = linkedEmail
+            ? await holdEarning(sr, ride, driver_id, payout, new Date(win.endMs).toISOString(), nowIso)
+            : null;
+
+        await sr.RideBooking.update(ride_booking_id, {
             driver_id,
-            driver_assigned_at: new Date().toISOString(),
+            driver_assigned_at: nowIso,
             // Only overwrite when something was actually typed — a reassignment
             // that leaves the box blank must not wipe instructions already
             // written for this pickup.
@@ -231,6 +341,10 @@ Deno.serve(async (req) => {
                 ? { pickup_instructions: pickup_instructions.trim() }
                 : {}),
         });
+
+        // Runs for every assignment, linked driver or not: handing a ride to
+        // someone else must always take it off the previous driver's ledger.
+        const others = await reverseHeldEarnings(sr, ride_booking_id, driver_id, `Reassigned to ${driver.full_name}`, nowIso);
 
         // Guest email with the driver's details — this is the moment the
         // contact becomes visible, so it goes out by email as well as push
@@ -267,9 +381,55 @@ Deno.serve(async (req) => {
             tag: `ride-driver-${ride.id}`,
         });
 
+        // The driver hears about it too, now that they have somewhere to look.
+        const whenShort = new Date(win.startMs).toLocaleString('en-GB', {
+            timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short',
+        });
+        if (linkedEmail) {
+            await tryPush(base44, {
+                user_email: linkedEmail,
+                title: '🚗 New ride assigned',
+                body: earning && earning.status === 'held'
+                    ? `${ride.vehicle_name} on ${whenShort} · ₦${(Number(earning.amount_ngn) || 0).toLocaleString()} held until the trip ends`
+                    : `${ride.vehicle_name} on ${whenShort}. Tap for the pickup details.`,
+                url: `/DriverRides#ride-${ride.id}`,
+                tag: `driver-assigned-${ride.id}`,
+            });
+        }
+        if (reassigning) {
+            try {
+                const previous = await sr.Driver.get(ride.driver_id);
+                const previousEmail = typeof previous?.user_email === 'string' ? previous.user_email.trim().toLowerCase() : '';
+                if (previousEmail) {
+                    await tryPush(base44, {
+                        user_email: previousEmail,
+                        title: '🔄 Ride reassigned',
+                        body: `You are no longer driving the ${ride.vehicle_name} on ${whenShort}.`,
+                        url: '/DriverRides',
+                        tag: `driver-removed-${ride.id}`,
+                    });
+                }
+            } catch (err) {
+                console.warn('Previous driver push failed (non-fatal):', err);
+            }
+        }
+
         return json({
             success: true,
-            data: { ride_booking_id, driver_id, driver_name: driver.full_name, reassigned: reassigning },
+            data: {
+                ride_booking_id,
+                driver_id,
+                driver_name: driver.full_name,
+                reassigned: reassigning,
+                // false means this driver has no login, so nothing was recorded.
+                pay_tracked: !!linkedEmail,
+                driver_payout_ngn: earning ? Number(earning.amount_ngn) || 0 : (payout ? payout.amount : null),
+                payout_basis: earning ? earning.basis || null : (payout ? payout.basis : null),
+                earning_id: earning ? earning.id : null,
+                // The previous driver's pay was already released and has NOT
+                // been taken back. Admin decides in Rides → Earnings.
+                previous_earning_released: others.released_ngn > 0,
+            },
         });
     } catch (error) {
         console.error('assignRideDriver error:', error);

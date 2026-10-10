@@ -868,3 +868,454 @@ git add scripts/check-driver-wallet.mjs base44/functions/assignRideDriver/entry.
 git commit -m "feat(rides): driver pay model with a server and client copy held in lockstep" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A03: `assignRideDriver` holds the driver's pay
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (in-memory entity stand-in and the assignment ledger section, above `// ---- result ----`)
+- Modify: `base44/functions/assignRideDriver/entry.ts` (header comment; two ledger helpers after `fetchAll`; the handler)
+
+**Interfaces:**
+- Consumes: `driverPayoutFor`, `releaseAtFor`, `parsePayoutOverride`, `RELEASE_BUFFER_MS` (Task A02); entity `DriverEarning`, `Driver.user_email` (Task A01); the file's existing `fetchAll(entity, query)`, `windowOf(ride)`, `tryPush(sdk, opts)`.
+- Produces, in `assignRideDriver/entry.ts`: `async holdEarning(sr, ride, driverId, payout, endAtIso, nowIso) → DriverEarning row | null` and `async reverseHeldEarnings(sr, rideId, keepDriverId, note, nowIso) → { reversed_ngn, released_ngn, driver_ids }` (pass `''` as `keepDriverId` to reverse every held row on the ride).
+- Request body gains optional `driver_payout_ngn`. New refusals: `INVALID_PAYOUT` (400), `PAYOUT_REQUIRED` (409). Success `data` gains `pay_tracked: boolean`, `driver_payout_ngn: number | null`, `payout_basis: 'hourly'|'daily'|'manual'|null`, `earning_id: string | null`, `previous_earning_released: boolean`.
+- Produces, in `scripts/check-driver-wallet.mjs`: `fakeEntity(seed)` and the constant string `FETCH_ALL`, reused by later tasks.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Assignment ledger ──────────────────────────────────────────────────────
+// holdEarning and reverseHeldEarnings are the only code that creates or
+// cancels a driver's pay at assignment time, so they run here against an
+// in-memory stand-in for the DriverEarning entity.
+
+// Just enough of one Base44 entity for the ledger helpers: exact-match filter
+// (plus { $in: [...] }), create, update, get.
+function fakeEntity(seed = []) {
+  let n = 0;
+  const rows = seed.map((r) => ({ ...r }));
+  const matches = (row, query) => Object.entries(query || {}).every(([k, v]) => (
+    v && typeof v === 'object' && Array.isArray(v.$in) ? v.$in.includes(row[k]) : row[k] === v
+  ));
+  return {
+    rows,
+    async filter(query, _sort, limit = 50, skip = 0) {
+      return rows.filter((r) => matches(r, query)).slice(skip, skip + limit).map((r) => ({ ...r }));
+    },
+    async create(data) {
+      n += 1;
+      const row = { id: `new${n}`, created_date: new Date(Date.UTC(2026, 0, 1, 0, 0, n)).toISOString(), ...data };
+      rows.push(row);
+      return { ...row };
+    },
+    async update(id, patch) {
+      const row = rows.find((r) => r.id === id);
+      if (!row) throw new Error(`no row ${id}`);
+      Object.assign(row, patch);
+      return { ...row };
+    },
+    async get(id) {
+      const row = rows.find((r) => r.id === id);
+      return row ? { ...row } : null;
+    },
+  };
+}
+// The shipped fetchAll carries type annotations in its body, so the lifted
+// helpers get this equivalent instead. It is glue, not the code under test.
+const FETCH_ALL = 'async function fetchAll(entity, query) { const out = []; for (let skip = 0; ; skip += 500) { const page = await entity.filter(query, undefined, 500, skip); out.push(...page); if (page.length < 500) break; } return out; }';
+
+console.log('\n— assignment ledger —');
+const holdEarning = make('holdEarning', PAY, FETCH_ALL,
+  liftSrc('assignRideDriver', 'releaseAtFor', 'endAtIso'),
+  liftSrc('assignRideDriver', 'holdEarning', 'sr, ride, driverId, payout, endAtIso, nowIso'));
+const reverseHeldEarnings = make('reverseHeldEarnings', FETCH_ALL,
+  liftSrc('assignRideDriver', 'reverseHeldEarnings', 'sr, rideId, keepDriverId, note, nowIso'));
+
+const rideA = { id: 'ride1', booking_reference: 'UD-AAA111', vehicle_name: 'Prado', service_date: '2026-08-10' };
+const END = '2026-08-10T10:00:00.000Z';
+const NOW = '2026-08-09T09:00:00.000Z';
+const dayPay = { amount: 15000, basis: 'daily', rate: 15000, units: 1 };
+const heldRow = (id, driver, extra = {}) => ({
+  id, created_date: '2025-12-31T00:00:00.000Z', ride_booking_id: 'ride1', driver_id: driver,
+  amount_ngn: 15000, status: 'held', ...extra,
+});
+
+{
+  const sr = { DriverEarning: fakeEntity() };
+  const e = await holdEarning(sr, rideA, 'drvA', dayPay, END, NOW);
+  check('first assignment writes one row', sr.DriverEarning.rows.length, 1);
+  check('…held', e.status, 'held');
+  check('…for the pay figure', e.amount_ngn, 15000);
+  check('…with the audit trail', `${e.basis}/${e.rate_ngn}/${e.units}`, 'daily/15000/1');
+  check('…releasable two hours after the booked end', e.release_at, '2026-08-10T12:00:00.000Z');
+  check('…snapshotting the ride', `${e.booking_reference}/${e.vehicle_name}/${e.service_date}`, 'UD-AAA111/Prado/2026-08-10');
+  const again = await holdEarning(sr, rideA, 'drvA', { ...dayPay, amount: 99999 }, END, NOW);
+  check('assigning the same driver again writes no second row', sr.DriverEarning.rows.length, 1);
+  check('…and the first figure stands', again.amount_ngn, 15000);
+}
+{
+  const sr = { DriverEarning: fakeEntity() };
+  check('a ₦0 figure holds nothing', await holdEarning(sr, rideA, 'drvA', { ...dayPay, amount: 0 }, END, NOW), null);
+  check('no figure holds nothing', await holdEarning(sr, rideA, 'drvA', null, END, NOW), null);
+  check('…and neither writes a row', sr.DriverEarning.rows.length, 0);
+}
+{
+  // Reassignment: A was holding, B takes the ride.
+  const sr = { DriverEarning: fakeEntity([heldRow('a1', 'drvA'), heldRow('x1', 'drvA', { ride_booking_id: 'other-ride' })]) };
+  const b = await holdEarning(sr, rideA, 'drvB', dayPay, END, NOW);
+  const out = await reverseHeldEarnings(sr, 'ride1', 'drvB', 'Reassigned to B', NOW);
+  const row = (id) => sr.DriverEarning.rows.find((r) => r.id === id);
+  check('reassignment holds pay for the new driver', b.status, 'held');
+  check('…reverses the previous driver', row('a1').status, 'reversed');
+  check('…stamps when and why', `${row('a1').reversed_at}|${row('a1').admin_notes}`, `${NOW}|Reassigned to B`);
+  check('…leaves the new driver held', row(b.id).status, 'held');
+  check('…never touches another ride', row('x1').status, 'held');
+  same('…and reports what moved', out, { reversed_ngn: 15000, released_ngn: 0, driver_ids: ['drvA'] });
+}
+{
+  // The previous driver's pay had already been released: it is not clawed back
+  // silently, it is reported so admin can decide.
+  const sr = { DriverEarning: fakeEntity([heldRow('a1', 'drvA', { status: 'released' })]) };
+  const out = await reverseHeldEarnings(sr, 'ride1', 'drvB', 'Reassigned to B', NOW);
+  check('a released row is left alone on reassignment', sr.DriverEarning.rows[0].status, 'released');
+  same('…and reported', out, { reversed_ngn: 0, released_ngn: 15000, driver_ids: [] });
+}
+{
+  // Cancellation passes '' and reverses everyone still holding.
+  const sr = { DriverEarning: fakeEntity([heldRow('a1', 'drvA'), heldRow('b1', 'drvB', { amount_ngn: 20000, admin_notes: 'earlier note' })]) };
+  const out = await reverseHeldEarnings(sr, 'ride1', '', 'Ride cancelled', NOW);
+  check('cancel reverses every held row', sr.DriverEarning.rows.every((r) => r.status === 'reversed'), true);
+  check('…keeping earlier notes', sr.DriverEarning.rows[1].admin_notes, 'earlier note | Ride cancelled');
+  same('…and totals it', out, { reversed_ngn: 35000, released_ngn: 0, driver_ids: ['drvA', 'drvB'] });
+}
+{
+  // Two admins assign in the same second: this call's first read is stale, so
+  // it creates a twin. The oldest row must stand and the twin be reversed.
+  const base = fakeEntity([heldRow('old', 'drvB')]);
+  let stale = true;
+  const racy = { ...base, filter: async (...a) => { if (stale) { stale = false; return []; } return base.filter(...a); } };
+  const kept = await holdEarning({ DriverEarning: racy }, rideA, 'drvB', dayPay, END, NOW);
+  check('a simultaneous double assign keeps the oldest row', kept.id, 'old');
+  check('…and reverses the twin', base.rows.filter((r) => r.status === 'held').length, 1);
+  check('…saying why', base.rows.find((r) => r.id !== 'old').admin_notes, 'Duplicate of old');
+}
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: every earlier line is `ok`, then `Error: could not find holdEarning in base44/functions/assignRideDriver/entry.ts`.
+
+- [ ] **Step 3: Say what the function now does**
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+// Enforces driver availability with the same overlap rule used for vehicles,
+// filtered on driver_id — a driver cannot be in two cars at once any more than
+// a car can be in two places.
+```
+
+replace with:
+
+```ts
+// Enforces driver availability with the same overlap rule used for vehicles,
+// filtered on driver_id — a driver cannot be in two cars at once any more than
+// a car can be in two places.
+//
+// Also the moment the driver's pay is HELD. For a driver who has a login
+// (Driver.user_email), a DriverEarning row is written for the pay figure —
+// what admin typed, or the vehicle's driver cost for the booked duration.
+// The sweep releases it two hours after the booked end. A driver without a
+// login is assigned exactly as before and nothing is recorded.
+```
+
+- [ ] **Step 4: Add the two ledger helpers**
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+```
+
+replace with:
+
+```ts
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+// ── Driver earnings ledger ──────────────────────────────────────────────────
+// Bodies are plain JavaScript on purpose: scripts/check-driver-wallet.mjs
+// lifts these two off disk and runs them against an in-memory ledger.
+
+// Hold the new driver's pay. Returns the earning that now stands for this
+// driver on this ride, or null when there is nothing to hold. Safe to call
+// twice: a standing row is returned as it is, never duplicated or repriced.
+async function holdEarning(sr: any, ride: any, driverId: string, payout: any, endAtIso: string, nowIso: string) {
+    const ledger = await fetchAll(sr.DriverEarning, { ride_booking_id: ride.id });
+    const standing = ledger.find((e) => e.driver_id === driverId && e.status !== 'reversed');
+    if (standing) return standing;
+    if (!payout || !(payout.amount > 0)) return null;
+    await sr.DriverEarning.create({
+        driver_id: driverId,
+        ride_booking_id: ride.id,
+        booking_reference: ride.booking_reference || '',
+        vehicle_name: ride.vehicle_name || '',
+        service_date: ride.service_date,
+        end_at: endAtIso,
+        amount_ngn: payout.amount,
+        basis: payout.basis,
+        rate_ngn: payout.rate,
+        units: payout.units,
+        status: 'held',
+        on_hold: false,
+        release_at: releaseAtFor(endAtIso),
+        held_at: nowIso,
+    });
+    // Two admins assigning in the same second would both reach this line. The
+    // oldest held row for this driver and ride stands; any twin is reversed.
+    const twins = await fetchAll(sr.DriverEarning, { ride_booking_id: ride.id, driver_id: driverId, status: 'held' });
+    twins.sort((a, b) => String(a.created_date || '').localeCompare(String(b.created_date || ''))
+        || String(a.id).localeCompare(String(b.id)));
+    for (const extra of twins.slice(1)) {
+        await sr.DriverEarning.update(extra.id, {
+            status: 'reversed', reversed_at: nowIso, admin_notes: `Duplicate of ${twins[0].id}`,
+        });
+    }
+    return twins[0] || null;
+}
+
+// Reverse the pay still HELD on a ride for every driver except keepDriverId
+// (pass '' to reverse all of it). Released rows are never clawed back here;
+// they are totalled so the caller can tell admin. Lockstep copy in
+// cancelRideBooking.
+async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string, note: string, nowIso: string) {
+    const ledger = await fetchAll(sr.DriverEarning, { ride_booking_id: rideId });
+    const out = { reversed_ngn: 0, released_ngn: 0, driver_ids: [] };
+    for (const e of ledger) {
+        if (keepDriverId && e.driver_id === keepDriverId) continue;
+        const amount = Math.max(0, Math.round(Number(e.amount_ngn) || 0));
+        if (e.status === 'held') {
+            await sr.DriverEarning.update(e.id, {
+                status: 'reversed',
+                reversed_at: nowIso,
+                on_hold: false,
+                admin_notes: e.admin_notes ? `${e.admin_notes} | ${note}` : note,
+            });
+            out.reversed_ngn += amount;
+            if (!out.driver_ids.includes(e.driver_id)) out.driver_ids.push(e.driver_id);
+        } else if (e.status === 'released') {
+            out.released_ngn += amount;
+        }
+    }
+    return out;
+}
+```
+
+- [ ] **Step 5: Accept the pay figure in the request**
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+        const { ride_booking_id, driver_id, pickup_instructions } = await req.json().catch(() => ({}));
+```
+
+replace with:
+
+```ts
+        const { ride_booking_id, driver_id, pickup_instructions, driver_payout_ngn } = await req.json().catch(() => ({}));
+```
+
+- [ ] **Step 6: Resolve the pay and hold it before the ride is updated**
+
+The order matters and is the reason this is safe without transactions: hold the new driver's pay, then put them on the ride, then reverse the previous driver's pay (Step 7). If the function dies after any one of those, the release pass added in Task A05 finds an earning whose ride belongs to someone else and reverses it instead of paying it, and calling this function again reuses the row written here.
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+        const reassigning = !!ride.driver_id && ride.driver_id !== driver_id;
+        await base44.asServiceRole.entities.RideBooking.update(ride_booking_id, {
+            driver_id,
+            driver_assigned_at: new Date().toISOString(),
+```
+
+replace with:
+
+```ts
+        const sr = base44.asServiceRole.entities;
+        const reassigning = !!ride.driver_id && ride.driver_id !== driver_id;
+        const nowIso = new Date().toISOString();
+
+        // ── Driver pay ──────────────────────────────────────────────────
+        // Tracked only for a driver who has a login to see it with. ₦0 is a
+        // real answer ("paid inside the partner's rate") and holds nothing;
+        // no figure at all is refused so nobody drives for an unknown amount.
+        const linkedEmail = typeof driver.user_email === 'string' ? driver.user_email.trim().toLowerCase() : '';
+        let payout: any = null;
+        if (linkedEmail) {
+            const typed = parsePayoutOverride(driver_payout_ngn);
+            if (!typed.ok) {
+                return json({
+                    success: false,
+                    error: 'Driver pay must be a whole naira amount between 0 and 50,000,000.',
+                    code: 'INVALID_PAYOUT',
+                }, 400);
+            }
+            if (typed.value !== null) {
+                payout = { amount: typed.value, basis: 'manual', rate: typed.value, units: 1 };
+            } else {
+                const costings = await sr.VehicleCosting.filter({ vehicle_id: ride.vehicle_id });
+                payout = driverPayoutFor(costings?.[0] || null, ride.duration_tier, ride.duration_hours, ride.duration_days);
+                if (!payout) {
+                    return json({
+                        success: false,
+                        error: 'No driver cost is set for this vehicle. Enter the pay for this ride, or set it under Vehicles → Internal costing.',
+                        code: 'PAYOUT_REQUIRED',
+                    }, 409);
+                }
+            }
+        }
+
+        const earning = linkedEmail
+            ? await holdEarning(sr, ride, driver_id, payout, new Date(win.endMs).toISOString(), nowIso)
+            : null;
+
+        await sr.RideBooking.update(ride_booking_id, {
+            driver_id,
+            driver_assigned_at: nowIso,
+```
+
+- [ ] **Step 7: Reverse what the previous driver was holding**
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+                ? { pickup_instructions: pickup_instructions.trim() }
+                : {}),
+        });
+```
+
+replace with:
+
+```ts
+                ? { pickup_instructions: pickup_instructions.trim() }
+                : {}),
+        });
+
+        // Runs for every assignment, linked driver or not: handing a ride to
+        // someone else must always take it off the previous driver's ledger.
+        const others = await reverseHeldEarnings(sr, ride_booking_id, driver_id, `Reassigned to ${driver.full_name}`, nowIso);
+```
+
+- [ ] **Step 8: Tell both drivers, and report the pay in the response**
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+            tag: `ride-driver-${ride.id}`,
+        });
+
+        return json({
+            success: true,
+            data: { ride_booking_id, driver_id, driver_name: driver.full_name, reassigned: reassigning },
+        });
+```
+
+replace with:
+
+```ts
+            tag: `ride-driver-${ride.id}`,
+        });
+
+        // The driver hears about it too, now that they have somewhere to look.
+        const whenShort = new Date(win.startMs).toLocaleString('en-GB', {
+            timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short',
+        });
+        if (linkedEmail) {
+            await tryPush(base44, {
+                user_email: linkedEmail,
+                title: '🚗 New ride assigned',
+                body: earning && earning.status === 'held'
+                    ? `${ride.vehicle_name} on ${whenShort} · ₦${(Number(earning.amount_ngn) || 0).toLocaleString()} held until the trip ends`
+                    : `${ride.vehicle_name} on ${whenShort}. Tap for the pickup details.`,
+                url: `/DriverRides#ride-${ride.id}`,
+                tag: `driver-assigned-${ride.id}`,
+            });
+        }
+        if (reassigning) {
+            try {
+                const previous = await sr.Driver.get(ride.driver_id);
+                const previousEmail = typeof previous?.user_email === 'string' ? previous.user_email.trim().toLowerCase() : '';
+                if (previousEmail) {
+                    await tryPush(base44, {
+                        user_email: previousEmail,
+                        title: '🔄 Ride reassigned',
+                        body: `You are no longer driving the ${ride.vehicle_name} on ${whenShort}.`,
+                        url: '/DriverRides',
+                        tag: `driver-removed-${ride.id}`,
+                    });
+                }
+            } catch (err) {
+                console.warn('Previous driver push failed (non-fatal):', err);
+            }
+        }
+
+        return json({
+            success: true,
+            data: {
+                ride_booking_id,
+                driver_id,
+                driver_name: driver.full_name,
+                reassigned: reassigning,
+                // false means this driver has no login, so nothing was recorded.
+                pay_tracked: !!linkedEmail,
+                driver_payout_ngn: earning ? Number(earning.amount_ngn) || 0 : (payout ? payout.amount : null),
+                payout_basis: earning ? earning.basis || null : (payout ? payout.basis : null),
+                earning_id: earning ? earning.id : null,
+                // The previous driver's pay was already released and has NOT
+                // been taken back. Admin decides in Rides → Earnings.
+                previous_earning_released: others.released_ngn > 0,
+            },
+        });
+```
+
+- [ ] **Step 9: Run the checks**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, including every line under `— assignment ledger —`.
+
+Run: `node_modules/.bin/esbuild base44/functions/assignRideDriver/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+- [ ] **Step 10: Sandbox checklist (after the next publish; the handler cannot run locally)**
+
+1. Give a test driver a login email (Task A06 adds the field; until then set `user_email` on the Driver row in the Base44 data browser).
+2. Assign that driver to a paid test ride from Admin → Rides. Expected: toast "Driver assigned"; one `DriverEarning` row for the ride, `status: held`, `release_at` two hours after the ride's `end_at`.
+3. Assign a second linked driver to the same ride. Expected: the first row is `reversed` with `admin_notes` "Reassigned to <name>", a new `held` row exists for the second driver.
+4. Assign a driver with no login email to another paid ride. Expected: success, no `DriverEarning` row, response `pay_tracked: false`.
+5. On a vehicle with no costing row, assign a linked driver without typing a pay figure. Expected: refused with "No driver cost is set for this vehicle…".
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs base44/functions/assignRideDriver/entry.ts
+git commit -m "feat(rides): assignRideDriver holds the driver's pay in the earnings ledger" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
