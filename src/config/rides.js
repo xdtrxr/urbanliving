@@ -304,6 +304,22 @@ export const mayDeleteDriver = (earnings, withdrawals) => Array.isArray(earnings
   && earnings.length === 0
   && withdrawals.length === 0;
 
+// ── What a driver is told about a ride with no pay on record ────────────────
+// No earning row means the app is holding nothing for this ride: the driver
+// had no login when it was assigned, or the figure was ₦0. Before the ride
+// that is something to settle with the team first, so it is said plainly and
+// in the warning colour. It never says pay has been arranged: the app does
+// not know that.
+export function noPayLine(bucket) {
+  if (bucket === 'upcoming' || bucket === 'current') {
+    return { tone: 'warn', text: 'No pay is recorded in the app for this ride. Confirm it with the team before you set off.' };
+  }
+  if (bucket === 'past') {
+    return { tone: 'muted', text: 'No pay was recorded in the app for this ride. Ask the team if you were expecting some.' };
+  }
+  return { tone: 'muted', text: 'No pay is recorded in the app for this ride.' };
+}
+
 // ── Ride reports ────────────────────────────────────────────────────────────
 // MIRROR of the limits in base44/functions/createRideReport/entry.ts. The
 // server is the authority; these let the dialog stop a report it would refuse

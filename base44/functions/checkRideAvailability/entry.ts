@@ -50,6 +50,15 @@ function multiDaysOk(days: unknown) {
     return Number.isInteger(d) && d >= 1 && d <= MAX_MULTI_DAYS;
 }
 
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copy, see processWithdrawal.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
 // Admin blocked this account from rides when resolving a report against it
 // (resolveRideReport). Only the boolean true blocks.
 function isRideBlocked(account: any) {
@@ -359,8 +368,8 @@ Deno.serve(async (req) => {
         }
 
         // ── Vehicle must exist and be bookable ──────────────────────────
-        const vehicle = await base44.asServiceRole.entities.Vehicle.get(vehicle_id);
-        if (!vehicle) return json({ success: false, error: 'Vehicle not found' }, 404);
+        const vehicle = isId(vehicle_id) ? await base44.asServiceRole.entities.Vehicle.get(vehicle_id) : null;
+        if (!vehicle || vehicle.id !== vehicle_id) return json({ success: false, error: 'Vehicle not found' }, 404);
         if (vehicle.active === false || vehicle.admin_approved === false) {
             return json({ success: false, error: 'This vehicle is not currently available', code: 'VEHICLE_UNAVAILABLE' }, 409);
         }
@@ -442,8 +451,10 @@ Deno.serve(async (req) => {
         // payment clock drifting against the first.
         let isAddOn = false;
         if (linked_property_booking_id) {
-            const stay = await base44.asServiceRole.entities.Booking.get(linked_property_booking_id);
-            if (!stay || stay.guest_email !== user.email) {
+            const stay = isId(linked_property_booking_id)
+                ? await base44.asServiceRole.entities.Booking.get(linked_property_booking_id)
+                : null;
+            if (!stay || stay.id !== linked_property_booking_id || stay.guest_email !== user.email) {
                 return json({ success: false, error: 'Linked booking not found', code: 'STAY_NOT_FOUND' }, 404);
             }
             if (stay.status !== 'confirmed' || stay.payment_status !== 'paid') {
@@ -499,7 +510,13 @@ Deno.serve(async (req) => {
             payload.admin_response = 'Added to your existing stay — no approval needed.';
         }
 
-        const ride = await base44.entities.RideBooking.create(payload);
+        // Created under the service role, never as the guest. Every figure on
+        // this row was worked out above from the Vehicle and the clock. The
+        // access rule staged in docs/entity-rules-pending-publish stops a
+        // browser creating a ride row at all; once it is live, this line is
+        // the only way a ride comes to exist. Until then a row can still be
+        // made by hand with any status on it.
+        const ride = await base44.asServiceRole.entities.RideBooking.create(payload);
 
         if (isAddOn) {
             return json({

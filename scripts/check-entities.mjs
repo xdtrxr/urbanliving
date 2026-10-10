@@ -209,6 +209,43 @@ check('staged WithdrawalRequest: only the server may create a row', adminOnly(st
 check('staged WithdrawalRequest: reading is unchanged',
   JSON.stringify(stagedWithdrawal?.rls?.read) === JSON.stringify(entities.WithdrawalRequest?.rls?.read));
 
+const stagedRide = stagedFiles.includes('RideBooking.jsonc')
+  ? JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, 'RideBooking.jsonc'), 'utf8')))
+  : null;
+// Until this is live, a signed-in user can create a ride row by hand with any
+// status on it, including confirmed and paid. checkRideAvailability creates
+// under the service role, so the strict rule breaks nothing once published.
+check('staged RideBooking: only the server may create a row', adminOnly(stagedRide?.rls?.create));
+for (const op of ['read', 'update', 'delete']) {
+  check(`staged RideBooking: ${op} is unchanged`,
+    !!stagedRide && JSON.stringify(stagedRide.rls?.[op]) === JSON.stringify(entities.RideBooking?.rls?.[op]));
+}
+
+// A staged "only the server may create" rule is safe to apply only if nothing
+// creates that row as the signed-in user: no function (it must go through
+// asServiceRole) and nothing in the browser. This is the README's "Needs"
+// column, checked.
+const filesUnder = (dir, exts) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
+  const full = path.join(dir, d.name);
+  if (d.isDirectory()) return d.name === 'node_modules' ? [] : filesUnder(full, exts);
+  return exts.some((e) => d.name.endsWith(e)) ? [full] : [];
+});
+const functionFiles = filesUnder(path.join(ROOT, 'base44/functions'), ['.ts']);
+const browserFiles = filesUnder(path.join(ROOT, 'src'), ['.js', '.jsx']);
+const rel = (file) => path.relative(ROOT, file);
+for (const file of stagedFiles) {
+  const stem = file.replace(/\.jsonc$/, '');
+  const staged = JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, file), 'utf8')));
+  if (!adminOnly(staged.rls?.create)) continue;
+  const asCaller = new RegExp(`(?<!asServiceRole)\\.entities\\.${stem}\\.(create|bulkCreate)\\(`);
+  const inBrowser = new RegExp(`\\b${stem}\\.(create|bulkCreate)\\(`);
+  const offenders = [
+    ...functionFiles.filter((f) => asCaller.test(fs.readFileSync(f, 'utf8'))),
+    ...browserFiles.filter((f) => inBrowser.test(fs.readFileSync(f, 'utf8'))),
+  ].map(rel);
+  check(`nothing creates a ${stem} as the signed-in user`, offenders.length === 0, offenders.join(', '));
+}
+
 // ── Result ─────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -1,7 +1,7 @@
 # Entity rules waiting for the next Publish
 
-These three schema files are the **intended** access rules for Booking,
-LoyaltyTransaction and User. They are kept outside `base44/` entirely because a
+These schema files are the **intended** access rules for the entities in the
+table below. They are kept outside `base44/` entirely because a
 Base44 checkpoint applies whatever is in that folder to the live database
 within minutes to hours, while the client bundle and the functions only ship
 when someone presses **Publish** in the Base44 dashboard. On 2026-09-09 the
@@ -17,6 +17,12 @@ What each one tightens, and which shipped code makes it safe:
 | `LoyaltyTransaction.jsonc` | `create` admin-only | `awardPoints` function and the client that calls it (loyaltyService, Dashboard, Quests, AIChatConcierge) |
 | `User.jsonc` | field-level `write` admin-only on `loyalty_points` and `loyalty_tier` | same as above |
 | `WithdrawalRequest.jsonc` | `create` admin-only | `createWithdrawalRequest` from the driver wallet work (2026-10), which creates the row under the service role. Until this rule is live a signed-in user can create a pending withdrawal row by hand; driver-wallet rows are re-checked against the ledger by `processWithdrawal`, referral rows are not |
+
+| `RideBooking.jsonc` | `create` admin-only | `checkRideAvailability` from the review hardening (2026-10), which creates the row under the service role. Until this rule is live a signed-in user can create a ride row by hand with any status on it, including confirmed and paid: a free ride, and a job a driver would be paid for |
+
+`scripts/check-entities.mjs` checks the "Needs" column for every file here
+whose rule is `create` admin-only: it fails if any function creates that
+entity as the caller, or if the browser code creates one at all.
 
 `referral_balance_ngn` on User is already admin-write live; nothing in the
 old client writes it, so that one did not have to wait.
@@ -39,3 +45,7 @@ old client writes it, so that one did not have to wait.
 6. Smoke-test as a non-admin user: cancel an unpaid stay, upload an ID after
    a test payment, complete a social quest, and confirm
    `base44.auth.updateMe({ loyalty_points: 1 })` is refused from the console.
+   Then request a ride through the app (it must still work) and confirm that
+   `base44.entities.RideBooking.create({ ... })` and
+   `base44.entities.WithdrawalRequest.create({ ... })` are both refused from
+   the console.

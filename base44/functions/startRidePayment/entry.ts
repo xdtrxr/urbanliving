@@ -19,6 +19,32 @@ const HOUR_MS = 60 * 60 * 1000;
 const PAYMENT_WINDOW_MS = 1 * HOUR_MS;
 const APPROVAL_CAP_MS = 3 * HOUR_MS;
 
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copy, see processWithdrawal.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// Admin blocked this account from rides when resolving a report against it
+// (resolveRideReport). Only the boolean true blocks. Lockstep copy, see
+// checkRideAvailability.
+function isRideBlocked(account: any) {
+    return !!account && account.ride_blocked === true;
+}
+
+// Whether the account a ride was booked under is blocked from rides. Looks
+// only at an account that really has that address: a ride row with no guest
+// email must not match whichever account the lookup happened to return.
+// Lockstep copy, see assignRideDriver.
+function guestIsBlocked(accounts: any[], email: string) {
+    const wanted = String(email || '').trim().toLowerCase();
+    if (!wanted) return false;
+    return (accounts || []).some((a) => !!a && String(a.email || '').trim().toLowerCase() === wanted && isRideBlocked(a));
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -36,16 +62,30 @@ Deno.serve(async (req) => {
         const user = await base44.auth.me();
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
 
-        const { ride_booking_id } = await req.json().catch(() => ({}));
-        if (!ride_booking_id) return json({ success: false, error: 'ride_booking_id is required' }, 400);
+        const body = await req.json().catch(() => null);
+        const ride_booking_id = body?.ride_booking_id;
+        if (!isId(ride_booking_id)) return json({ success: false, error: 'ride_booking_id is required' }, 400);
 
         const ride = await base44.asServiceRole.entities.RideBooking.get(ride_booking_id);
-        if (!ride) return json({ success: false, error: 'Ride booking not found' }, 404);
+        if (!ride || ride.id !== ride_booking_id) return json({ success: false, error: 'Ride booking not found' }, 404);
         if (ride.guest_email !== user.email && user.role !== 'admin') {
             return json({ success: false, error: 'Not your booking' }, 403);
         }
         if (ride.payment_status === 'paid') {
             return json({ success: true, data: { already_paid: true, ride_booking_id } });
+        }
+        // Blocked since this ride was requested. Read fresh under the service
+        // role, not from the session, so a block takes effect at once. Admin
+        // opening the page on a guest's behalf is not stopped.
+        if (user.role !== 'admin') {
+            const accounts = await base44.asServiceRole.entities.User.filter({ email: user.email });
+            if (guestIsBlocked(accounts, user.email)) {
+                return json({
+                    success: false,
+                    error: 'Ride bookings are not available on this account. Please contact support.',
+                    code: 'RIDE_BLOCKED',
+                }, 403);
+            }
         }
         if (!ride.approved_at) {
             return json({ success: false, error: 'This ride has not been approved yet', code: 'NOT_APPROVED' }, 409);

@@ -1773,6 +1773,24 @@ const WHY = { reason: 'guest never showed' };
   check(`the sweep releases while the ride is reassigned, every order (${out.runs})`, `${out.problem}${out.schedule}`, '');
 }
 
+// ── Ride rows are written by the server ────────────────────────────────────
+console.log('\n— ride rows —');
+identical('isId', 'value', [PW, 'checkRideAvailability']);
+identical('isId', 'value', [PW, 'startRidePayment']);
+identical('isRideBlocked', 'account', ['checkRideAvailability', 'startRidePayment']);
+identical('guestIsBlocked', 'accounts, email', [AR, 'startRidePayment']);
+
+// What a driver is told about a ride with no pay on record. It is the only
+// warning they get that the app is not holding anything for them.
+check('before the ride: confirm with the team first', rides.noPayLine('upcoming').text.includes('before you set off'), true);
+check('…and it stands out', rides.noPayLine('upcoming').tone, 'warn');
+check('…the same while the ride is running', rides.noPayLine('current').tone, 'warn');
+check('after the ride: ask if some was expected', rides.noPayLine('past').text.includes('Ask the team'), true);
+check('…quietly', rides.noPayLine('past').tone, 'muted');
+check('a cancelled ride promises nothing either way', rides.noPayLine('cancelled').text, 'No pay is recorded in the app for this ride.');
+check('no sentence claims pay has been arranged',
+  ['upcoming', 'current', 'past', 'cancelled'].some((b) => /arranged/i.test(rides.noPayLine(b).text)), false);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

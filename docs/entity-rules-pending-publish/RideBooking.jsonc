@@ -1,0 +1,290 @@
+{
+  "name": "RideBooking",
+  "type": "object",
+  "description": "A booking for a Vehicle (chauffeur-driven hire). Mirrors the Booking entity's lifecycle so the Bookings page can show rides in the same Pending/Upcoming/Active/Completed/Cancelled tabs.",
+  "properties": {
+    "vehicle_id": {
+      "type": "string",
+      "description": "FK to Vehicle"
+    },
+    "vehicle_name": {
+      "type": "string",
+      "description": "Snapshotted at booking time so the row keeps a readable label even if the Vehicle row is later deleted"
+    },
+    "vehicle_image": {
+      "type": "string",
+      "description": "Snapshot of the primary vehicle image at booking time"
+    },
+    "guest_name": {
+      "type": "string"
+    },
+    "guest_email": {
+      "type": "string"
+    },
+    "guest_phone": {
+      "type": "string",
+      "description": "Required at booking time \u2014 admin uses this to coordinate pickup"
+    },
+    "service_date": {
+      "type": "string",
+      "format": "date",
+      "description": "The pickup date (YYYY-MM-DD). For multi-day bookings this is day 1."
+    },
+    "start_time": {
+      "type": "string",
+      "description": "Pickup time in HH:MM (24h)"
+    },
+    "booking_reference": {
+      "type": "string",
+      "description": "Human-quotable reference (UD-XXXXXX) generated at request time. For the guest to cite in messages and for admin to search on \u2014 the row id stays the actual key."
+    },
+    "duration_tier": {
+      "type": "string",
+      "enum": [
+        "hourly",
+        "12hr",
+        "24hr",
+        "multi_day",
+        "weekly",
+        "monthly"
+      ],
+      "description": "Which pricing tier was selected at checkout. '12hr' is presented to guests as 'Full day (12 hours)' \u2014 the value was deliberately not renamed, since renaming would orphan every existing row for the sake of a label."
+    },
+    "duration_hours": {
+      "type": "number",
+      "description": "For hourly bookings, how many hours (1-8). Ignored for every other tier."
+    },
+    "duration_days": {
+      "type": "number",
+      "description": "For multi_day bookings, the total number of days. Always 1 for hourly/12hr/24hr."
+    },
+    "start_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Computed pickup datetime, derived from service_date + start_time pinned to WAT (UTC+1). Stored rather than re-derived so overlap queries and bucketing are cheap and every consumer agrees on the same instant."
+    },
+    "end_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Computed end datetime in ISO format. start_at + the duration implied by duration_tier. Drives conflict detection."
+    },
+    "pickup_location": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "area": {
+          "type": "string",
+          "description": "Neighborhood / district (Maitama, Lekki, etc.)"
+        },
+        "city": {
+          "type": "string",
+          "description": "Always inherited from the vehicle, never entered by the guest, so pickup can't drift to a city the car isn't in. Not an enum \u2014 see Vehicle.city."
+        },
+        "coordinates": {
+          "type": "object",
+          "properties": {
+            "lat": {
+              "type": "number"
+            },
+            "lng": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "dropoff_location": {
+      "type": "object",
+      "description": "Optional. For known one-way trips. Otherwise the driver follows the guest's plan throughout the booking window.",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "area": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        }
+      }
+    },
+    "passengers": {
+      "type": "number",
+      "default": 1
+    },
+    "special_requests": {
+      "type": "string"
+    },
+    "estimated_price": {
+      "type": "number",
+      "description": "What the guest was quoted when they submitted the request, computed server-side from the Vehicle. Frozen \u2014 never rewritten. total_price may diverge from it once admin confirms, and the guest is shown both."
+    },
+    "total_price": {
+      "type": "number",
+      "description": "The NGN amount actually charged. Starts equal to estimated_price and is the only figure payment ever reads, so admin adjusting it at approval needs no change to the payment path."
+    },
+    "price_adjustment_reason": {
+      "type": "string",
+      "description": "Why total_price differs from estimated_price (airport surcharge, extra waiting time, fuel). Mandatory whenever admin changes the figure \u2014 a silent price rise between quote and payment must be impossible."
+    },
+    "extra_hour_rate_ngn": {
+      "type": "number",
+      "description": "The per-hour overage rate the guest agreed to when they requested, snapshotted from the Vehicle (like vehicle_name) so a later price edit on the car cannot change what this booking's extra time costs. Shown in the confirmation email and on the booking card; admin applies it when settling extra time after the trip."
+    },
+    "suggested_vehicle_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Set when admin rejects because the chosen vehicle is unavailable but similar cars in the same city are free. The guest sees these as alternatives instead of a dead end."
+    },
+    "pickup_instructions": {
+      "type": "string",
+      "description": "Free-text note from admin for the pickup itself ('driver waits at the Zone 4 gate, call on arrival'). Written at driver assignment and shown alongside the driver's contact details."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "confirmed",
+        "completed",
+        "cancelled"
+      ],
+      "default": "pending"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "unpaid",
+        "paid",
+        "refunded"
+      ],
+      "default": "unpaid"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When admin approved the request \u2014 same role as Booking.approved_at. Also the decision idempotency guard: a row with approved_at set has already been decided."
+    },
+    "admin_response": {
+      "type": "string",
+      "description": "Decision message shown to the guest. Lives here rather than on a separate request entity \u2014 Rides deliberately uses one row per request, unlike the apartment flow's AvailabilityRequest + Booking split."
+    },
+    "telegram_message_id": {
+      "type": "string",
+      "description": "Id of the admin Telegram message, so it can be edited in place when the decision is made."
+    },
+    "payment_deadline": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Auto-cancel timer \u2014 same role as Booking.payment_deadline"
+    },
+    "payment_started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Stamped server-side by startRidePayment on first open of the payment page. Never written by the client."
+    },
+    "paid_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When payment cleared. Revenue reporting keys off this."
+    },
+    "payment_method": {
+      "type": "string",
+      "enum": [
+        "paystack",
+        "other"
+      ],
+      "default": "paystack"
+    },
+    "cancel_reason": {
+      "type": "string",
+      "enum": [
+        "admin_rejected",
+        "payment_expired",
+        "user_cancelled",
+        "other"
+      ],
+      "description": "Why the booking ended. Matches the Booking enum so the UI can reuse the same status badge component."
+    },
+    "transaction_hash": {
+      "type": "string",
+      "description": "Paystack transaction reference for idempotency"
+    },
+    "driver_id": {
+      "type": "string",
+      "description": "FK to Driver. Assigned by admin when confirming the booking \u2014 null until then. RLS hides this field from guests until the booking is confirmed AND paid."
+    },
+    "driver_assigned_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When admin assigned a driver. Used by the UI to know when to surface the driver contact card."
+    },
+    "payment_warning_pushed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Idempotency stamp for the 5-minute payment warning push, so a re-run of the sweep cannot double-notify."
+    },
+    "driver_arrival_push_sent_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Idempotency stamp for the driver-arriving-soon push (~30 min before start_at)."
+    },
+    "linked_property_booking_id": {
+      "type": "string",
+      "description": "Optional FK to a Booking row when the ride was added from an existing property stay (Phase 3 hook)"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the ride was marked completed. Set by the sweep once the booked window is over, or by admin through completeRide."
+    },
+    "completed_by": {
+      "type": "string",
+      "enum": [
+        "system",
+        "admin"
+      ],
+      "description": "Who completed it. The driver's pay is deliberately NOT stored on this row: a guest can read their own RideBooking, and the pay lives on DriverEarning."
+    }
+  },
+  "required": [
+    "vehicle_id",
+    "guest_email",
+    "guest_phone",
+    "service_date",
+    "start_time",
+    "duration_tier"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "data.guest_email": "{{user.email}}"
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

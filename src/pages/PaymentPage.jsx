@@ -10,6 +10,7 @@ import { Lock, ShieldCheck, CreditCard, Loader2, CheckCircle, AlertTriangle, Arr
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
+import { invokeFn } from '@/lib/invokeFn';
 import { awardBookingMilestones } from '@/components/utils/loyaltyService';
 import IdUploadGate from '@/components/booking/IdUploadGate';
 
@@ -160,15 +161,21 @@ export default function PaymentPage() {
       // deadline and returns the price. Nothing about a ride's payment window
       // is client-writable, unlike the stay path below.
       if (isRide) {
-        const startRes = await base44.functions.invoke('startRidePayment', {
-          ride_booking_id: rideBookingId,
-        });
-        if (!startRes?.data?.success) {
-          setError(startRes?.data?.error || 'This ride is not ready for payment.');
+        // invokeFn never throws, so a refusal arrives as the server's own
+        // sentence ("The payment window for this ride has closed.") instead
+        // of falling into the catch below as a generic failure.
+        const start = await invokeFn('startRidePayment', { ride_booking_id: rideBookingId });
+        if (!start.ok) {
+          setError(start.error || 'This ride is not ready for payment.');
           setIsPageLoading(false);
           return;
         }
-        const r = startRes.data.data;
+        const r = start.data || {};
+        if (r.already_paid) {
+          setError('This ride has already been paid for.');
+          setIsPageLoading(false);
+          return;
+        }
         setBookingData({
           id: rideBookingId,
           total_price: Number(r.total_price) || 0,

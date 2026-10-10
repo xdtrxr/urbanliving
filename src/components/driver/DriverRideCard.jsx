@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Car, CalendarClock, MapPin, Users, Phone, UserRound, Banknote, Flag, MessageSquare } from 'lucide-react';
-import { durationLabel } from '@/config/rides';
+import { durationLabel, noPayLine } from '@/config/rides';
 
 // DriverRideCard — one ride as the driver needs to see it: when, where, who,
 // and what it pays.
@@ -37,9 +37,10 @@ const PAY_TONE = {
 };
 
 // The one sentence about money. A ride with no earning row predates pay
-// tracking or was assigned at ₦0; either way the driver is told who to ask.
-export function payLine(earning) {
-  if (!earning) return { tone: 'muted', text: 'Pay for this ride is arranged with the team.' };
+// tracking or was assigned at ₦0; either way the driver is told the app is
+// holding nothing for it, and before the ride, to confirm with the team.
+export function payLine(earning, bucket) {
+  if (!earning) return noPayLine(bucket);
   const amount = ngn(earning.amount_ngn);
   if (earning.status === 'released') return { tone: 'good', text: `${amount} released to your wallet` };
   if (earning.status === 'reversed') return { tone: 'muted', text: `${amount} reversed. This ride no longer pays.` };
@@ -52,7 +53,7 @@ export default function DriverRideCard({ ride, onReport }) {
   const pickup = [ride.pickup_location?.address, ride.pickup_location?.area, ride.pickup_location?.city]
     .filter(Boolean).join(', ');
   const dropoff = [ride.dropoff_location?.address, ride.dropoff_location?.area].filter(Boolean).join(', ');
-  const pay = payLine(ride.earning);
+  const pay = payLine(ride.earning, ride.bucket);
   const cancelled = ride.bucket === 'cancelled';
 
   return (
