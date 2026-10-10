@@ -8,6 +8,8 @@ import { createPageUrl } from '@/utils';
 import { useDriverProfile } from '@/lib/useDriverProfile';
 import DriverNotice from '@/components/driver/DriverNotice';
 import DriverRideCard from '@/components/driver/DriverRideCard';
+import RideReportDialog from '@/components/rides/RideReportDialog';
+import { useToast } from '@/components/ui/use-toast';
 
 // DriverRides — the driver's jobs: what is on now, what is coming, what is done.
 //
@@ -28,6 +30,16 @@ export default function DriverRidesPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [reporting, setReporting] = useState(null); // the ride being reported
+  const { toast } = useToast();
+
+  const onReported = (outcome) => {
+    setReporting(null);
+    toast(outcome === 'already'
+      ? { title: 'Already reported', description: 'You have already reported this ride. The team has it.' }
+      : { title: 'Report sent', description: 'The team will look into it. Your pay for this ride is not affected.' });
+    load(true);
+  };
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
@@ -151,7 +163,7 @@ export default function DriverRidesPage() {
                     {group.label} ({items.length})
                   </h2>
                   <div className="space-y-3">
-                    {items.map((ride) => <DriverRideCard key={ride.id} ride={ride} />)}
+                    {items.map((ride) => <DriverRideCard key={ride.id} ride={ride} onReport={setReporting} />)}
                   </div>
                 </section>
               );
@@ -169,7 +181,7 @@ export default function DriverRidesPage() {
                 </button>
                 {showHistory && (
                   <div className="space-y-3">
-                    {history.map((ride) => <DriverRideCard key={ride.id} ride={ride} />)}
+                    {history.map((ride) => <DriverRideCard key={ride.id} ride={ride} onReport={setReporting} />)}
                   </div>
                 )}
               </section>
@@ -177,6 +189,11 @@ export default function DriverRidesPage() {
           </div>
         )}
       </div>
+
+      <RideReportDialog
+        open={!!reporting} ride={reporting} role="driver"
+        onClose={() => setReporting(null)} onSubmitted={onReported}
+      />
     </div>
   );
 }

@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as rides from '../src/config/rides.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = (name) => path.join(ROOT, 'base44/functions', name, 'entry.ts');
@@ -325,6 +326,13 @@ const ledgerView = make('ledgerView', liftSrc('getDriverWallet', 'ledgerView', '
 check('a held ledger row on a ride under review says so', ledgerView({ id: 'e1', status: 'held' }, true).under_review, true);
 check('a held row with no report does not', ledgerView({ id: 'e1', status: 'held' }, false).under_review, false);
 check('a released row never does', ledgerView({ id: 'e1', status: 'released' }, true).under_review, false);
+
+// ── The dialog's limits are the server's ───────────────────────────────────
+console.log('\n— client limits —');
+same('the dialog offers exactly the categories the server accepts', rides.REPORT_CATEGORIES, make('CATEGORIES', LIMITS));
+check('shortest description', rides.REPORT_LIMITS?.minDescription, make('MIN_DESCRIPTION', LIMITS));
+check('longest description', rides.REPORT_LIMITS?.maxDescription, make('MAX_DESCRIPTION', LIMITS));
+check('most photos', rides.REPORT_LIMITS?.maxPhotos, make('MAX_EVIDENCE', LIMITS));
 
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

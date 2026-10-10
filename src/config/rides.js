@@ -270,3 +270,11 @@ export function typedDriverPay(hasLogin, typed, computedAmount) {
   }
   return { ok: true, value };
 }
+
+// ── Ride reports ────────────────────────────────────────────────────────────
+// MIRROR of the limits in base44/functions/createRideReport/entry.ts. The
+// server is the authority; these let the dialog stop a report it would refuse
+// before the reporter has typed it twice. scripts/check-ride-reports.mjs
+// compares them with the shipped constants.
+export const REPORT_CATEGORIES = ['rude', 'abusive', 'threatening', 'unsafe', 'no_show', 'damage', 'other'];
+export const REPORT_LIMITS = { minDescription: 10, maxDescription: 2000, maxPhotos: 3 };

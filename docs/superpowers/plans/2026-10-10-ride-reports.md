@@ -1899,3 +1899,622 @@ git add scripts/check-ride-reports.mjs scripts/check-driver-wallet.mjs base44/fu
 git commit -m "feat(rides): a guest's open complaint holds the driver's pay; ride lists know what can be reported" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task B06: The report dialog, on the driver's ride card and the guest's driver card
+
+**Files:**
+- Modify: `scripts/check-ride-reports.mjs` (client limits section, above `// ---- result ----`)
+- Modify: `src/config/rides.js` (two constants, appended)
+- Create: `src/components/rides/RideReportDialog.jsx`
+- Modify: `src/pages/DriverRides.jsx` (open the dialog from a ride card)
+- Modify: `src/components/booking/RideBookingsSection.jsx` (a report link on the guest's driver card)
+
+**Interfaces:**
+- Consumes: `createRideReport` and its refusal codes (Task B02); `ride.can_report`, `ride.already_reported` from `getDriverRides` and from `getRideBookings` (Task B05); `DriverRideCard`'s `onReport` prop (wallet plan, Task A07); `invokeFn`, `fromThrown` (wallet plan, Task A10); `UploadFile` from `@/api/integrations`.
+- Produces: `REPORT_CATEGORIES` and `REPORT_LIMITS` in `src/config/rides.js`; default export `RideReportDialog` with props `{ open, ride, role, onClose, onSubmitted }`, where `role` is `'driver'` or `'guest'` and `onSubmitted(outcome)` receives `'sent'` or `'already'`.
+
+- [ ] **Step 1: Write the failing check**
+
+The dialog stops a report the server would refuse, so its limits must be the server's.
+
+**Edit `scripts/check-ride-reports.mjs`** — find:
+
+```js
+import { fileURLToPath } from 'node:url';
+```
+
+replace with:
+
+```js
+import { fileURLToPath } from 'node:url';
+import * as rides from '../src/config/rides.js';
+```
+
+**Edit `scripts/check-ride-reports.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── The dialog's limits are the server's ───────────────────────────────────
+console.log('\n— client limits —');
+same('the dialog offers exactly the categories the server accepts', rides.REPORT_CATEGORIES, make('CATEGORIES', LIMITS));
+check('shortest description', rides.REPORT_LIMITS?.minDescription, make('MIN_DESCRIPTION', LIMITS));
+check('longest description', rides.REPORT_LIMITS?.maxDescription, make('MAX_DESCRIPTION', LIMITS));
+check('most photos', rides.REPORT_LIMITS?.maxPhotos, make('MAX_EVIDENCE', LIMITS));
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-ride-reports.mjs`
+
+Expected: ` FAIL  the dialog offers exactly the categories the server accepts  got=undefined …` and three more failures.
+
+- [ ] **Step 3: Add the limits**
+
+**Edit `src/config/rides.js`** — find:
+
+```js
+  if (value > MAX_PAYOUT_NGN) {
+    return { ok: false, message: `Driver pay cannot be more than ₦${MAX_PAYOUT_NGN.toLocaleString()}.` };
+  }
+  return { ok: true, value };
+}
+```
+
+replace with:
+
+```js
+  if (value > MAX_PAYOUT_NGN) {
+    return { ok: false, message: `Driver pay cannot be more than ₦${MAX_PAYOUT_NGN.toLocaleString()}.` };
+  }
+  return { ok: true, value };
+}
+
+// ── Ride reports ────────────────────────────────────────────────────────────
+// MIRROR of the limits in base44/functions/createRideReport/entry.ts. The
+// server is the authority; these let the dialog stop a report it would refuse
+// before the reporter has typed it twice. scripts/check-ride-reports.mjs
+// compares them with the shipped constants.
+export const REPORT_CATEGORIES = ['rude', 'abusive', 'threatening', 'unsafe', 'no_show', 'damage', 'other'];
+export const REPORT_LIMITS = { minDescription: 10, maxDescription: 2000, maxPhotos: 3 };
+```
+
+- [ ] **Step 4: Run the check and watch it pass**
+
+Run: `node scripts/check-ride-reports.mjs`
+
+Expected: `PASS`, including the four lines under `— client limits —`.
+
+- [ ] **Step 5: Create the dialog**
+
+**Create `src/components/rides/RideReportDialog.jsx`:**
+
+```jsx
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, ImagePlus, X, AlertCircle, Flag } from 'lucide-react';
+import { UploadFile } from '@/api/integrations';
+import { invokeFn } from '@/lib/invokeFn';
+import { fromThrown } from '@/lib/fnResult';
+import { REPORT_CATEGORIES, REPORT_LIMITS } from '@/config/rides';
+
+// RideReportDialog — one party to a ride tells the team about a problem with
+// the other. The same form serves both sides; only the wording changes.
+//
+// The server decides everything that matters (who may report, when, how
+// often): see createRideReport. This form only collects the three things it
+// asks for and shows the server's own sentence if it says no.
+
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+// The words on each chip. The values are the server's; a category this map
+// has no words for still shows, as its value, rather than disappearing.
+const CATEGORY_WORDS = {
+  driver: {
+    rude: 'Rude', abusive: 'Abusive', threatening: 'Threatening', unsafe: 'Unsafe behaviour',
+    no_show: 'Did not show up', damage: 'Damaged the car', other: 'Something else',
+  },
+  guest: {
+    rude: 'Rude', abusive: 'Abusive', threatening: 'Threatening', unsafe: 'Unsafe driving',
+    no_show: 'Driver did not show up', damage: 'Damage or loss', other: 'Something else',
+  },
+};
+
+const COPY = {
+  driver: {
+    title: 'Report this customer',
+    intro: 'Tell us what happened. Only the UrbanStays team sees this, and reporting never affects your pay for the ride.',
+    placeholder: 'What did the customer do or say? When, and where?',
+  },
+  guest: {
+    title: 'Report a problem with this driver',
+    intro: 'Tell us what happened. Only the UrbanStays team sees this.',
+    placeholder: 'What happened on the ride? When, and where?',
+  },
+};
+
+export default function RideReportDialog({ open, ride, role, onClose, onSubmitted }) {
+  const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
+  const [photos, setPhotos] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const fileRef = useRef(null);
+
+  // A clean form each time it opens, whichever ride it opens for.
+  const rideId = ride?.id;
+  useEffect(() => {
+    if (!open) return;
+    setCategory('');
+    setDescription('');
+    setPhotos([]);
+    setError(null);
+  }, [open, rideId]);
+
+  const side = role === 'driver' ? 'driver' : 'guest';
+  const copy = COPY[side];
+  const text = description.trim();
+  const tooShort = text.length < REPORT_LIMITS.minDescription;
+  const busy = uploading || submitting;
+  const canSubmit = !!category && !tooShort && text.length <= REPORT_LIMITS.maxDescription && !busy;
+
+  const pickPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Photos only. Choose a JPG or PNG.');
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setError('That photo is over 10 MB. Choose a smaller one.');
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      const { file_url } = await UploadFile({ file });
+      if (!file_url) throw new Error('The upload did not return a link.');
+      setPhotos((list) => (list.includes(file_url) ? list : [...list, file_url]).slice(0, REPORT_LIMITS.maxPhotos));
+    } catch (err) {
+      // Show the platform's own reason: an exhausted upload quota will not
+      // succeed on a retry, and "please try again" would be a lie.
+      setError(`The photo could not be uploaded: ${fromThrown(err).error}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submit = async () => {
+    if (!canSubmit || !ride) return;
+    setSubmitting(true);
+    setError(null);
+    const r = await invokeFn('createRideReport', {
+      ride_booking_id: ride.id,
+      category,
+      description: text,
+      evidence_urls: photos,
+    });
+    setSubmitting(false);
+    if (r.ok) {
+      onSubmitted?.('sent');
+    } else if (r.code === 'ALREADY_REPORTED') {
+      onSubmitted?.('already');
+    } else {
+      setError(r.error);
+    }
+  };
+
+  return (
+    <Dialog open={!!open} onOpenChange={(o) => { if (!o && !busy) onClose?.(); }}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Flag className="w-4 h-4 text-red-600 dark:text-red-400" />
+            {copy.title}
+          </DialogTitle>
+          <DialogDescription>
+            {[ride?.vehicle_name, ride?.booking_reference].filter(Boolean).join(' · ')}
+          </DialogDescription>
+        </DialogHeader>
+
+        <p className="text-sm text-slate-600 dark:text-slate-300">{copy.intro}</p>
+
+        <div>
+          <Label>What kind of problem was it?</Label>
+          <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="What kind of problem was it?">
+            {REPORT_CATEGORIES.map((value) => {
+              const chosen = category === value;
+              return (
+                <button
+                  key={value} type="button" role="radio" aria-checked={chosen}
+                  onClick={() => setCategory(value)}
+                  className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-colors ${
+                    chosen
+                      ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
+                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'
+                  }`}
+                >
+                  {CATEGORY_WORDS[side][value] || value}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="rr-description">What happened?</Label>
+          <Textarea
+            id="rr-description" rows={5} value={description} maxLength={REPORT_LIMITS.maxDescription}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={copy.placeholder} className="mt-1 rounded-xl"
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            {tooShort
+              ? `At least ${REPORT_LIMITS.minDescription} characters.`
+              : `${text.length} of ${REPORT_LIMITS.maxDescription} characters.`}
+          </p>
+        </div>
+
+        <div>
+          <Label>Photos, if you have any</Label>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {photos.map((url) => (
+              <div key={url} className="relative">
+                <img src={url} alt="" className="w-16 h-16 rounded-lg object-cover border border-slate-200 dark:border-slate-800" />
+                <button
+                  type="button" aria-label="Remove photo"
+                  onClick={() => setPhotos((list) => list.filter((u) => u !== url))}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black/70 hover:bg-black text-white flex items-center justify-center"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            {photos.length < REPORT_LIMITS.maxPhotos && (
+              <>
+                <input ref={fileRef} type="file" accept="image/*" onChange={pickPhoto} className="hidden" id="rr-photo" />
+                <Button
+                  type="button" variant="outline" size="sm" disabled={busy}
+                  onClick={() => fileRef.current?.click()} className="rounded-xl"
+                >
+                  {uploading
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading…</>
+                    : <><ImagePlus className="w-4 h-4 mr-2" /> Add a photo</>}
+                </Button>
+              </>
+            )}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Up to {REPORT_LIMITS.maxPhotos} photos, 10 MB each.
+          </p>
+        </div>
+
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3" role="alert">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={() => onClose?.()} disabled={busy} className="rounded-xl">
+            Cancel
+          </Button>
+          <Button
+            onClick={submit} disabled={!canSubmit}
+            className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+          >
+            {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+            Send report
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+- [ ] **Step 6: Open it from the driver's ride card**
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+import DriverRideCard from '@/components/driver/DriverRideCard';
+```
+
+replace with:
+
+```jsx
+import DriverRideCard from '@/components/driver/DriverRideCard';
+import RideReportDialog from '@/components/rides/RideReportDialog';
+import { useToast } from '@/components/ui/use-toast';
+```
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+  const [showHistory, setShowHistory] = useState(false);
+```
+
+replace with:
+
+```jsx
+  const [showHistory, setShowHistory] = useState(false);
+  const [reporting, setReporting] = useState(null); // the ride being reported
+  const { toast } = useToast();
+
+  const onReported = (outcome) => {
+    setReporting(null);
+    toast(outcome === 'already'
+      ? { title: 'Already reported', description: 'You have already reported this ride. The team has it.' }
+      : { title: 'Report sent', description: 'The team will look into it. Your pay for this ride is not affected.' });
+    load(true);
+  };
+```
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+                    {items.map((ride) => <DriverRideCard key={ride.id} ride={ride} />)}
+```
+
+replace with:
+
+```jsx
+                    {items.map((ride) => <DriverRideCard key={ride.id} ride={ride} onReport={setReporting} />)}
+```
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+                    {history.map((ride) => <DriverRideCard key={ride.id} ride={ride} />)}
+```
+
+replace with:
+
+```jsx
+                    {history.map((ride) => <DriverRideCard key={ride.id} ride={ride} onReport={setReporting} />)}
+```
+
+`load` is declared after these lines in the file but before anything calls `onReported`, so the reference is safe. The dialog goes at the end of the page:
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+              </section>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+replace with:
+
+```jsx
+              </section>
+            )}
+          </div>
+        )}
+      </div>
+
+      <RideReportDialog
+        open={!!reporting} ride={reporting} role="driver"
+        onClose={() => setReporting(null)} onSubmitted={onReported}
+      />
+    </div>
+  );
+}
+```
+
+- [ ] **Step 7: Offer it on the guest's driver card**
+
+`DriverCard` only knew the ride's id. It now receives the ride and a callback, and shows a quiet link under the driver's details.
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+  CreditCard, Phone, UserRound,
+} from 'lucide-react';
+```
+
+replace with:
+
+```jsx
+  CreditCard, Phone, UserRound, Flag,
+} from 'lucide-react';
+import RideReportDialog from '@/components/rides/RideReportDialog';
+```
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+const DriverCard = React.memo(function DriverCard({ rideId }) {
+```
+
+replace with:
+
+```jsx
+const DriverCard = React.memo(function DriverCard({ rideId, canReport, alreadyReported, onReport }) {
+```
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+          <span className="text-xs text-emerald-900 dark:text-emerald-100">
+            {driver.pickup_instructions}
+          </span>
+        </div>
+      )}
+```
+
+replace with:
+
+```jsx
+          <span className="text-xs text-emerald-900 dark:text-emerald-100">
+            {driver.pickup_instructions}
+          </span>
+        </div>
+      )}
+
+      {/* getRideBookings decides whether this is offered: a paid ride with a
+          driver, from its start until a week after it ends, not yet reported. */}
+      {alreadyReported ? (
+        <p className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-900 text-xs text-emerald-900 dark:text-emerald-100">
+          You reported a problem with this ride. The team has it.
+        </p>
+      ) : canReport && onReport ? (
+        <div className="mt-3 pt-3 border-t border-emerald-200 dark:border-emerald-900">
+          <button
+            type="button" onClick={onReport}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-red-700 dark:text-red-300 hover:underline py-1"
+          >
+            <Flag className="w-3.5 h-3.5" /> Report a problem with this driver
+          </button>
+        </div>
+      ) : null}
+```
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling }) {
+```
+
+replace with:
+
+```jsx
+const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling, onReport }) {
+```
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+            <DriverCard rideId={ride.id} />
+```
+
+replace with:
+
+```jsx
+            <DriverCard
+              rideId={ride.id}
+              canReport={!!ride.can_report}
+              alreadyReported={!!ride.already_reported}
+              onReport={onReport ? () => onReport(ride) : undefined}
+            />
+```
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+  const [cancellingId, setCancellingId] = useState(null);
+```
+
+replace with:
+
+```jsx
+  const [cancellingId, setCancellingId] = useState(null);
+  const [reporting, setReporting] = useState(null); // the ride being reported
+```
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+                  cancelling={cancellingId === r.id}
+                  onCancel={setConfirmCancel}
+                />
+```
+
+replace with:
+
+```jsx
+                  cancelling={cancellingId === r.id}
+                  onCancel={setConfirmCancel}
+                  onReport={setReporting}
+                />
+```
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+                  <RideCard key={r.id} ride={r} cancelling={false} onCancel={setConfirmCancel} />
+```
+
+replace with:
+
+```jsx
+                  <RideCard key={r.id} ride={r} cancelling={false} onCancel={setConfirmCancel} onReport={setReporting} />
+```
+
+**Edit `src/components/booking/RideBookingsSection.jsx`** — find:
+
+```jsx
+            <AlertDialogAction onClick={doCancel} className="bg-red-600 hover:bg-red-700 text-white">
+              Yes, cancel
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+```
+
+replace with:
+
+```jsx
+            <AlertDialogAction onClick={doCancel} className="bg-red-600 hover:bg-red-700 text-white">
+              Yes, cancel
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <RideReportDialog
+        open={!!reporting} ride={reporting} role="guest"
+        onClose={() => setReporting(null)}
+        onSubmitted={(outcome) => {
+          setReporting(null);
+          toast(outcome === 'already'
+            ? { title: 'Already reported', description: 'You have already reported this ride. The team has it.' }
+            : { title: 'Report sent', description: 'Thank you. The team will look into it.' });
+          load(true);
+        }}
+      />
+```
+
+- [ ] **Step 8: Lint and build**
+
+Run: `npm run lint`
+
+Expected: no output, exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`.
+
+- [ ] **Step 9: Look at it (sandbox, after the next publish)**
+
+1. As a driver on a ride in progress: the card shows "Report this customer". Pick a category, type nine characters. Expected: Send report is disabled and the hint reads "At least 10 characters." Finish the description, add a photo, send. Expected: "Report sent"; the card now reads "You reported this ride. The team will be in touch."
+2. As the guest of a ride that has started: the driver card shows "Report a problem with this driver". Send one. Expected: "Report sent"; the link is replaced by "You reported a problem with this ride."
+3. On a ride that has not started, or ended more than a week ago: neither side sees the button.
+4. Both dialogs in dark mode at 375 wide: chips wrap, the selected chip is white with dark text, the error box is readable, nothing scrolls sideways.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add scripts/check-ride-reports.mjs src/config/rides.js src/components/rides/RideReportDialog.jsx src/pages/DriverRides.jsx src/components/booking/RideBookingsSection.jsx
+git commit -m "feat(rides): report dialog for drivers and guests" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
