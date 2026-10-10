@@ -234,6 +234,16 @@ check('a dismissed report elsewhere does not keep the block', guestBlockAfter([o
 check('this report\'s own stale row is ignored', guestBlockAfter([{ ...openReport, status: 'resolved', action_taken: 'blocked' }], 'r1', 'warning'), false);
 check('no reports at all: not blocked', guestBlockAfter(undefined, 'r1', 'none'), false);
 
+// ── Blocked accounts ───────────────────────────────────────────────────────
+console.log('\n— blocked accounts —');
+const isRideBlocked = make('isRideBlocked', liftSrc('checkRideAvailability', 'isRideBlocked', 'account'));
+check('an account admin blocked is refused', isRideBlocked({ ride_blocked: true }), true);
+check('an ordinary account is not', isRideBlocked({ ride_blocked: false }), false);
+check('an account from before the flag existed is not', isRideBlocked({ email: 'ada@example.com' }), false);
+// Only the boolean true blocks. A string that happens to be truthy must not.
+check('the string "false" does not block', isRideBlocked({ ride_blocked: 'false' }), false);
+check('a missing account row does not block', isRideBlocked(undefined), false);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

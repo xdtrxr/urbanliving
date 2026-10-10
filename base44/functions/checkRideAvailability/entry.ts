@@ -50,6 +50,12 @@ function multiDaysOk(days: unknown) {
     return Number.isInteger(d) && d >= 1 && d <= MAX_MULTI_DAYS;
 }
 
+// Admin blocked this account from rides when resolving a report against it
+// (resolveRideReport). Only the boolean true blocks.
+function isRideBlocked(account: any) {
+    return !!account && account.ride_blocked === true;
+}
+
 // Turnaround was a flat 2h constant until hourly hire landed. Two hours of
 // clearance either side of a one-hour booking would cap a car at roughly three
 // hires a day, so it is now per-vehicle and defaults to one hour.
@@ -286,6 +292,17 @@ Deno.serve(async (req) => {
         const base44 = createClientFromRequest(req);
         const user = await base44.auth.me();
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+
+        // Read the account fresh under the service role rather than trusting
+        // the copy on the session: a block must take effect at once.
+        const accounts = await base44.asServiceRole.entities.User.filter({ email: user.email });
+        if (isRideBlocked(accounts?.[0])) {
+            return json({
+                success: false,
+                error: 'Ride bookings are not available on this account. Please contact support.',
+                code: 'RIDE_BLOCKED',
+            }, 403);
+        }
 
         const body = await req.json().catch(() => ({}));
         const {
