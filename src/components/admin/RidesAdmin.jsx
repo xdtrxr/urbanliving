@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DriversAdmin from '@/components/admin/DriversAdmin';
+import DriverEarningsAdmin from '@/components/admin/DriverEarningsAdmin';
 
 // RidesAdmin — the in-app twin of the Telegram approve/reject keyboard.
 //
@@ -834,12 +835,15 @@ export default function RidesAdmin() {
 
   return (
     <Tabs value={innerTab} onValueChange={setInnerTab} className="space-y-4">
-      <TabsList className="grid w-full grid-cols-2 max-w-md">
+      <TabsList className="grid w-full grid-cols-3 max-w-xl">
         <TabsTrigger value="requests">
-          <Inbox className="w-4 h-4 mr-2" /> Requests
+          <Inbox className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Requests</span>
         </TabsTrigger>
         <TabsTrigger value="drivers">
-          <IdCard className="w-4 h-4 mr-2" /> Drivers
+          <IdCard className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Drivers</span>
+        </TabsTrigger>
+        <TabsTrigger value="earnings">
+          <Banknote className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Earnings</span>
         </TabsTrigger>
       </TabsList>
 
@@ -849,6 +853,10 @@ export default function RidesAdmin() {
 
       <TabsContent value="drivers">
         <DriversAdmin />
+      </TabsContent>
+
+      <TabsContent value="earnings">
+        <DriverEarningsAdmin />
       </TabsContent>
     </Tabs>
   );

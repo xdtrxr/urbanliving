@@ -6483,3 +6483,762 @@ git add scripts/check-driver-wallet.mjs src/config/rides.js src/components/admin
 git commit -m "feat(rides): set the driver's pay when assigning, and mark a ride completed" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A13: The Earnings tab for admin
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (per-driver summaries section, above `// ---- result ----`)
+- Create: `base44/functions/getDriverEarningsAdmin/entry.ts`
+- Create: `src/components/admin/DriverEarningsAdmin.jsx`
+- Modify: `src/components/admin/RidesAdmin.jsx` (third inner tab)
+
+**Interfaces:**
+- Consumes: `driverEmails`, `driverWithdrawals`, `walletTotals` (Task A08, copied); `settleDriverEarning` (Task A11); `invokeFn` (Task A10).
+- Produces: function `getDriverEarningsAdmin` — admin only; body `{}`; answers `data: { earnings: Array<DriverEarning & { driver_name }>, earnings_truncated: boolean, drivers: Summary[], totals: { held, available, shortfall } }` where `Summary` is `{ driver_id, full_name, has_login, held, available, paid_out, reserved, shortfall }`. Helper `driverWalletSummaries(drivers, earnings, withdrawals) → Summary[]`, which Task A14 copies.
+- Produces: default export `DriverEarningsAdmin`; `RidesAdmin` gains an `earnings` inner tab.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Per-driver summaries for admin ─────────────────────────────────────────
+console.log('\n— admin earnings summary —');
+const SUMMARY_HOME = 'getDriverEarningsAdmin';
+identical('driverEmails', 'driver', [WALLET_HOME, SUMMARY_HOME]);
+identical('driverWithdrawals', 'driver, rows', [WALLET_HOME, SUMMARY_HOME]);
+identical('walletTotals', 'earnings, withdrawals', [WALLET_HOME, SUMMARY_HOME]);
+const SUMMARY_SIG = 'drivers, earnings, withdrawals';
+const driverWalletSummaries = make('driverWalletSummaries',
+  liftSrc(SUMMARY_HOME, 'driverEmails', 'driver'),
+  liftSrc(SUMMARY_HOME, 'driverWithdrawals', 'driver, rows'),
+  liftSrc(SUMMARY_HOME, 'walletTotals', 'earnings, withdrawals'),
+  liftSrc(SUMMARY_HOME, 'driverWalletSummaries', SUMMARY_SIG));
+{
+  const drivers = [
+    { id: 'drvA', full_name: 'Emeka', user_email: 'emeka@work.ng' },
+    { id: 'drvB', full_name: 'Ada', user_email: '' },
+    { id: 'drvC', full_name: 'Idle', user_email: 'idle@x.ng' },
+  ];
+  const earnings = [
+    { driver_id: 'drvA', status: 'held', amount_ngn: 15000 },
+    { driver_id: 'drvA', status: 'released', amount_ngn: 30000 },
+    { driver_id: 'drvB', status: 'reversed', amount_ngn: 10000 },
+    { driver_id: 'gone', status: 'held', amount_ngn: 99999 },
+  ];
+  const withdrawals = [
+    { wallet: 'driver', driver_id: 'drvA', user_email: 'emeka@work.ng', amount: 10000, status: 'completed' },
+    { wallet: 'driver', driver_id: 'drvA', user_email: 'mallory@evil.ng', amount: 20000, status: 'completed' },
+    { wallet: 'referral', driver_id: 'drvA', user_email: 'emeka@work.ng', amount: 5000, status: 'completed' },
+  ];
+  const out = driverWalletSummaries(drivers, earnings, withdrawals);
+  same('one line per driver who has pay on record, most owed first', out.map((s) => s.driver_id), ['drvA', 'drvB']);
+  same('the line is the driver wallet arithmetic', out[0],
+    { driver_id: 'drvA', full_name: 'Emeka', has_login: true, held: 15000, available: 20000, paid_out: 10000, reserved: 0, shortfall: 0 });
+  check('a driver with no login is marked', out[1].has_login, false);
+}
+{
+  // A driver who withdrew pay that was later reversed sorts to the top.
+  const drivers = [
+    { id: 'drvA', full_name: 'Emeka', user_email: 'emeka@work.ng' },
+    { id: 'drvB', full_name: 'Ada', user_email: 'ada@x.ng' },
+  ];
+  const out = driverWalletSummaries(drivers,
+    [{ driver_id: 'drvA', status: 'held', amount_ngn: 900000 }, { driver_id: 'drvB', status: 'reversed', amount_ngn: 10000 }],
+    [{ wallet: 'driver', driver_id: 'drvB', user_email: 'ada@x.ng', amount: 10000, status: 'completed' }]);
+  same('a shortfall sorts first, whatever else is owed', out.map((s) => `${s.driver_id}:${s.shortfall}`), ['drvB:10000', 'drvA:0']);
+}
+same('no drivers, no lines', driverWalletSummaries([], [], []), []);
+same('nothing at all, no lines', driverWalletSummaries(undefined, undefined, undefined), []);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error: ENOENT: no such file or directory, open '…/base44/functions/getDriverEarningsAdmin/entry.ts'`.
+
+- [ ] **Step 3: Create the function**
+
+**Create `base44/functions/getDriverEarningsAdmin/entry.ts`:**
+
+```ts
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+// getDriverEarningsAdmin
+// ----------------------------------------------------------------------------
+// Everything the admin Earnings tab shows: the pay ledger across all drivers,
+// and one summary line per driver (held, available, paid out, shortfall).
+//
+// The summaries are computed here rather than in the browser so that there is
+// no client copy of the wallet arithmetic to drift, and so the totals count
+// every row even when the list on screen is capped.
+
+const LIST_LIMIT = 500;
+
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+// ── Wallet arithmetic — lockstep copies, see getDriverWallet ────────────────
+
+// Every login this driver is, or was, linked to. Lower-cased, once each.
+function driverEmails(driver: any) {
+    const all = [driver && driver.user_email].concat((driver && driver.previous_user_emails) || []);
+    const out = [];
+    for (const raw of all) {
+        const email = String(raw || '').trim().toLowerCase();
+        if (email && !out.includes(email)) out.push(email);
+    }
+    return out;
+}
+
+// The withdrawal rows that count against this driver's balance: driver-wallet
+// rows carrying this driver's id AND made by a login that is, or was, linked
+// to this driver. The second condition is not decoration. Until the staged
+// rule that stops browsers creating WithdrawalRequest rows is live, any
+// signed-in user can create one for their own email with any driver_id on it;
+// the email is the one field the access rule pins to the creator.
+function driverWithdrawals(driver: any, rows: any[]) {
+    if (!driver) return [];
+    const emails = driverEmails(driver);
+    return (rows || []).filter((w) => !!w
+        && w.wallet === 'driver'
+        && w.driver_id === driver.id
+        && emails.includes(String(w.user_email || '').trim().toLowerCase()));
+}
+
+// The driver's position in whole naira. Pass withdrawals through
+// driverWithdrawals first. A failed or reversed transfer counts nowhere, so it
+// needs no refund. If pay is reversed after it was withdrawn, available stops
+// at zero and the difference is carried as shortfall until later pay covers it.
+function walletTotals(earnings: any[], withdrawals: any[]) {
+    const naira = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+    };
+    let held = 0;
+    let released = 0;
+    for (const e of earnings || []) {
+        if (!e) continue;
+        if (e.status === 'held') held += naira(e.amount_ngn);
+        else if (e.status === 'released') released += naira(e.amount_ngn);
+    }
+    let paidOut = 0;
+    let reserved = 0;
+    for (const w of withdrawals || []) {
+        if (!w) continue;
+        if (w.status === 'completed') paidOut += naira(w.amount);
+        else if (w.status === 'pending' || w.status === 'processing') reserved += naira(w.amount);
+    }
+    const net = released - paidOut - reserved;
+    return {
+        held,
+        released,
+        paid_out: paidOut,
+        reserved,
+        available: Math.max(0, net),
+        shortfall: Math.max(0, -net),
+    };
+}
+
+// One line per driver who has any pay or payout on record: the same numbers
+// that driver sees in their own wallet. A shortfall (pay reversed after it was
+// withdrawn) sorts first, because that is money to recover. Lockstep copy in
+// getDashboardStats.
+function driverWalletSummaries(drivers: any[], earnings: any[], withdrawals: any[]) {
+    const out = [];
+    for (const driver of drivers || []) {
+        if (!driver) continue;
+        const theirEarnings = (earnings || []).filter((e) => !!e && e.driver_id === driver.id);
+        const theirWithdrawals = driverWithdrawals(driver, withdrawals);
+        if (theirEarnings.length === 0 && theirWithdrawals.length === 0) continue;
+        const totals = walletTotals(theirEarnings, theirWithdrawals);
+        out.push({
+            driver_id: driver.id,
+            full_name: driver.full_name || 'Driver',
+            has_login: !!String(driver.user_email || '').trim(),
+            held: totals.held,
+            available: totals.available,
+            paid_out: totals.paid_out,
+            reserved: totals.reserved,
+            shortfall: totals.shortfall,
+        });
+    }
+    out.sort((a, b) => (b.shortfall - a.shortfall)
+        || ((b.held + b.available) - (a.held + a.available))
+        || String(a.full_name).localeCompare(String(b.full_name)));
+    return out;
+}
+
+Deno.serve(async (req) => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+    const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers });
+
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+    if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
+
+    try {
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
+        if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+        if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
+
+        const sr = base44.asServiceRole.entities;
+        const [earnings, drivers, withdrawals] = await Promise.all([
+            fetchAll(sr.DriverEarning, {}),
+            fetchAll(sr.Driver, {}),
+            fetchAll(sr.WithdrawalRequest, { wallet: 'driver' }),
+        ]);
+
+        const names = new Map<string, string>();
+        for (const d of drivers) names.set(d.id, d.full_name || 'Driver');
+
+        const summaries = driverWalletSummaries(drivers, earnings, withdrawals);
+        const totals = { held: 0, available: 0, shortfall: 0 };
+        for (const s of summaries) {
+            totals.held += s.held;
+            totals.available += s.available;
+            totals.shortfall += s.shortfall;
+        }
+
+        const newestFirst = earnings.slice().sort(
+            (a, b) => String(b.created_date || '').localeCompare(String(a.created_date || '')),
+        );
+
+        return json({
+            success: true,
+            data: {
+                earnings: newestFirst.slice(0, LIST_LIMIT).map((e) => ({
+                    ...e,
+                    driver_name: names.get(e.driver_id) || 'Deleted driver',
+                })),
+                earnings_truncated: earnings.length > LIST_LIMIT,
+                drivers: summaries,
+                totals,
+            },
+        });
+    } catch (error) {
+        console.error('getDriverEarningsAdmin error:', error);
+        return json({ success: false, error: 'Internal server error', details: (error as Error).message }, 500);
+    }
+});
+```
+
+- [ ] **Step 4: Run the check and watch it pass**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, including every line under `— admin earnings summary —`.
+
+- [ ] **Step 5: Create the Earnings panel**
+
+**Create `src/components/admin/DriverEarningsAdmin.jsx`:**
+
+```jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Loader2, RefreshCw, Banknote, Clock, CheckCircle, Undo2, PauseCircle, AlertTriangle, AlertCircle,
+} from 'lucide-react';
+import { invokeFn } from '@/lib/invokeFn';
+import { useToast } from '@/components/ui/use-toast';
+
+// DriverEarningsAdmin — every driver's pay, ride by ride, and the five things
+// admin can do to a row: release it now, hold it, lift the hold, adjust the
+// figure, reverse it.
+//
+// Nothing on this screen adds money up. The per-driver lines and the totals
+// come from getDriverEarningsAdmin, which runs the same arithmetic the
+// driver's own wallet runs. Every action goes through settleDriverEarning,
+// which decides whether the change is allowed.
+
+const ngn = (n) => `₦${(Number(n) || 0).toLocaleString()}`;
+
+const fmtWhen = (iso) => {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('en-GB', {
+      timeZone: 'Africa/Lagos', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    });
+  } catch { return '—'; }
+};
+
+const FILTERS = [
+  { value: 'held', label: 'Held' },
+  { value: 'on-hold', label: 'On hold' },
+  { value: 'released', label: 'Released' },
+  { value: 'reversed', label: 'Reversed' },
+  { value: 'all', label: 'All' },
+];
+
+const viewOf = (e) => {
+  if (e.status === 'held') return e.on_hold ? 'on-hold' : 'held';
+  return e.status;
+};
+
+const VIEW_STYLE = {
+  held: { label: 'Held', icon: Clock, className: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900' },
+  'on-hold': { label: 'On hold', icon: PauseCircle, className: 'bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-900' },
+  released: { label: 'Released', icon: CheckCircle, className: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900' },
+  reversed: { label: 'Reversed', icon: Undo2, className: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700' },
+};
+
+// Which buttons a row gets. settleDriverEarning enforces the same table; this
+// only stops admin being offered a move that would be refused.
+const ACTIONS_FOR = {
+  held: ['release', 'hold', 'adjust', 'reverse'],
+  'on-hold': ['unhold', 'release', 'adjust', 'reverse'],
+  released: ['reverse'],
+  reversed: [],
+};
+
+const ACTION_COPY = {
+  release: {
+    button: 'Release now', title: 'Release this pay now?',
+    body: 'It moves to the driver\'s available balance straight away instead of waiting for the release time.',
+    done: 'Pay released',
+  },
+  hold: {
+    button: 'Hold', title: 'Hold this pay',
+    body: 'It will not be released until you lift the hold. The driver sees "under review".',
+    needsReason: true, done: 'Pay put on hold',
+  },
+  unhold: {
+    button: 'Lift hold', title: 'Lift the hold?',
+    body: 'The pay is released at its release time, or at the next sweep if that time has passed.',
+    done: 'Hold lifted',
+  },
+  adjust: {
+    button: 'Adjust', title: 'Adjust the pay for this ride',
+    body: 'Use this for extra hours or an agreed deduction. Only pay that is still held can be changed.',
+    needsReason: true, needsAmount: true, done: 'Pay adjusted',
+  },
+  reverse: {
+    button: 'Reverse', title: 'Reverse this pay',
+    body: 'The ride no longer pays the driver. This cannot be undone.',
+    needsReason: true, danger: true, done: 'Pay reversed',
+  },
+};
+
+export default function DriverEarningsAdmin() {
+  const { toast } = useToast();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState('held');
+  const [pending, setPending] = useState(null); // { earning, action }
+  const [reason, setReason] = useState('');
+  const [amount, setAmount] = useState('');
+  const [working, setWorking] = useState(false);
+
+  const load = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true);
+    const r = await invokeFn('getDriverEarningsAdmin');
+    if (r.ok) {
+      setData(r.data);
+      setError(null);
+    } else {
+      setError(r.error);
+    }
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const open = (earning, action) => {
+    setReason('');
+    setAmount(action === 'adjust' ? String(Math.round(Number(earning.amount_ngn) || 0)) : '');
+    setPending({ earning, action });
+  };
+
+  const confirm = async () => {
+    if (!pending) return;
+    const { earning, action } = pending;
+    const copy = ACTION_COPY[action];
+    if (copy.needsReason && !reason.trim()) {
+      toast({ title: 'A reason is needed', description: 'It is kept on the record with the change.', variant: 'destructive' });
+      return;
+    }
+    let amountNgn;
+    if (copy.needsAmount) {
+      if (!/^\d{1,9}$/.test(amount.trim())) {
+        toast({ title: 'Check the amount', description: 'Enter the new pay in whole naira, digits only.', variant: 'destructive' });
+        return;
+      }
+      amountNgn = Number(amount.trim());
+    }
+    setWorking(true);
+    const r = await invokeFn('settleDriverEarning', {
+      earning_id: earning.id,
+      action,
+      reason: reason.trim() || undefined,
+      amount_ngn: amountNgn,
+    });
+    setWorking(false);
+    if (!r.ok) {
+      toast({ title: 'Not changed', description: r.error, variant: 'destructive' });
+      return;
+    }
+    setPending(null);
+    toast({
+      title: copy.done,
+      description: action === 'reverse' && r.data?.was_released
+        ? `${earning.driver_name} could already withdraw this. Their available balance is now ${ngn(earning.amount_ngn)} lower.`
+        : `${earning.vehicle_name || 'Ride'} · ${earning.driver_name}`,
+    });
+    await load(true);
+  };
+
+  const earnings = data?.earnings || [];
+  const shown = filter === 'all' ? earnings : earnings.filter((e) => viewOf(e) === filter);
+  const drivers = data?.drivers || [];
+  const copy = pending ? ACTION_COPY[pending.action] : null;
+
+  return (
+    <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg text-slate-900 dark:text-white">
+            <Banknote className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
+            Driver earnings
+          </CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            Pay is held when a driver is assigned and released two hours after the ride ends. Step in here when it should not be.
+          </CardDescription>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger className="h-10 w-36 rounded-xl"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {FILTERS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline" size="icon" onClick={() => load(true)} disabled={refreshing}
+            className="rounded-xl flex-shrink-0" aria-label="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        {error && (
+          <div className="mb-4 flex items-start gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-400 dark:text-slate-500" />
+          </div>
+        ) : (
+          <>
+            {drivers.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                  By driver
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {drivers.map((d) => (
+                    <div key={d.driver_id} className="border border-slate-200 dark:border-slate-800 rounded-2xl p-3">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{d.full_name}</p>
+                        {!d.has_login && (
+                          <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-0 text-xs flex-shrink-0">No login</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        {ngn(d.held)} held · {ngn(d.available)} available · {ngn(d.paid_out)} paid out
+                        {d.reserved > 0 ? ` · ${ngn(d.reserved)} being withdrawn` : ''}
+                      </p>
+                      {d.shortfall > 0 && (
+                        <p className="mt-2 flex items-start gap-1.5 text-xs text-red-700 dark:text-red-300">
+                          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>
+                            {ngn(d.shortfall)} to recover: pay was reversed after it had been withdrawn.
+                            It comes off their next released pay.
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {shown.length === 0 ? (
+              <p className="text-center text-slate-500 dark:text-slate-400 py-10 text-sm">
+                {earnings.length === 0
+                  ? 'No driver pay recorded yet. It appears here when a driver with a login is assigned to a paid ride.'
+                  : `Nothing under "${FILTERS.find((f) => f.value === filter)?.label}".`}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {shown.map((e) => {
+                  const view = viewOf(e);
+                  const style = VIEW_STYLE[view] || VIEW_STYLE.held;
+                  const StyleIcon = style.icon;
+                  const actions = ACTIONS_FOR[view] || [];
+                  return (
+                    <div key={e.id} className="border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <p className="text-lg font-bold text-slate-900 dark:text-white">{ngn(e.amount_ngn)}</p>
+                            <Badge className={`${style.className} border font-medium`}>
+                              <StyleIcon className="w-3 h-3 mr-1" />
+                              {style.label}
+                            </Badge>
+                            {e.booking_reference && (
+                              <Badge variant="outline" className="text-xs font-mono">{e.booking_reference}</Badge>
+                            )}
+                            {e.basis === 'manual' && (
+                              <Badge variant="outline" className="text-xs">Typed figure</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-slate-700 dark:text-slate-200 break-words">
+                            {e.driver_name} · {e.vehicle_name || 'Ride'}{e.service_date ? ` · ${e.service_date}` : ''}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            {view === 'released' ? `Released ${fmtWhen(e.released_at)}`
+                              : view === 'reversed' ? `Reversed ${fmtWhen(e.reversed_at)}`
+                                : `Releases ${fmtWhen(e.release_at)}`}
+                            {e.basis && e.basis !== 'manual' && e.units
+                              ? ` · ${e.units} × ${ngn(e.rate_ngn)} per ${e.basis === 'hourly' ? 'hour' : 'day'}`
+                              : ''}
+                          </p>
+                          {e.hold_reason && view === 'on-hold' && (
+                            <p className="text-xs text-orange-700 dark:text-orange-300 mt-1 break-words">Held because: {e.hold_reason}</p>
+                          )}
+                          {e.adjustment_reason && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 break-words">Adjusted: {e.adjustment_reason}</p>
+                          )}
+                          {e.admin_notes && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 italic break-words">{e.admin_notes}</p>
+                          )}
+                        </div>
+                        {actions.length > 0 && (
+                          <div className="flex flex-wrap gap-2 flex-shrink-0">
+                            {actions.map((action) => (
+                              <Button
+                                key={action} size="sm"
+                                variant={action === 'release' ? 'default' : 'outline'}
+                                onClick={() => open(e, action)}
+                                className={
+                                  action === 'release'
+                                    ? 'rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'
+                                    : ACTION_COPY[action].danger
+                                      ? 'rounded-xl border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40'
+                                      : 'rounded-xl'
+                                }
+                              >
+                                {ACTION_COPY[action].button}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {data?.earnings_truncated && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center pt-2">
+                    Showing the most recent 500 rows. The per-driver lines above count every row.
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+
+      <Dialog open={!!pending} onOpenChange={(o) => { if (!o && !working) setPending(null); }}>
+        <DialogContent className="max-w-md">
+          {pending && copy && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{copy.title}</DialogTitle>
+                <DialogDescription>
+                  {ngn(pending.earning.amount_ngn)} · {pending.earning.driver_name} · {pending.earning.vehicle_name || 'Ride'}
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-sm text-slate-600 dark:text-slate-300">{copy.body}</p>
+              {pending.action === 'reverse' && pending.earning.status === 'released' && (
+                <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-900 dark:text-amber-100">
+                    This pay was already released. If the driver has withdrawn it, the amount shows as
+                    money to recover and comes off their next released pay.
+                  </p>
+                </div>
+              )}
+              {copy.needsAmount && (
+                <div>
+                  <Label htmlFor="de-amount">New pay (₦)</Label>
+                  <Input
+                    id="de-amount" type="text" inputMode="numeric" autoComplete="off" value={amount}
+                    onChange={(ev) => setAmount(ev.target.value)} className="mt-1 rounded-xl"
+                  />
+                </div>
+              )}
+              {copy.needsReason && (
+                <div>
+                  <Label htmlFor="de-reason">Reason</Label>
+                  <Textarea
+                    id="de-reason" rows={3} value={reason} maxLength={500}
+                    onChange={(ev) => setReason(ev.target.value)}
+                    placeholder="Kept on the record with this change" className="mt-1 rounded-xl"
+                  />
+                </div>
+              )}
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button variant="outline" onClick={() => setPending(null)} disabled={working} className="rounded-xl">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={confirm} disabled={working}
+                  className={copy.danger
+                    ? 'rounded-xl bg-red-600 hover:bg-red-700 text-white'
+                    : 'rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'}
+                >
+                  {working ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  {copy.button}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+```
+
+- [ ] **Step 6: Add the tab**
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+import DriversAdmin from '@/components/admin/DriversAdmin';
+```
+
+replace with:
+
+```jsx
+import DriversAdmin from '@/components/admin/DriversAdmin';
+import DriverEarningsAdmin from '@/components/admin/DriverEarningsAdmin';
+```
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+      <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsTrigger value="requests">
+          <Inbox className="w-4 h-4 mr-2" /> Requests
+        </TabsTrigger>
+        <TabsTrigger value="drivers">
+          <IdCard className="w-4 h-4 mr-2" /> Drivers
+        </TabsTrigger>
+      </TabsList>
+```
+
+replace with:
+
+```jsx
+      <TabsList className="grid w-full grid-cols-3 max-w-xl">
+        <TabsTrigger value="requests">
+          <Inbox className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Requests</span>
+        </TabsTrigger>
+        <TabsTrigger value="drivers">
+          <IdCard className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Drivers</span>
+        </TabsTrigger>
+        <TabsTrigger value="earnings">
+          <Banknote className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Earnings</span>
+        </TabsTrigger>
+      </TabsList>
+```
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+      <TabsContent value="drivers">
+        <DriversAdmin />
+      </TabsContent>
+```
+
+replace with:
+
+```jsx
+      <TabsContent value="drivers">
+        <DriversAdmin />
+      </TabsContent>
+
+      <TabsContent value="earnings">
+        <DriverEarningsAdmin />
+      </TabsContent>
+```
+
+- [ ] **Step 7: Lint, parse and build**
+
+Run: `npm run lint`
+
+Expected: no output, exit code 0.
+
+Run: `node_modules/.bin/esbuild base44/functions/getDriverEarningsAdmin/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`.
+
+- [ ] **Step 8: Look at it (sandbox, after the next publish)**
+
+1. Admin → Rides → Earnings. Expected: a "By driver" line for each driver with pay on record, then the held rows.
+2. Hold a row with a reason, then switch the filter to On hold. Expected: the row is there with "Held because: …".
+3. Adjust it to a new figure with a reason, lift the hold, release it. Expected: the driver's line moves the amount from held to available.
+4. Reverse the released row. Expected: the amber warning in the dialog, then the toast naming the drop in the driver's available balance.
+5. On a phone-width window the three inner tabs show icons only, and no row scrolls sideways. In dark mode every panel and both dialogs are readable.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs base44/functions/getDriverEarningsAdmin/entry.ts src/components/admin/DriverEarningsAdmin.jsx src/components/admin/RidesAdmin.jsx
+git commit -m "feat(rides): Earnings tab for admin, with a per-driver summary" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+

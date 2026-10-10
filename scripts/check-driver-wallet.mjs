@@ -840,6 +840,55 @@ for (const bad of ['25,000', '-5', '1e3', 'abc', '99999999999', '50000001']) {
 }
 check('the ceiling itself can be typed', rides.typedDriverPay(true, '50000000', null).value, 50000000);
 
+// ── Per-driver summaries for admin ─────────────────────────────────────────
+console.log('\n— admin earnings summary —');
+const SUMMARY_HOME = 'getDriverEarningsAdmin';
+identical('driverEmails', 'driver', [WALLET_HOME, SUMMARY_HOME]);
+identical('driverWithdrawals', 'driver, rows', [WALLET_HOME, SUMMARY_HOME]);
+identical('walletTotals', 'earnings, withdrawals', [WALLET_HOME, SUMMARY_HOME]);
+const SUMMARY_SIG = 'drivers, earnings, withdrawals';
+const driverWalletSummaries = make('driverWalletSummaries',
+  liftSrc(SUMMARY_HOME, 'driverEmails', 'driver'),
+  liftSrc(SUMMARY_HOME, 'driverWithdrawals', 'driver, rows'),
+  liftSrc(SUMMARY_HOME, 'walletTotals', 'earnings, withdrawals'),
+  liftSrc(SUMMARY_HOME, 'driverWalletSummaries', SUMMARY_SIG));
+{
+  const drivers = [
+    { id: 'drvA', full_name: 'Emeka', user_email: 'emeka@work.ng' },
+    { id: 'drvB', full_name: 'Ada', user_email: '' },
+    { id: 'drvC', full_name: 'Idle', user_email: 'idle@x.ng' },
+  ];
+  const earnings = [
+    { driver_id: 'drvA', status: 'held', amount_ngn: 15000 },
+    { driver_id: 'drvA', status: 'released', amount_ngn: 30000 },
+    { driver_id: 'drvB', status: 'reversed', amount_ngn: 10000 },
+    { driver_id: 'gone', status: 'held', amount_ngn: 99999 },
+  ];
+  const withdrawals = [
+    { wallet: 'driver', driver_id: 'drvA', user_email: 'emeka@work.ng', amount: 10000, status: 'completed' },
+    { wallet: 'driver', driver_id: 'drvA', user_email: 'mallory@evil.ng', amount: 20000, status: 'completed' },
+    { wallet: 'referral', driver_id: 'drvA', user_email: 'emeka@work.ng', amount: 5000, status: 'completed' },
+  ];
+  const out = driverWalletSummaries(drivers, earnings, withdrawals);
+  same('one line per driver who has pay on record, most owed first', out.map((s) => s.driver_id), ['drvA', 'drvB']);
+  same('the line is the driver wallet arithmetic', out[0],
+    { driver_id: 'drvA', full_name: 'Emeka', has_login: true, held: 15000, available: 20000, paid_out: 10000, reserved: 0, shortfall: 0 });
+  check('a driver with no login is marked', out[1].has_login, false);
+}
+{
+  // A driver who withdrew pay that was later reversed sorts to the top.
+  const drivers = [
+    { id: 'drvA', full_name: 'Emeka', user_email: 'emeka@work.ng' },
+    { id: 'drvB', full_name: 'Ada', user_email: 'ada@x.ng' },
+  ];
+  const out = driverWalletSummaries(drivers,
+    [{ driver_id: 'drvA', status: 'held', amount_ngn: 900000 }, { driver_id: 'drvB', status: 'reversed', amount_ngn: 10000 }],
+    [{ wallet: 'driver', driver_id: 'drvB', user_email: 'ada@x.ng', amount: 10000, status: 'completed' }]);
+  same('a shortfall sorts first, whatever else is owed', out.map((s) => `${s.driver_id}:${s.shortfall}`), ['drvB:10000', 'drvA:0']);
+}
+same('no drivers, no lines', driverWalletSummaries([], [], []), []);
+same('nothing at all, no lines', driverWalletSummaries(undefined, undefined, undefined), []);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
