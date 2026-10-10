@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, RefreshCw, Car, ChevronDown, AlertCircle, Banknote } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { invokeFn } from '@/lib/invokeFn';
 import { createPageUrl } from '@/utils';
 import { useDriverProfile } from '@/lib/useDriverProfile';
 import DriverNotice from '@/components/driver/DriverNotice';
@@ -31,21 +31,15 @@ export default function DriverRidesPage() {
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
-    try {
-      const res = await base44.functions.invoke('getDriverRides', {});
-      if (res?.data?.success) {
-        setRides(res.data.data?.rides || []);
-        setError(null);
-      } else {
-        setError(res?.data?.error || 'Could not load your rides.');
-      }
-    } catch (err) {
-      console.error('getDriverRides failed:', err);
-      setError(err?.message || 'Could not load your rides.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    const r = await invokeFn('getDriverRides');
+    if (r.ok) {
+      setRides(r.data?.rides || []);
+      setError(null);
+    } else {
+      setError(r.error);
     }
+    setLoading(false);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {

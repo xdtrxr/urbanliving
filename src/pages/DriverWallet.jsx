@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Loader2, RefreshCw, Wallet, Clock, CheckCircle, Send, CreditCard, AlertCircle, Car, Undo2, PauseCircle,
 } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { invokeFn } from '@/lib/invokeFn';
 import { createPageUrl } from '@/utils';
 import { useDriverProfile } from '@/lib/useDriverProfile';
 import DriverNotice from '@/components/driver/DriverNotice';
@@ -87,21 +87,15 @@ export default function DriverWalletPage() {
 
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);
-    try {
-      const res = await base44.functions.invoke('getDriverWallet', {});
-      if (res?.data?.success) {
-        setWallet(res.data.data);
-        setError(null);
-      } else {
-        setError(res?.data?.error || 'Could not load your wallet.');
-      }
-    } catch (err) {
-      console.error('getDriverWallet failed:', err);
-      setError(err?.message || 'Could not load your wallet.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    const r = await invokeFn('getDriverWallet');
+    if (r.ok) {
+      setWallet(r.data);
+      setError(null);
+    } else {
+      setError(r.error);
     }
+    setLoading(false);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {

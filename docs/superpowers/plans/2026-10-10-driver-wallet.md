@@ -5063,3 +5063,572 @@ git add scripts/check-driver-wallet.mjs scripts/check-entities.mjs base44/functi
 git commit -m "feat(rides): withdraw from the driver wallet, re-checked against the ledger before paying" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A10: The Withdrawals page knows two wallets, and refusals are readable
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (function results section, above `// ---- result ----`)
+- Create: `src/lib/fnResult.js`
+- Create: `src/lib/invokeFn.js`
+- Modify: `src/pages/Withdrawals.jsx`
+- Modify: `src/pages/DriverRides.jsx`, `src/pages/DriverWallet.jsx` (load through `invokeFn`)
+
+**Interfaces:**
+- Consumes: `useDriverProfile()` (Task A06); function `getDriverWallet` → `data.available_ngn` (Task A08); `createWithdrawalRequest` with `wallet` (Task A09).
+- Produces: `fromResponse(res)` and `fromThrown(err)` in `src/lib/fnResult.js`, both returning `{ ok, data, error, code, status, body }`; `async invokeFn(name, body = {})` in `src/lib/invokeFn.js`, which never throws and returns that same shape. Every later task that calls a function from the browser uses `invokeFn`.
+- The Withdrawals page reads `?wallet=driver`, shows a two-way switch to drivers only, and sends `wallet` with the request.
+
+**Why `invokeFn` exists.** `base44.functions.invoke` is an axios call with no response interceptor (`@base44/sdk`, `client.js`: `interceptResponses: false` for the functions client). A 2xx resolves to the axios response; anything else rejects. Every function in this app answers a refusal with a 4xx and a sentence (`{ success: false, error, code }`), so that sentence only ever arrives inside the thrown error's `response.data`. Code that checks `res.data.success` in an `else` branch never sees it, and a `catch` that shows `err.message` shows "Request failed with status code 409". `invokeFn` gives one result shape for both outcomes.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+import * as rides from '../src/config/rides.js';
+```
+
+replace with:
+
+```js
+import * as rides from '../src/config/rides.js';
+import { fromResponse, fromThrown } from '../src/lib/fnResult.js';
+```
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Reading what a function said ───────────────────────────────────────────
+// A refusal is a 4xx with a sentence in it, and axios throws on a 4xx. These
+// two functions are what stand between the user and "Request failed with
+// status code 409".
+console.log('\n— function results —');
+{
+  const r = fromResponse({ status: 200, data: { success: true, data: { rides: [] } } });
+  same('a success carries its data', [r.ok, r.data, r.error], [true, { rides: [] }, null]);
+}
+{
+  // createWithdrawalRequest answers { success, withdrawal_request, message } with no `data` key.
+  const r = fromResponse({ status: 200, data: { success: true, message: 'Created', withdrawal_request: { id: 'w1' } } });
+  same('an older success shape keeps its body', [r.ok, r.data, r.body.message], [true, null, 'Created']);
+}
+{
+  const r = fromResponse({ status: 200, data: { success: false, error: 'Already decided', code: 'ALREADY_DECIDED' } });
+  same('a 200 that says no is not ok', [r.ok, r.error, r.code], [false, 'Already decided', 'ALREADY_DECIDED']);
+}
+{
+  const r = fromThrown({
+    message: 'Request failed with status code 409',
+    response: { status: 409, data: { success: false, error: 'No driver cost is set for this vehicle.', code: 'PAYOUT_REQUIRED' } },
+  });
+  same('a refusal gives the server sentence, not the axios one',
+    [r.ok, r.error, r.code, r.status], [false, 'No driver cost is set for this vehicle.', 'PAYOUT_REQUIRED', 409]);
+}
+{
+  const r = fromThrown({ message: 'Request failed with status code 400', response: { status: 400, data: { error: 'Minimum withdrawal amount is ₦10,000' } } });
+  check('an older refusal shape is read too', r.error, 'Minimum withdrawal amount is ₦10,000');
+}
+{
+  // What the platform itself answers when the workspace plan has no functions.
+  const r = fromThrown({ message: 'Request failed with status code 402', response: { status: 402, data: { message: 'Functions are blocked - app owner lacks backend functions capability' } } });
+  same('a platform refusal is shown as it was sent',
+    [r.error, r.status], ['Functions are blocked - app owner lacks backend functions capability', 402]);
+}
+check('no response at all reads as a connection problem',
+  fromThrown({ message: 'Network Error' }).error, 'Could not reach the server. Check your connection and try again.');
+check('an error page instead of JSON falls back to the transport message',
+  fromThrown({ message: 'Request failed with status code 502', response: { status: 502, data: '<html>Bad gateway</html>' } }).error,
+  'Request failed with status code 502');
+check('nothing at all still gives a sentence', typeof fromThrown(undefined).error, 'string');
+check('a malformed success is not ok', fromResponse({ status: 200, data: null }).ok, false);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error [ERR_MODULE_NOT_FOUND]: Cannot find module '…/src/lib/fnResult.js'`.
+
+- [ ] **Step 3: Create the two small modules**
+
+`fnResult.js` imports nothing, so the check script can load it directly. `invokeFn.js` is the only place that touches the SDK.
+
+**Create `src/lib/fnResult.js`:**
+
+```js
+// Reading what a backend function said.
+//
+// Every function in this app answers { success: true, data } on a 2xx, and
+// { success: false, error, code } with a 4xx or 5xx when it refuses. The SDK
+// call is plain axios, which RESOLVES the first and THROWS the second, so the
+// sentence a person is meant to read ("No driver cost is set for this
+// vehicle…") arrives inside the thrown error, not in a response.
+//
+// These two functions turn both outcomes into one shape:
+//   { ok, data, error, code, status, body }
+// No imports on purpose: scripts/check-driver-wallet.mjs loads this file as it is.
+
+const FALLBACK = 'Something went wrong. Please try again.';
+const OFFLINE = 'Could not reach the server. Check your connection and try again.';
+
+// The sentence in a response body, wherever this function put it. Older
+// functions use `error` alone; the platform itself uses `message` or `detail`.
+const sentenceIn = (body) => {
+  if (!body || typeof body !== 'object') return null;
+  for (const key of ['error', 'message', 'detail']) {
+    if (typeof body[key] === 'string' && body[key].trim()) return body[key];
+  }
+  return null;
+};
+
+// The call resolved: a 2xx.
+export function fromResponse(res) {
+  const body = res && typeof res === 'object' && res.data && typeof res.data === 'object' ? res.data : null;
+  const status = (res && res.status) || null;
+  if (body && body.success === true) {
+    return { ok: true, data: body.data === undefined ? null : body.data, error: null, code: null, status, body };
+  }
+  return { ok: false, data: null, error: sentenceIn(body) || FALLBACK, code: (body && body.code) || null, status, body };
+}
+
+// The call threw: a refusal (4xx), a failure (5xx), or no answer at all.
+export function fromThrown(err) {
+  const response = (err && err.response) || null;
+  const raw = (response && response.data) || (err && err.data) || null;
+  const body = raw && typeof raw === 'object' ? raw : null;
+  const status = (response && response.status) || (err && err.status) || null;
+  const transport = err && typeof err.message === 'string' && err.message ? err.message : null;
+  // No response and no body means the request never got an answer.
+  const error = sentenceIn(body) || (!response && !raw ? OFFLINE : (transport || FALLBACK));
+  return { ok: false, data: null, error, code: (body && body.code) || null, status, body };
+}
+```
+
+**Create `src/lib/invokeFn.js`:**
+
+```js
+import { base44 } from '@/api/base44Client';
+import { fromResponse, fromThrown } from '@/lib/fnResult';
+
+// invokeFn — call a backend function and get one result shape back, whether
+// it succeeded, refused or never answered:
+//
+//   const r = await invokeFn('assignRideDriver', { ride_booking_id, driver_id });
+//   if (r.ok) use(r.data); else toast({ description: r.error });   // r.code for branching
+//
+// It never throws. See src/lib/fnResult.js for why a bare
+// base44.functions.invoke hides the server's reason for a refusal.
+export async function invokeFn(name, body = {}) {
+  try {
+    return fromResponse(await base44.functions.invoke(name, body));
+  } catch (err) {
+    return fromThrown(err);
+  }
+}
+```
+
+- [ ] **Step 4: Run the check and watch it pass**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `PASS`, including every line under `— function results —`.
+
+- [ ] **Step 5: The two driver pages load through `invokeFn`**
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+import { base44 } from '@/api/base44Client';
+import { createPageUrl } from '@/utils';
+```
+
+replace with:
+
+```jsx
+import { invokeFn } from '@/lib/invokeFn';
+import { createPageUrl } from '@/utils';
+```
+
+**Edit `src/pages/DriverRides.jsx`** — find:
+
+```jsx
+    try {
+      const res = await base44.functions.invoke('getDriverRides', {});
+      if (res?.data?.success) {
+        setRides(res.data.data?.rides || []);
+        setError(null);
+      } else {
+        setError(res?.data?.error || 'Could not load your rides.');
+      }
+    } catch (err) {
+      console.error('getDriverRides failed:', err);
+      setError(err?.message || 'Could not load your rides.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+```
+
+replace with:
+
+```jsx
+    const r = await invokeFn('getDriverRides');
+    if (r.ok) {
+      setRides(r.data?.rides || []);
+      setError(null);
+    } else {
+      setError(r.error);
+    }
+    setLoading(false);
+    setRefreshing(false);
+```
+
+**Edit `src/pages/DriverWallet.jsx`** — find:
+
+```jsx
+import { base44 } from '@/api/base44Client';
+import { createPageUrl } from '@/utils';
+```
+
+replace with:
+
+```jsx
+import { invokeFn } from '@/lib/invokeFn';
+import { createPageUrl } from '@/utils';
+```
+
+**Edit `src/pages/DriverWallet.jsx`** — find:
+
+```jsx
+    try {
+      const res = await base44.functions.invoke('getDriverWallet', {});
+      if (res?.data?.success) {
+        setWallet(res.data.data);
+        setError(null);
+      } else {
+        setError(res?.data?.error || 'Could not load your wallet.');
+      }
+    } catch (err) {
+      console.error('getDriverWallet failed:', err);
+      setError(err?.message || 'Could not load your wallet.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+```
+
+replace with:
+
+```jsx
+    const r = await invokeFn('getDriverWallet');
+    if (r.ok) {
+      setWallet(r.data);
+      setError(null);
+    } else {
+      setError(r.error);
+    }
+    setLoading(false);
+    setRefreshing(false);
+```
+
+- [ ] **Step 6: Teach the Withdrawals page about the driver wallet**
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+import { Link } from 'react-router-dom';
+```
+
+replace with:
+
+```jsx
+import { Link, useLocation } from 'react-router-dom';
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+import { useToast } from '@/components/ui/use-toast';
+
+const WITHDRAWAL_THRESHOLD_NGN = 10000;
+```
+
+replace with:
+
+```jsx
+import { useToast } from '@/components/ui/use-toast';
+import { useDriverProfile } from '@/lib/useDriverProfile';
+import { invokeFn } from '@/lib/invokeFn';
+
+const WITHDRAWAL_THRESHOLD_NGN = 10000;
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+```
+
+replace with:
+
+```jsx
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+
+  // Drivers have a second wallet. ?wallet=driver (the Withdraw button on the
+  // driver's Wallet page) opens this page on it. Anyone who is not a driver
+  // stays on referral whatever the URL says, and the server checks again.
+  const location = useLocation();
+  const { isDriver } = useDriverProfile();
+  const [chosenWallet, setChosenWallet] = useState(
+    () => (new URLSearchParams(location.search).get('wallet') === 'driver' ? 'driver' : 'referral'),
+  );
+  const [driverWallet, setDriverWallet] = useState(null);
+  const wallet = chosenWallet === 'driver' && isDriver ? 'driver' : 'referral';
+  const walletLabel = wallet === 'driver' ? 'driver earnings' : 'referral earnings';
+  // The driver figure is computed by the server from the earnings ledger; the
+  // referral figure is the stored balance, as before.
+  const availableBalance = wallet === 'driver'
+    ? (driverWallet?.available_ngn || 0)
+    : (user?.referral_balance_ngn || 0);
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+  useEffect(() => {
+    loadData();
+  }, []);
+```
+
+replace with:
+
+```jsx
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadDriverWallet = async () => {
+    const r = await invokeFn('getDriverWallet');
+    if (r.ok) setDriverWallet(r.data);
+  };
+
+  useEffect(() => {
+    if (isDriver) loadDriverWallet();
+  }, [isDriver]);
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+    const amount = parseFloat(formData.amount);
+    if (amount < WITHDRAWAL_THRESHOLD_NGN) {
+```
+
+replace with:
+
+```jsx
+    const amount = Number(formData.amount);
+    if (!Number.isInteger(amount)) {
+      toast({
+        title: 'Whole naira only',
+        description: 'Enter the amount without kobo, for example 15000.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (amount < WITHDRAWAL_THRESHOLD_NGN) {
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+    if (amount > (user?.referral_balance_ngn || 0)) {
+      toast({
+        title: 'Insufficient balance',
+        description: `You have ₦${(user?.referral_balance_ngn || 0).toLocaleString()} available.`,
+```
+
+replace with:
+
+```jsx
+    if (amount > availableBalance) {
+      toast({
+        title: 'Insufficient balance',
+        description: `You have ₦${availableBalance.toLocaleString()} available.`,
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+      const response = await base44.functions.invoke('createWithdrawalRequest', {
+        amount: amount,
+        bank_account_id: formData.bank_account_id
+      });
+
+      if (response.data.success) {
+```
+
+replace with:
+
+```jsx
+      // invokeFn turns a refusal (a 4xx carrying the reason) into a result
+      // rather than an exception, so the branch below shows the server's own
+      // sentence: "You have a pending withdrawal request…", not a status code.
+      const result = await invokeFn('createWithdrawalRequest', {
+        amount,
+        bank_account_id: formData.bank_account_id,
+        wallet,
+      });
+      const response = { data: result.ok ? result.body : { success: false, error: result.error } };
+
+      if (response.data.success) {
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+        setShowRequestForm(false);
+        await loadData();
+```
+
+replace with:
+
+```jsx
+        setShowRequestForm(false);
+        await loadData();
+        if (isDriver) await loadDriverWallet();
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+  const availableBalance = user?.referral_balance_ngn || 0;
+
+  return (
+```
+
+replace with:
+
+```jsx
+  return (
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+          <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">Withdraw your earnings to your bank account</p>
+        </div>
+```
+
+replace with:
+
+```jsx
+          <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">Withdraw your earnings to your bank account</p>
+        </div>
+
+        {isDriver && (
+          <div
+            className="mb-4 inline-flex rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 p-1"
+            role="tablist" aria-label="Which earnings to withdraw"
+          >
+            {[{ id: 'driver', label: 'Driver earnings' }, { id: 'referral', label: 'Referral earnings' }].map((option) => (
+              <button
+                key={option.id} type="button" role="tab" aria-selected={wallet === option.id}
+                onClick={() => {
+                  setChosenWallet(option.id);
+                  setShowRequestForm(false);
+                  setFormData({ amount: '', bank_account_id: '' });
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  wallet === option.id
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+                <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 mt-2">From referrals and other earnings</p>
+```
+
+replace with:
+
+```jsx
+                <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 mt-2">
+                  {wallet === 'driver' ? 'Released pay from your rides' : 'From referrals and other earnings'}
+                </p>
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+                  You need at least ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} in referral
+                  earnings to request a withdrawal. You currently have ₦{availableBalance.toLocaleString()}
+```
+
+replace with:
+
+```jsx
+                  You need at least ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} in {walletLabel} to
+                  request a withdrawal. You currently have ₦{availableBalance.toLocaleString()}
+```
+
+**Edit `src/pages/Withdrawals.jsx`** — find:
+
+```jsx
+                                {config.label}
+                              </Badge>
+```
+
+replace with:
+
+```jsx
+                                {config.label}
+                              </Badge>
+                              {isDriver && (
+                                <Badge variant="outline" className="text-xs">
+                                  {withdrawal.wallet === 'driver' ? 'Driver earnings' : 'Referral'}
+                                </Badge>
+                              )}
+```
+
+- [ ] **Step 7: Lint and build**
+
+Run: `npm run lint`
+
+Expected: no output, exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`.
+
+- [ ] **Step 8: Look at it (sandbox, after the next publish)**
+
+1. As a guest who is not a driver, open `/Withdrawals` and `/Withdrawals?wallet=driver`. Expected: both look exactly as the page does today, no switch, referral balance shown.
+2. As a linked driver, open the Wallet page and press Withdraw to my bank. Expected: the Withdrawals page opens with "Driver earnings" selected, the balance card shows the wallet's Available figure and "Released pay from your rides".
+3. Request ₦10,000 from driver earnings. Expected: "Withdrawal requested"; the history row carries a "Driver earnings" badge; the Wallet page shows the withdrawal in progress.
+4. Request again straight away. Expected: a toast reading "You have a pending withdrawal request. Please wait for it to complete." (the server's sentence, not a status code).
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs src/lib/fnResult.js src/lib/invokeFn.js src/pages/Withdrawals.jsx src/pages/DriverRides.jsx src/pages/DriverWallet.jsx
+git commit -m "feat(rides): withdraw driver earnings from the Withdrawals page; show a function's own reason when it refuses" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+

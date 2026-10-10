@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as rides from '../src/config/rides.js';
+import { fromResponse, fromThrown } from '../src/lib/fnResult.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = (name) => path.join(ROOT, 'base44/functions', name, 'entry.ts');
@@ -714,6 +715,50 @@ for (const bad of [9999, 20000.5, 'abc', Infinity, -20000, null]) {
     await problemFor(request({ amount: bad }), [releasedRow('e1', 20000)]),
     'The amount on this request is not a valid withdrawal.');
 }
+
+// ── Reading what a function said ───────────────────────────────────────────
+// A refusal is a 4xx with a sentence in it, and axios throws on a 4xx. These
+// two functions are what stand between the user and "Request failed with
+// status code 409".
+console.log('\n— function results —');
+{
+  const r = fromResponse({ status: 200, data: { success: true, data: { rides: [] } } });
+  same('a success carries its data', [r.ok, r.data, r.error], [true, { rides: [] }, null]);
+}
+{
+  // createWithdrawalRequest answers { success, withdrawal_request, message } with no `data` key.
+  const r = fromResponse({ status: 200, data: { success: true, message: 'Created', withdrawal_request: { id: 'w1' } } });
+  same('an older success shape keeps its body', [r.ok, r.data, r.body.message], [true, null, 'Created']);
+}
+{
+  const r = fromResponse({ status: 200, data: { success: false, error: 'Already decided', code: 'ALREADY_DECIDED' } });
+  same('a 200 that says no is not ok', [r.ok, r.error, r.code], [false, 'Already decided', 'ALREADY_DECIDED']);
+}
+{
+  const r = fromThrown({
+    message: 'Request failed with status code 409',
+    response: { status: 409, data: { success: false, error: 'No driver cost is set for this vehicle.', code: 'PAYOUT_REQUIRED' } },
+  });
+  same('a refusal gives the server sentence, not the axios one',
+    [r.ok, r.error, r.code, r.status], [false, 'No driver cost is set for this vehicle.', 'PAYOUT_REQUIRED', 409]);
+}
+{
+  const r = fromThrown({ message: 'Request failed with status code 400', response: { status: 400, data: { error: 'Minimum withdrawal amount is ₦10,000' } } });
+  check('an older refusal shape is read too', r.error, 'Minimum withdrawal amount is ₦10,000');
+}
+{
+  // What the platform itself answers when the workspace plan has no functions.
+  const r = fromThrown({ message: 'Request failed with status code 402', response: { status: 402, data: { message: 'Functions are blocked - app owner lacks backend functions capability' } } });
+  same('a platform refusal is shown as it was sent',
+    [r.error, r.status], ['Functions are blocked - app owner lacks backend functions capability', 402]);
+}
+check('no response at all reads as a connection problem',
+  fromThrown({ message: 'Network Error' }).error, 'Could not reach the server. Check your connection and try again.');
+check('an error page instead of JSON falls back to the transport message',
+  fromThrown({ message: 'Request failed with status code 502', response: { status: 502, data: '<html>Bad gateway</html>' } }).error,
+  'Request failed with status code 502');
+check('nothing at all still gives a sentence', typeof fromThrown(undefined).error, 'string');
+check('a malformed success is not ok', fromResponse({ status: 200, data: null }).ok, false);
 
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

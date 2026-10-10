@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,8 @@ import {
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/ui/use-toast';
+import { useDriverProfile } from '@/lib/useDriverProfile';
+import { invokeFn } from '@/lib/invokeFn';
 
 const WITHDRAWAL_THRESHOLD_NGN = 10000;
 
@@ -55,6 +57,23 @@ export default function WithdrawalsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showRequestForm, setShowRequestForm] = useState(false);
 
+  // Drivers have a second wallet. ?wallet=driver (the Withdraw button on the
+  // driver's Wallet page) opens this page on it. Anyone who is not a driver
+  // stays on referral whatever the URL says, and the server checks again.
+  const location = useLocation();
+  const { isDriver } = useDriverProfile();
+  const [chosenWallet, setChosenWallet] = useState(
+    () => (new URLSearchParams(location.search).get('wallet') === 'driver' ? 'driver' : 'referral'),
+  );
+  const [driverWallet, setDriverWallet] = useState(null);
+  const wallet = chosenWallet === 'driver' && isDriver ? 'driver' : 'referral';
+  const walletLabel = wallet === 'driver' ? 'driver earnings' : 'referral earnings';
+  // The driver figure is computed by the server from the earnings ledger; the
+  // referral figure is the stored balance, as before.
+  const availableBalance = wallet === 'driver'
+    ? (driverWallet?.available_ngn || 0)
+    : (user?.referral_balance_ngn || 0);
+
   const [formData, setFormData] = useState({
     amount: '',
     bank_account_id: ''
@@ -63,6 +82,15 @@ export default function WithdrawalsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const loadDriverWallet = async () => {
+    const r = await invokeFn('getDriverWallet');
+    if (r.ok) setDriverWallet(r.data);
+  };
+
+  useEffect(() => {
+    if (isDriver) loadDriverWallet();
+  }, [isDriver]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -103,7 +131,15 @@ export default function WithdrawalsPage() {
       return;
     }
 
-    const amount = parseFloat(formData.amount);
+    const amount = Number(formData.amount);
+    if (!Number.isInteger(amount)) {
+      toast({
+        title: 'Whole naira only',
+        description: 'Enter the amount without kobo, for example 15000.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (amount < WITHDRAWAL_THRESHOLD_NGN) {
       toast({
         title: 'Below minimum',
@@ -113,10 +149,10 @@ export default function WithdrawalsPage() {
       return;
     }
 
-    if (amount > (user?.referral_balance_ngn || 0)) {
+    if (amount > availableBalance) {
       toast({
         title: 'Insufficient balance',
-        description: `You have ₦${(user?.referral_balance_ngn || 0).toLocaleString()} available.`,
+        description: `You have ₦${availableBalance.toLocaleString()} available.`,
         variant: 'destructive',
       });
       return;
@@ -124,10 +160,15 @@ export default function WithdrawalsPage() {
 
     setIsSubmitting(true);
     try {
-      const response = await base44.functions.invoke('createWithdrawalRequest', {
-        amount: amount,
-        bank_account_id: formData.bank_account_id
+      // invokeFn turns a refusal (a 4xx carrying the reason) into a result
+      // rather than an exception, so the branch below shows the server's own
+      // sentence: "You have a pending withdrawal request…", not a status code.
+      const result = await invokeFn('createWithdrawalRequest', {
+        amount,
+        bank_account_id: formData.bank_account_id,
+        wallet,
       });
+      const response = { data: result.ok ? result.body : { success: false, error: result.error } };
 
       if (response.data.success) {
         toast({
@@ -137,6 +178,7 @@ export default function WithdrawalsPage() {
         setFormData({ amount: '', bank_account_id: '' });
         setShowRequestForm(false);
         await loadData();
+        if (isDriver) await loadDriverWallet();
       } else {
         toast({
           title: 'Withdrawal could not be created',
@@ -163,8 +205,6 @@ export default function WithdrawalsPage() {
     );
   }
 
-  const availableBalance = user?.referral_balance_ngn || 0;
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
@@ -173,6 +213,31 @@ export default function WithdrawalsPage() {
           <p className="text-slate-600 dark:text-slate-300 text-base sm:text-lg">Withdraw your earnings to your bank account</p>
         </div>
 
+        {isDriver && (
+          <div
+            className="mb-4 inline-flex rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 p-1"
+            role="tablist" aria-label="Which earnings to withdraw"
+          >
+            {[{ id: 'driver', label: 'Driver earnings' }, { id: 'referral', label: 'Referral earnings' }].map((option) => (
+              <button
+                key={option.id} type="button" role="tab" aria-selected={wallet === option.id}
+                onClick={() => {
+                  setChosenWallet(option.id);
+                  setShowRequestForm(false);
+                  setFormData({ amount: '', bank_account_id: '' });
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  wallet === option.id
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Balance Card */}
         <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl shadow-xl mb-6 sm:mb-8">
           <CardContent className="p-5 sm:p-8">
@@ -180,7 +245,9 @@ export default function WithdrawalsPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-slate-300 mb-1 sm:mb-2 text-sm sm:text-base">Available Balance</p>
                 <p className="text-2xl sm:text-4xl font-bold break-words">₦{availableBalance.toLocaleString()}</p>
-                <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 mt-2">From referrals and other earnings</p>
+                <p className="text-xs sm:text-sm text-slate-400 dark:text-slate-500 mt-2">
+                  {wallet === 'driver' ? 'Released pay from your rides' : 'From referrals and other earnings'}
+                </p>
               </div>
               <Wallet className="w-12 h-12 sm:w-16 sm:h-16 text-amber-400 opacity-50 flex-shrink-0" />
             </div>
@@ -211,8 +278,8 @@ export default function WithdrawalsPage() {
                   Withdrawal threshold not met
                 </p>
                 <p className="text-sm text-amber-800 dark:text-amber-200">
-                  You need at least ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} in referral
-                  earnings to request a withdrawal. You currently have ₦{availableBalance.toLocaleString()}
+                  You need at least ₦{WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} in {walletLabel} to
+                  request a withdrawal. You currently have ₦{availableBalance.toLocaleString()}
                   {' '}— ₦{(WITHDRAWAL_THRESHOLD_NGN - availableBalance).toLocaleString()} to go.
                 </p>
               </div>
@@ -346,6 +413,11 @@ export default function WithdrawalsPage() {
                                 <Icon className={`w-3 h-3 mr-1 ${withdrawal.status === 'processing' ? 'animate-spin' : ''}`} />
                                 {config.label}
                               </Badge>
+                              {isDriver && (
+                                <Badge variant="outline" className="text-xs">
+                                  {withdrawal.wallet === 'driver' ? 'Driver earnings' : 'Referral'}
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
                               ₦{withdrawal.amount.toLocaleString()}
