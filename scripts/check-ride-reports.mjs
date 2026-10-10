@@ -192,6 +192,48 @@ check('a guest report says so', guestCard.includes('A guest reported a driver'),
 check('falls back to the ride id and the email when names are missing', guestCard.includes('ride1') && guestCard.includes('ada@example.com'), true);
 check('a short description is not cut', guestCard.includes('Drove far too fast.') && !guestCard.includes('…'), true);
 
+// ── Resolving a report ─────────────────────────────────────────────────────
+console.log('\n— resolving —');
+const RESOLVE = 'resolveRideReport';
+const nextReportState = make('nextReportState',
+  consts(RESOLVE, ['RESOLVE_STATUSES', 'ACTIONS', 'MAX_NOTES']),
+  liftSrc(RESOLVE, 'nextReportState', 'report, input, adminEmail, nowIso'));
+const NOW = '2026-08-12T09:00:00.000Z';
+const openReport = { id: 'r1', status: 'open', action_taken: 'none' };
+
+same('dismiss: closed, no action, stamped with who and when',
+  nextReportState(openReport, { status: 'dismissed' }, 'admin@urbanstays.io', NOW),
+  { ok: true, patch: { status: 'dismissed', action_taken: 'none', resolved_at: NOW, resolved_by: 'admin@urbanstays.io' }, was: 'none', now: 'none' });
+same('dismiss always clears the action, even if one is sent',
+  nextReportState({ ...openReport, action_taken: 'blocked' }, { status: 'dismissed', action_taken: 'blocked' }, 'a@x', NOW).now, 'none');
+same('warn: resolved with a warning and the note kept',
+  nextReportState(openReport, { status: 'resolved', action_taken: 'warning', admin_notes: '  Spoke to him.  ' }, 'a@x', NOW).patch,
+  { status: 'resolved', action_taken: 'warning', admin_notes: 'Spoke to him.', resolved_at: NOW, resolved_by: 'a@x' });
+same('block: reports the change so the caller can apply it',
+  [nextReportState(openReport, { status: 'resolved', action_taken: 'blocked' }, 'a@x', NOW).was,
+    nextReportState(openReport, { status: 'resolved', action_taken: 'blocked' }, 'a@x', NOW).now], ['none', 'blocked']);
+same('reviewing: not closed, action left as it was',
+  nextReportState(openReport, { status: 'reviewing' }, 'a@x', NOW),
+  { ok: true, patch: { status: 'reviewing', action_taken: 'none' }, was: 'none', now: 'none' });
+same('resolved with no action named keeps the earlier action',
+  nextReportState({ ...openReport, status: 'reviewing', action_taken: 'warning' }, { status: 'resolved' }, 'a@x', NOW).now, 'warning');
+same('an unknown status is refused', nextReportState(openReport, { status: 'open' }, 'a@x', NOW), { ok: false, code: 'INVALID_STATUS' });
+same('a missing status is refused', nextReportState(openReport, {}, 'a@x', NOW), { ok: false, code: 'INVALID_STATUS' });
+same('an unknown action is refused', nextReportState(openReport, { status: 'resolved', action_taken: 'ban' }, 'a@x', NOW), { ok: false, code: 'INVALID_ACTION' });
+same('an action that is not text is refused', nextReportState(openReport, { status: 'resolved', action_taken: { $ne: 'none' } }, 'a@x', NOW), { ok: false, code: 'INVALID_ACTION' });
+check('a note is cut at 1000 characters',
+  nextReportState(openReport, { status: 'resolved', admin_notes: 'x'.repeat(3000) }, 'a@x', NOW).patch.admin_notes.length, 1000);
+
+// Review focus 4: one block stands for as long as any report still says so.
+const guestBlockAfter = make('guestBlockAfter', liftSrc(RESOLVE, 'guestBlockAfter', 'reports, thisReportId, thisAction'));
+const blockedElsewhere = { id: 'r2', status: 'resolved', action_taken: 'blocked' };
+check('this report blocks: blocked', guestBlockAfter([openReport], 'r1', 'blocked'), true);
+check('this report cleared, nothing else blocks: not blocked', guestBlockAfter([{ ...openReport, action_taken: 'none' }], 'r1', 'none'), false);
+check('this report cleared, another still blocks: stays blocked', guestBlockAfter([openReport, blockedElsewhere], 'r1', 'none'), true);
+check('a dismissed report elsewhere does not keep the block', guestBlockAfter([openReport, { ...blockedElsewhere, status: 'dismissed' }], 'r1', 'none'), false);
+check('this report\'s own stale row is ignored', guestBlockAfter([{ ...openReport, status: 'resolved', action_taken: 'blocked' }], 'r1', 'warning'), false);
+check('no reports at all: not blocked', guestBlockAfter(undefined, 'r1', 'none'), false);
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

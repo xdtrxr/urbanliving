@@ -881,3 +881,428 @@ git add scripts/check-ride-reports.mjs base44/functions/createRideReport/entry.t
 git commit -m "feat(rides): a driver or a guest can report a ride" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task B03: `resolveRideReport`
+
+**Files:**
+- Modify: `scripts/check-ride-reports.mjs` (resolving section, above `// ---- result ----`)
+- Create: `base44/functions/resolveRideReport/entry.ts`
+
+**Interfaces:**
+- Consumes: entity `RideReport`, `User.ride_blocked` (Task B01); `Driver.active`; `tryPush`.
+- Produces: function `resolveRideReport` — admin only; body `{ report_id, status: 'reviewing' | 'resolved' | 'dismissed', action_taken?: 'none' | 'warning' | 'blocked', admin_notes? }`; answers `{ success: true, data: { report, effect } }` where `effect` is `'none' | 'guest_blocked' | 'guest_unblocked' | 'guest_not_found' | 'driver_deactivated'`. Refusals: `INVALID_STATUS`, `INVALID_ACTION` (400), `NOT_FOUND` (404).
+- Helpers: `nextReportState(report, input, adminEmail, nowIso) → { ok: true, patch, was, now } | { ok: false, code }` and `guestBlockAfter(reports, thisReportId, thisAction) → boolean`.
+
+**What a block does.** A report about a guest resolved as `blocked` sets `User.ride_blocked`. Moving that report away from `blocked` clears the flag, unless another resolved report against the same guest still says blocked. A report about a driver resolved as `blocked` sets `Driver.active = false`; it is never switched back on automatically, because admin may have deactivated the driver for other reasons (the switch is on the Drivers tab). Dismissing a report always takes no action.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-ride-reports.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Resolving a report ─────────────────────────────────────────────────────
+console.log('\n— resolving —');
+const RESOLVE = 'resolveRideReport';
+const nextReportState = make('nextReportState',
+  consts(RESOLVE, ['RESOLVE_STATUSES', 'ACTIONS', 'MAX_NOTES']),
+  liftSrc(RESOLVE, 'nextReportState', 'report, input, adminEmail, nowIso'));
+const NOW = '2026-08-12T09:00:00.000Z';
+const openReport = { id: 'r1', status: 'open', action_taken: 'none' };
+
+same('dismiss: closed, no action, stamped with who and when',
+  nextReportState(openReport, { status: 'dismissed' }, 'admin@urbanstays.io', NOW),
+  { ok: true, patch: { status: 'dismissed', action_taken: 'none', resolved_at: NOW, resolved_by: 'admin@urbanstays.io' }, was: 'none', now: 'none' });
+same('dismiss always clears the action, even if one is sent',
+  nextReportState({ ...openReport, action_taken: 'blocked' }, { status: 'dismissed', action_taken: 'blocked' }, 'a@x', NOW).now, 'none');
+same('warn: resolved with a warning and the note kept',
+  nextReportState(openReport, { status: 'resolved', action_taken: 'warning', admin_notes: '  Spoke to him.  ' }, 'a@x', NOW).patch,
+  { status: 'resolved', action_taken: 'warning', admin_notes: 'Spoke to him.', resolved_at: NOW, resolved_by: 'a@x' });
+same('block: reports the change so the caller can apply it',
+  [nextReportState(openReport, { status: 'resolved', action_taken: 'blocked' }, 'a@x', NOW).was,
+    nextReportState(openReport, { status: 'resolved', action_taken: 'blocked' }, 'a@x', NOW).now], ['none', 'blocked']);
+same('reviewing: not closed, action left as it was',
+  nextReportState(openReport, { status: 'reviewing' }, 'a@x', NOW),
+  { ok: true, patch: { status: 'reviewing', action_taken: 'none' }, was: 'none', now: 'none' });
+same('resolved with no action named keeps the earlier action',
+  nextReportState({ ...openReport, status: 'reviewing', action_taken: 'warning' }, { status: 'resolved' }, 'a@x', NOW).now, 'warning');
+same('an unknown status is refused', nextReportState(openReport, { status: 'open' }, 'a@x', NOW), { ok: false, code: 'INVALID_STATUS' });
+same('a missing status is refused', nextReportState(openReport, {}, 'a@x', NOW), { ok: false, code: 'INVALID_STATUS' });
+same('an unknown action is refused', nextReportState(openReport, { status: 'resolved', action_taken: 'ban' }, 'a@x', NOW), { ok: false, code: 'INVALID_ACTION' });
+same('an action that is not text is refused', nextReportState(openReport, { status: 'resolved', action_taken: { $ne: 'none' } }, 'a@x', NOW), { ok: false, code: 'INVALID_ACTION' });
+check('a note is cut at 1000 characters',
+  nextReportState(openReport, { status: 'resolved', admin_notes: 'x'.repeat(3000) }, 'a@x', NOW).patch.admin_notes.length, 1000);
+
+// Review focus 4: one block stands for as long as any report still says so.
+const guestBlockAfter = make('guestBlockAfter', liftSrc(RESOLVE, 'guestBlockAfter', 'reports, thisReportId, thisAction'));
+const blockedElsewhere = { id: 'r2', status: 'resolved', action_taken: 'blocked' };
+check('this report blocks: blocked', guestBlockAfter([openReport], 'r1', 'blocked'), true);
+check('this report cleared, nothing else blocks: not blocked', guestBlockAfter([{ ...openReport, action_taken: 'none' }], 'r1', 'none'), false);
+check('this report cleared, another still blocks: stays blocked', guestBlockAfter([openReport, blockedElsewhere], 'r1', 'none'), true);
+check('a dismissed report elsewhere does not keep the block', guestBlockAfter([openReport, { ...blockedElsewhere, status: 'dismissed' }], 'r1', 'none'), false);
+check('this report\'s own stale row is ignored', guestBlockAfter([{ ...openReport, status: 'resolved', action_taken: 'blocked' }], 'r1', 'warning'), false);
+check('no reports at all: not blocked', guestBlockAfter(undefined, 'r1', 'none'), false);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-ride-reports.mjs`
+
+Expected: `Error: ENOENT: no such file or directory, open '…/base44/functions/resolveRideReport/entry.ts'`.
+
+- [ ] **Step 3: Create the function**
+
+**Create `base44/functions/resolveRideReport/entry.ts`:**
+
+```ts
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+// resolveRideReport
+// ----------------------------------------------------------------------------
+// Admin's decision on a ride report: still looking at it, resolved (with no
+// action, a warning, or a block), or dismissed.
+//
+// A block is the only decision with an effect outside the report:
+//   - about a GUEST   sets User.ride_blocked, which checkRideAvailability
+//                     refuses. Moving the report away from blocked clears the
+//                     flag again, unless another resolved report against the
+//                     same guest still says blocked.
+//   - about a DRIVER  sets Driver.active = false so they stop appearing when
+//                     a ride is assigned. It is never switched back on from
+//                     here: admin may have deactivated them for other reasons,
+//                     and the switch is on the Drivers tab.
+//
+// Closing a report (resolved or dismissed) is also what lets the driver's pay
+// for that ride release: the sweep skips an earning whose ride has an open or
+// reviewing report.
+
+const RESOLVE_STATUSES = ['reviewing', 'resolved', 'dismissed'];
+const ACTIONS = ['none', 'warning', 'blocked'];
+const MAX_NOTES = 1000;
+
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+// What the report becomes. `was` and `now` are the action before and after,
+// so the caller can tell whether a block has to be applied or lifted. Plain
+// JavaScript body: scripts/check-ride-reports.mjs lifts and runs it.
+function nextReportState(report: any, input: any, adminEmail: string, nowIso: string) {
+    const status = input && input.status;
+    if (typeof status !== 'string' || !RESOLVE_STATUSES.includes(status)) return { ok: false, code: 'INVALID_STATUS' };
+    const asked = input && input.action_taken;
+    const named = asked !== undefined && asked !== null;
+    if (named && (typeof asked !== 'string' || !ACTIONS.includes(asked))) return { ok: false, code: 'INVALID_ACTION' };
+    const was = (report && report.action_taken) || 'none';
+    // Dismissing means "nothing to act on", whatever was sent or decided before.
+    const now = status === 'dismissed' ? 'none' : (named ? asked : was);
+    const notes = typeof (input && input.admin_notes) === 'string'
+        ? { admin_notes: input.admin_notes.trim().slice(0, MAX_NOTES) }
+        : {};
+    const closing = status === 'resolved' || status === 'dismissed'
+        ? { resolved_at: nowIso, resolved_by: adminEmail || '' }
+        : {};
+    return { ok: true, patch: { status, action_taken: now, ...notes, ...closing }, was, now };
+}
+
+// Whether the reported guest is blocked once this report holds `thisAction`.
+// `reports` is every report against that guest. A block stands for as long as
+// any RESOLVED report says so; this report's own row in the list is ignored
+// because it may be stale.
+function guestBlockAfter(reports: any[], thisReportId: string, thisAction: string) {
+    if (thisAction === 'blocked') return true;
+    return (reports || []).some((r) => !!r
+        && r.id !== thisReportId
+        && r.status === 'resolved'
+        && r.action_taken === 'blocked');
+}
+
+async function tryPush(sdk: any, opts: Record<string, unknown>) {
+    try {
+        await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
+    } catch (err) {
+        console.warn('tryPush failed (non-fatal):', err);
+    }
+}
+
+Deno.serve(async (req) => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+    const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers });
+
+    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+    if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
+
+    try {
+        const base44 = createClientFromRequest(req);
+        const user = await base44.auth.me();
+        if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+        if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
+
+        const { report_id, status, action_taken, admin_notes } = await req.json().catch(() => ({}));
+        if (!report_id || typeof report_id !== 'string') {
+            return json({ success: false, error: 'report_id is required' }, 400);
+        }
+
+        const sr = base44.asServiceRole.entities;
+        const report = await sr.RideReport.get(report_id);
+        if (!report) return json({ success: false, error: 'That report no longer exists.', code: 'NOT_FOUND' }, 404);
+
+        const next = nextReportState(report, { status, action_taken, admin_notes }, user.email, new Date().toISOString());
+        if (!next.ok) {
+            return json({
+                success: false,
+                error: next.code === 'INVALID_STATUS' ? 'Choose reviewing, resolved or dismissed.' : 'Choose none, warning or blocked.',
+                code: next.code,
+            }, 400);
+        }
+
+        await sr.RideReport.update(report.id, next.patch);
+
+        // ── The one effect outside the report ───────────────────────────
+        let effect = 'none';
+        if (report.reported_email && (next.now === 'blocked' || next.was === 'blocked')) {
+            // Only touch the flag when this report is, or was, a reason for it.
+            const about = await fetchAll(sr.RideReport, { reported_email: report.reported_email });
+            const shouldBlock = guestBlockAfter(about, report.id, next.now as string);
+            const accounts = await sr.User.filter({ email: report.reported_email });
+            const guest = accounts?.[0] || null;
+            if (!guest) {
+                effect = 'guest_not_found';
+            } else if ((guest.ride_blocked === true) !== shouldBlock) {
+                await sr.User.update(guest.id, { ride_blocked: shouldBlock });
+                effect = shouldBlock ? 'guest_blocked' : 'guest_unblocked';
+            }
+        } else if (report.reported_driver_id && next.now === 'blocked' && next.was !== 'blocked') {
+            const driver = await sr.Driver.get(report.reported_driver_id);
+            if (driver && driver.active !== false) {
+                await sr.Driver.update(driver.id, { active: false });
+                effect = 'driver_deactivated';
+            }
+        }
+
+        // Tell the reporter it was looked at. Never what was decided about
+        // the other person: that is between admin and them.
+        const closedNow = (next.patch.status === 'resolved' || next.patch.status === 'dismissed')
+            && report.status !== next.patch.status;
+        if (closedNow && report.reporter_email) {
+            await tryPush(base44, {
+                user_email: report.reporter_email,
+                title: 'Your report was reviewed',
+                body: `The team has looked at your report on ride ${report.booking_reference || ''}. Thank you for telling us.`.replace('  ', ' '),
+                url: report.reporter_role === 'driver' ? '/DriverRides' : '/Bookings',
+                tag: `ride-report-${report.id}`,
+            });
+        }
+
+        const updated = await sr.RideReport.get(report.id);
+        return json({ success: true, data: { report: updated, effect } });
+    } catch (error) {
+        console.error('resolveRideReport error:', error);
+        return json({ success: false, error: 'Internal server error', details: (error as Error).message }, 500);
+    }
+});
+```
+
+- [ ] **Step 4: Run the checks**
+
+Run: `node scripts/check-ride-reports.mjs`
+
+Expected: `PASS`, including every line under `— resolving —`.
+
+Run: `node_modules/.bin/esbuild base44/functions/resolveRideReport/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+- [ ] **Step 5: Sandbox checklist (after the next publish)**
+
+1. As admin: `await base44.functions.invoke('resolveRideReport', { report_id: '<a driver's report about a guest>', status: 'resolved', action_taken: 'blocked', admin_notes: 'Second complaint' })`. Expected: `effect: 'guest_blocked'`; the guest's User row has `ride_blocked: true`; the driver receives "Your report was reviewed".
+2. The same call with `action_taken: 'warning'`. Expected: `effect: 'guest_unblocked'`.
+3. On a guest's report about a driver, `action_taken: 'blocked'`. Expected: `effect: 'driver_deactivated'`; the driver shows "Inactive" on the Drivers tab.
+4. As a non-admin. Expected: 403.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/check-ride-reports.mjs base44/functions/resolveRideReport/entry.ts
+git commit -m "feat(rides): admin resolves a ride report, with warn and block" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task B04: A blocked guest cannot request a ride, and the request screen says why
+
+**Files:**
+- Modify: `scripts/check-ride-reports.mjs` (blocked accounts section, above `// ---- result ----`)
+- Modify: `base44/functions/checkRideAvailability/entry.ts` (one helper; the check after sign-in)
+- Modify: `src/pages/RideCheckout.jsx` (read the server's reason when a request is refused)
+
+**Interfaces:**
+- Consumes: `User.ride_blocked` (Task B01); `fromThrown(err)` from `src/lib/fnResult.js` (wallet plan, Task A10).
+- Produces: `checkRideAvailability` refuses a blocked account with 403 `RIDE_BLOCKED` and the sentence "Ride bookings are not available on this account. Please contact support." Helper `isRideBlocked(account) → boolean`.
+
+**Why the request screen changes.** `RideCheckout` showed `err.message` when a request was refused. Every refusal from `checkRideAvailability` is a 4xx, which the SDK throws, so a guest whose car was double-booked, who had too many open requests, or who is blocked read "Request failed with status code 409". The sentence they should read is in the thrown error's response body; `fromThrown` gets it.
+
+- [ ] **Step 1: Write the failing check**
+
+**Edit `scripts/check-ride-reports.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Blocked accounts ───────────────────────────────────────────────────────
+console.log('\n— blocked accounts —');
+const isRideBlocked = make('isRideBlocked', liftSrc('checkRideAvailability', 'isRideBlocked', 'account'));
+check('an account admin blocked is refused', isRideBlocked({ ride_blocked: true }), true);
+check('an ordinary account is not', isRideBlocked({ ride_blocked: false }), false);
+check('an account from before the flag existed is not', isRideBlocked({ email: 'ada@example.com' }), false);
+// Only the boolean true blocks. A string that happens to be truthy must not.
+check('the string "false" does not block', isRideBlocked({ ride_blocked: 'false' }), false);
+check('a missing account row does not block', isRideBlocked(undefined), false);
+
+// ---- result ----
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `node scripts/check-ride-reports.mjs`
+
+Expected: `Error: could not find isRideBlocked in base44/functions/checkRideAvailability/entry.ts`.
+
+- [ ] **Step 3: Refuse a blocked account before anything else is looked at**
+
+**Edit `base44/functions/checkRideAvailability/entry.ts`** — find:
+
+```ts
+function multiDaysOk(days: unknown) {
+    const d = Number(days);
+    return Number.isInteger(d) && d >= 1 && d <= MAX_MULTI_DAYS;
+}
+```
+
+replace with:
+
+```ts
+function multiDaysOk(days: unknown) {
+    const d = Number(days);
+    return Number.isInteger(d) && d >= 1 && d <= MAX_MULTI_DAYS;
+}
+
+// Admin blocked this account from rides when resolving a report against it
+// (resolveRideReport). Only the boolean true blocks.
+function isRideBlocked(account: any) {
+    return !!account && account.ride_blocked === true;
+}
+```
+
+**Edit `base44/functions/checkRideAvailability/entry.ts`** — find:
+
+```ts
+        const user = await base44.auth.me();
+        if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+
+        const body = await req.json().catch(() => ({}));
+```
+
+replace with:
+
+```ts
+        const user = await base44.auth.me();
+        if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
+
+        // Read the account fresh under the service role rather than trusting
+        // the copy on the session: a block must take effect at once.
+        const accounts = await base44.asServiceRole.entities.User.filter({ email: user.email });
+        if (isRideBlocked(accounts?.[0])) {
+            return json({
+                success: false,
+                error: 'Ride bookings are not available on this account. Please contact support.',
+                code: 'RIDE_BLOCKED',
+            }, 403);
+        }
+
+        const body = await req.json().catch(() => ({}));
+```
+
+- [ ] **Step 4: Let the guest read why a request was refused**
+
+**Edit `src/pages/RideCheckout.jsx`** — find:
+
+```jsx
+import { base44 } from '@/api/base44Client';
+import { Card, CardContent } from '@/components/ui/card';
+```
+
+replace with:
+
+```jsx
+import { base44 } from '@/api/base44Client';
+import { fromThrown } from '@/lib/fnResult';
+import { Card, CardContent } from '@/components/ui/card';
+```
+
+**Edit `src/pages/RideCheckout.jsx`** — find:
+
+```jsx
+      console.error('Ride request failed:', err);
+      setSubmitError(err?.message || 'Something went wrong. Please try again.');
+```
+
+replace with:
+
+```jsx
+      console.error('Ride request failed:', err);
+      // A refusal is a 4xx, which the SDK throws. Its body carries the reason
+      // the guest can act on ("That vehicle is already booked for…", "Ride
+      // bookings are not available on this account…"); err.message is only
+      // "Request failed with status code 409".
+      setSubmitError(fromThrown(err).error);
+```
+
+- [ ] **Step 5: Run the checks**
+
+Run: `npm run check && npm run lint`
+
+Expected: five `PASS` lines, no lint output.
+
+Run: `node_modules/.bin/esbuild base44/functions/checkRideAvailability/entry.ts --format=esm --target=esnext --outfile=/dev/null`
+
+Expected: exit code 0.
+
+Run: `set -a; . ./.env; set +a; npm run build`
+
+Expected: `✓ built in …`.
+
+- [ ] **Step 6: Sandbox checklist (after the next publish)**
+
+1. Block a test guest (Task B03, step 5.1). As that guest, request a ride. Expected: the request screen shows "Ride bookings are not available on this account. Please contact support." in its error area.
+2. Unblock them and request again. Expected: the request goes through.
+3. As any guest, request a car that is already booked for that time. Expected: the screen shows the server's double-booking sentence, not a status code.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add scripts/check-ride-reports.mjs base44/functions/checkRideAvailability/entry.ts src/pages/RideCheckout.jsx
+git commit -m "feat(rides): a blocked guest cannot request a ride; refusals on the request screen are readable" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
