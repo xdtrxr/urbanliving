@@ -2,18 +2,32 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 // processWithdrawal
 // ----------------------------------------------------------------------------
-// Admin sends a pending withdrawal to Paystack.
+// Admin sends a withdrawal to Paystack.
 //
-// A referral withdrawal was debited from User.referral_balance_ngn when it was
-// requested, so it is refunded there if Paystack turns the transfer down.
+// SENT ONCE. Nothing on this platform can lock a row, so two calls for the
+// same withdrawal (a double press, two tabs, two admins) can both read it as
+// pending. Two things stand between that and two bank transfers:
+//   1. the Paystack reference is fixed per row, wd-<row id>, and Paystack
+//      does not hold two transfers with one reference;
+//   2. before sending, and again after any refusal, this function asks
+//      Paystack what it already holds for that reference.
+// A withdrawal is marked failed, and a referral refunded, only when Paystack
+// refused it for a stated reason AND holds no transfer for it. Refunding on a
+// guess would pay twice: once by transfer and once by refund.
 //
-// A driver-wallet withdrawal was not debited from anywhere: the row is the
-// reservation against the driver's released earnings. So before any money
-// moves, the request is checked against the ledger again here. That is the
-// guard that matters, because nothing about the row itself can be trusted: a
-// browser can create a WithdrawalRequest row directly until the stricter
-// create rule staged in docs/entity-rules-pending-publish is live, and an
-// honest request can be overtaken by a reversal of the pay it relied on.
+// NEVER STUCK. The reference is written on the row before Paystack is asked
+// to send. If the answer never arrives, the row stays processing with no
+// transfer code, which is exactly the state canSend() lets admin retry, and
+// paystackTransferWebhook can still find the row from the reference alone.
+//
+// ON THE LEDGER. A referral withdrawal was debited from
+// User.referral_balance_ngn when it was requested. A driver-wallet withdrawal
+// was not debited from anywhere: the row is the reservation against the
+// driver's released earnings. So a driver-wallet request is checked against
+// the ledger again here, and the request itself must be one of the rows that
+// check counts. Nothing on the row is trusted: a browser can create a
+// WithdrawalRequest row directly until the stricter create rule staged in
+// docs/entity-rules-pending-publish is live.
 
 const WITHDRAWAL_THRESHOLD_NGN = 10000;
 
@@ -27,6 +41,15 @@ async function fetchAll(entity: any, query: Record<string, unknown>): Promise<an
         if (page.length < PAGE) break;
     }
     return out;
+}
+
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copies in every function that takes an id.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 }
 
 // ── Wallet arithmetic — lockstep copies, see getDriverWallet ────────────────
@@ -98,17 +121,98 @@ function refundsToBalance(withdrawal: any) {
     return !!withdrawal && withdrawal.wallet !== 'driver';
 }
 
+// ── Sending ─────────────────────────────────────────────────────────────────
+
+// The Paystack reference for a withdrawal. Fixed per row, in the form
+// Paystack requires (lowercase letters, digits, - and _, 16 to 50 characters),
+// so Paystack never holds two transfers for one withdrawal.
+// paystackTransferWebhook reads the row id back out of it.
+function transferReferenceFor(withdrawalId: string) {
+    return `wd-${String(withdrawalId).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
+}
+
+// Whether this row may be sent now: a pending one, or one an earlier attempt
+// marked processing without ever getting a transfer code back. Sending the
+// second kind again is safe because its reference is the same.
+function canSend(withdrawal: any) {
+    if (!withdrawal) return false;
+    if (withdrawal.status === 'pending') return true;
+    return withdrawal.status === 'processing' && !withdrawal.transfer_code;
+}
+
+// Whether the bank account on a request is the requester's own.
+function bankBelongsTo(bankAccount: any, withdrawal: any) {
+    const owner = String((bankAccount && bankAccount.user_email) || '').trim().toLowerCase();
+    const asker = String((withdrawal && withdrawal.user_email) || '').trim().toLowerCase();
+    return !!owner && owner === asker;
+}
+
+// What Paystack's answer to "what do you hold for this reference?" means:
+// the transfer; null for a definite "nothing"; undefined for "could not
+// tell". When a transfer exists the answer is a 2xx carrying it, so any
+// ordinary refusal means there is none. A bad key, a timeout, a rate limit
+// or a fault on Paystack's side says nothing either way.
+function lookupFromResponse(httpStatus: number, body: any) {
+    if (httpStatus >= 200 && httpStatus < 300) {
+        return body && body.status && body.data && body.data.transfer_code ? body.data : undefined;
+    }
+    if (httpStatus < 400 || httpStatus === 401 || httpStatus === 403) return undefined;
+    if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500) return undefined;
+    return null;
+}
+
+// Paystack's stated reason for refusing a request, or null when it gave no
+// usable answer: no response at all (0), a timeout, a rate limit, a fault on
+// its side, a body that was not JSON, or a 2xx without what was asked for.
+// null never leads to a refund. It means "ask again", not "no".
+function refusalMessage(httpStatus: number, body: any, fallback: string) {
+    if (httpStatus < 400 || httpStatus === 408 || httpStatus === 429 || httpStatus >= 500) return null;
+    if (!body || typeof body !== 'object') return null;
+    return String(body.message || fallback);
+}
+
+// What happened to a transfer request. `message` is refusalMessage's answer;
+// `lookup` is lookupFromResponse's.
+//   sent          Paystack accepted it
+//   already_sent  not accepted, but the transfer exists: another call, or an
+//                 earlier attempt, got there first
+//   failed        refused for a stated reason and nothing exists: the only
+//                 case in which a referral is refunded
+//   unconfirmed   anything else. The row stays processing and nobody is
+//                 refunded, because refunding a transfer that did go out
+//                 would pay twice.
+function transferOutcome(accepted: boolean, message: string | null, lookup: any) {
+    if (accepted) return 'sent';
+    if (lookup && lookup.transfer_code) return 'already_sent';
+    if (lookup === undefined) return 'unconfirmed';
+    if (message === null || message === undefined) return 'unconfirmed';
+    if (/reference/i.test(String(message))) return 'unconfirmed';
+    return 'failed';
+}
+
+// Where a withdrawal row should stand given the status Paystack reports for
+// its transfer. '' means not settled yet: the row stays processing and the
+// settlement webhook finishes it.
+function rowStatusFor(transferStatus: string) {
+    if (transferStatus === 'success') return 'completed';
+    if (transferStatus === 'failed') return 'failed';
+    if (transferStatus === 'reversed') return 'reversed';
+    return '';
+}
+
 // Why a driver-wallet withdrawal must not be paid, or '' when it may be.
-// The request itself is one of the rows walletTotals counts, so "the ledger
-// covers it" is the same as "there is no shortfall".
+// The request itself has to be one of the rows walletTotals counts, so "the
+// ledger covers it" is the same as "there is no shortfall".
 async function driverWithdrawalProblem(sr: any, w: any) {
     const amount = Number(w.amount);
     if (typeof w.amount !== 'number' || !Number.isInteger(amount) || amount < WITHDRAWAL_THRESHOLD_NGN) {
         return 'The amount on this request is not a valid withdrawal.';
     }
-    if (!w.driver_id) return 'This request names no driver.';
+    if (!isId(w.driver_id)) return 'This request names no driver.';
     const driver = await sr.Driver.get(w.driver_id);
     if (!driver) return 'The driver profile for this request no longer exists.';
+    // Whatever the lookup answered with, it must be the row the request names.
+    if (driver.id !== w.driver_id) return 'This request names no driver.';
     // Only the login linked to the driver right now may start a withdrawal.
     const requester = String(w.user_email || '').trim().toLowerCase();
     if (!requester || requester !== String(driver.user_email || '').trim().toLowerCase()) {
@@ -116,202 +220,260 @@ async function driverWithdrawalProblem(sr: any, w: any) {
     }
     const earnings = await fetchAll(sr.DriverEarning, { driver_id: driver.id });
     const rows = await fetchAll(sr.WithdrawalRequest, { driver_id: driver.id });
-    const totals = walletTotals(earnings, driverWithdrawals(driver, rows));
+    const counted = driverWithdrawals(driver, rows);
+    // If the request is not among the counted rows, the arithmetic below says
+    // nothing about it, and "no shortfall" would be meaningless.
+    if (!counted.some((r) => r.id === w.id)) return 'This request is not on the driver\'s ledger.';
+    const totals = walletTotals(earnings, counted);
     if (totals.shortfall > 0) {
         return `The driver's released earnings do not cover this request (short by ₦${totals.shortfall.toLocaleString()}).`;
     }
     return '';
 }
 
+// Credit a failed referral withdrawal back to the stored balance, once: the
+// row's refunded_at stamp is the guard, and it is the same stamp
+// paystackTransferWebhook uses. A driver-wallet request debited nothing, so
+// marking it failed is its refund. Says whether anything was credited.
+async function refundReferralOnce(sr: any, withdrawal: any, nowIso: string) {
+    if (!refundsToBalance(withdrawal)) return false;
+    const fresh = await sr.WithdrawalRequest.get(withdrawal.id);
+    if (!fresh || fresh.refunded_at) return false;
+    const users = await sr.User.filter({ email: withdrawal.user_email });
+    if (!Array.isArray(users) || users.length === 0) return false;
+    await sr.User.update(users[0].id, {
+        referral_balance_ngn: (Number(users[0].referral_balance_ngn) || 0) + (Number(withdrawal.amount) || 0),
+    });
+    await sr.WithdrawalRequest.update(withdrawal.id, { refunded_at: nowIso });
+    return true;
+}
+
+// Send one withdrawal and say what the response should be: { status, body }.
+// Everything that touches Paystack goes through `paystack` (see
+// paystackClient), so this exact code runs in scripts/check-driver-wallet.mjs
+// against a stand-in, including two calls overlapping on one row.
+async function sendWithdrawal(sr: any, paystack: any, withdrawal: any, nowIso: string) {
+    const reference = transferReferenceFor(withdrawal.id);
+    const refuse = (status, error, code) => ({ status, body: { success: false, error, code } });
+
+    // The transfer exists at Paystack. Record its codes. The row's status is
+    // only ever moved forward: to its settled state if the bank has settled
+    // and the row is not final yet, or from pending to processing. It is
+    // never written over a state the settlement webhook may have set a
+    // moment ago, which is why the row is read again here.
+    const alreadySent = async (transfer) => {
+        const settled = rowStatusFor(transfer.status);
+        const fresh = await sr.WithdrawalRequest.get(withdrawal.id);
+        const open = !!fresh && (fresh.status === 'pending' || fresh.status === 'processing');
+        const patch = {
+            transfer_reference: reference,
+            transfer_code: transfer.transfer_code,
+            transfer_id: String(transfer.id || ''),
+        };
+        if (settled && open) {
+            patch.status = settled;
+            patch.processed_at = nowIso;
+        } else if (!settled && fresh && fresh.status === 'pending') {
+            patch.status = 'processing';
+        }
+        await sr.WithdrawalRequest.update(withdrawal.id, patch);
+        if (open && (settled === 'failed' || settled === 'reversed')) await refundReferralOnce(sr, withdrawal, nowIso);
+        const status = patch.status || (fresh && fresh.status) || 'processing';
+        const what = {
+            completed: 'This withdrawal had already been sent, and the bank has paid it.',
+            failed: 'This withdrawal had already been sent, and the bank refused it. It is marked failed.',
+            reversed: 'This withdrawal had already been sent, and the bank sent the money back. It is marked reversed.',
+        }[status] || 'This withdrawal had already been sent to Paystack. Its status will update when the bank settles.';
+        return {
+            status: 200,
+            body: {
+                success: true,
+                already_sent: true,
+                status,
+                message: `${what} Nothing was sent a second time.`,
+            },
+        };
+    };
+
+    // What it means that Paystack did not accept a request. `message` is its
+    // stated reason, or null when it gave no usable answer.
+    const notAccepted = async (label, message, details) => {
+        const lookup = await paystack.find(reference);
+        const outcome = transferOutcome(false, message, lookup);
+        if (outcome === 'already_sent') return alreadySent(lookup);
+        if (outcome === 'unconfirmed') {
+            return refuse(502, `Paystack did not confirm the transfer. The withdrawal is left as processing and cannot be sent twice. Press Retry in a minute. If it keeps happening, look up the reference ${reference} in Paystack.`, 'UNCONFIRMED');
+        }
+        await sr.WithdrawalRequest.update(withdrawal.id, {
+            status: 'failed',
+            error_message: message || label,
+            processed_at: nowIso,
+        });
+        await refundReferralOnce(sr, withdrawal, nowIso);
+        return { status: 400, body: { success: false, error: label, details } };
+    };
+
+    // Ask before sending. A transfer for this withdrawal may already exist:
+    // an earlier attempt whose answer was lost, or a press a moment ago.
+    const before = await paystack.find(reference);
+    if (before === undefined) {
+        return refuse(502, 'Paystack could not be asked whether this withdrawal has already been sent, so nothing was sent. Try again in a minute.', 'UNCONFIRMED');
+    }
+    if (before) return alreadySent(before);
+
+    // Nothing has been sent, so a request that should not be paid can still
+    // be turned away. A driver-wallet request is only as good as the ledger
+    // behind it; one that fails is closed, so it cannot be retried into a
+    // payout later. Nothing was debited for it, so nothing is refunded.
+    if (withdrawal.wallet === 'driver') {
+        const problem = await driverWithdrawalProblem(sr, withdrawal);
+        if (problem) {
+            await sr.WithdrawalRequest.update(withdrawal.id, {
+                status: 'failed',
+                error_message: problem,
+                processed_at: nowIso,
+            });
+            return refuse(409, problem, 'NOT_COVERED');
+        }
+    }
+
+    let bankAccount = null;
+    if (isId(withdrawal.bank_account_id)) {
+        try {
+            bankAccount = await sr.UserBankAccount.get(withdrawal.bank_account_id);
+        } catch (_err) {
+            bankAccount = null;
+        }
+    }
+    if (!bankAccount) return refuse(404, 'Bank account not found', 'NO_BANK');
+    // createWithdrawalRequest only accepts the requester's own account, so a
+    // row naming someone else's was not made by it. Left exactly as it is,
+    // for a person to look at: failing it would refund a referral balance
+    // that may never have been debited.
+    if (!bankBelongsTo(bankAccount, withdrawal)) {
+        return refuse(409, 'The bank account on this request does not belong to the person who asked. Nothing was sent.', 'BANK_MISMATCH');
+    }
+
+    // The reference goes on the row before Paystack is asked to send.
+    await sr.WithdrawalRequest.update(withdrawal.id, { status: 'processing', transfer_reference: reference });
+
+    // Create the transfer recipient the first time this account is paid.
+    let recipientCode = bankAccount.recipient_code;
+    if (!recipientCode) {
+        const made = await paystack.createRecipient(bankAccount);
+        if (!made.ok) return notAccepted('Failed to create transfer recipient', made.message, made.details);
+        recipientCode = made.code;
+        await sr.UserBankAccount.update(bankAccount.id, { recipient_code: recipientCode });
+    }
+
+    const sent = await paystack.send({
+        source: 'balance',
+        reason: `UrbanStays withdrawal - ${String(withdrawal.id).substring(0, 8)}`,
+        amount: Math.round(Number(withdrawal.amount) * 100), // kobo
+        recipient: recipientCode,
+        reference,
+    });
+    if (!sent.ok) return notAccepted('Transfer failed', sent.message, sent.details);
+
+    // Paystack accepted the transfer for processing. It is NOT marked
+    // completed here: settlement is asynchronous and can still fail.
+    // paystackTransferWebhook hears transfer.success / transfer.failed /
+    // transfer.reversed and moves the row to its final state.
+    await sr.WithdrawalRequest.update(withdrawal.id, {
+        transfer_code: sent.transfer.transfer_code,
+        transfer_id: String(sent.transfer.id || ''),
+    });
+    return {
+        status: 200,
+        body: {
+            success: true,
+            message: 'Transfer initiated — Paystack will confirm settlement asynchronously.',
+            transfer_data: sent.transfer,
+        },
+    };
+}
+
+// The three Paystack calls a payout needs, in the shape sendWithdrawal reads.
+function paystackClient(secretKey: string) {
+    const headers = { 'Authorization': `Bearer ${secretKey}`, 'Content-Type': 'application/json' };
+    // { http, body }. http is 0 when there was no response at all.
+    const call = async (method: string, path: string, payload?: unknown) => {
+        try {
+            const res = await fetch(`https://api.paystack.co${path}`, {
+                method,
+                headers,
+                ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+            });
+            const body = await res.json().catch(() => null);
+            return { http: res.status, body };
+        } catch (err) {
+            console.error(`Paystack ${method} ${path} gave no answer:`, err);
+            return { http: 0, body: null };
+        }
+    };
+    const accepted = (http: number, body: any) => http >= 200 && http < 300 && !!body && !!body.status && !!body.data;
+    return {
+        // The transfer Paystack holds for a reference: see lookupFromResponse.
+        async find(reference: string) {
+            const { http, body } = await call('GET', `/transfer/verify/${encodeURIComponent(reference)}`);
+            return lookupFromResponse(http, body);
+        },
+        async createRecipient(bankAccount: any) {
+            const { http, body } = await call('POST', '/transferrecipient', {
+                type: 'nuban',
+                name: bankAccount.account_name,
+                account_number: bankAccount.account_number,
+                bank_code: bankAccount.bank_code,
+                currency: 'NGN',
+            });
+            if (accepted(http, body) && body.data.recipient_code) return { ok: true, code: body.data.recipient_code };
+            return { ok: false, message: refusalMessage(http, body, 'Failed to create transfer recipient'), details: body };
+        },
+        async send(payload: unknown) {
+            const { http, body } = await call('POST', '/transfer', payload);
+            if (accepted(http, body) && body.data.transfer_code) return { ok: true, transfer: body.data };
+            return { ok: false, message: refusalMessage(http, body, 'Transfer initiation failed'), details: body };
+        },
+    };
+}
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
-        
-        // Authenticate user and check admin
+
         const user = await base44.auth.me();
         if (!user || user.role !== 'admin') {
-            return Response.json({ error: 'Unauthorized. Admin access required.' }, { status: 403 });
+            return Response.json({ success: false, error: 'Unauthorized. Admin access required.' }, { status: 403 });
         }
 
-        const { withdrawal_request_id } = await req.json();
+        const body = await req.json().catch(() => null);
+        const withdrawal_request_id = body?.withdrawal_request_id;
+        if (!isId(withdrawal_request_id)) {
+            return Response.json({ success: false, error: 'Missing withdrawal_request_id' }, { status: 400 });
+        }
 
-        if (!withdrawal_request_id) {
-            return Response.json({ 
-                error: 'Missing withdrawal_request_id' 
+        const sr = base44.asServiceRole.entities;
+        const withdrawalRequest = await sr.WithdrawalRequest.get(withdrawal_request_id);
+        if (!withdrawalRequest || withdrawalRequest.id !== withdrawal_request_id) {
+            return Response.json({ success: false, error: 'Withdrawal request not found' }, { status: 404 });
+        }
+        if (!canSend(withdrawalRequest)) {
+            return Response.json({
+                success: false,
+                error: `Withdrawal is already ${withdrawalRequest.status}`,
             }, { status: 400 });
-        }
-
-        // Get withdrawal request
-        const withdrawalRequest = await base44.asServiceRole.entities.WithdrawalRequest.get(withdrawal_request_id);
-        
-        if (!withdrawalRequest) {
-            return Response.json({ error: 'Withdrawal request not found' }, { status: 404 });
-        }
-
-        if (withdrawalRequest.status !== 'pending') {
-            return Response.json({ 
-                error: `Withdrawal is already ${withdrawalRequest.status}` 
-            }, { status: 400 });
-        }
-
-        // A driver-wallet request is only as good as the ledger behind it.
-        // Checked here, after the "still pending" guard and before anything
-        // is sent, and a request that fails is closed so it cannot be retried
-        // into a payout later.
-        if (withdrawalRequest.wallet === 'driver') {
-            const problem = await driverWithdrawalProblem(base44.asServiceRole.entities, withdrawalRequest);
-            if (problem) {
-                await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawal_request_id, {
-                    status: 'failed',
-                    error_message: problem,
-                    processed_at: new Date().toISOString(),
-                });
-                return Response.json({ success: false, error: problem, code: 'NOT_COVERED' }, { status: 409 });
-            }
-        }
-
-        // Get bank account details
-        const bankAccount = await base44.asServiceRole.entities.UserBankAccount.get(withdrawalRequest.bank_account_id);
-        
-        if (!bankAccount) {
-            return Response.json({ error: 'Bank account not found' }, { status: 404 });
         }
 
         const paystackSecretKey = Deno.env.get('PAYSTACK_SECRET_KEY');
         if (!paystackSecretKey) {
-            return Response.json({ error: 'Payment service not configured' }, { status: 500 });
+            return Response.json({ success: false, error: 'Payment service not configured' }, { status: 500 });
         }
 
-        // Update status to processing
-        await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawal_request_id, {
-            status: 'processing'
-        });
-
-        let recipientCode = bankAccount.recipient_code;
-
-        // Create transfer recipient if not exists
-        if (!recipientCode) {
-            const recipientResponse = await fetch('https://api.paystack.co/transferrecipient', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${paystackSecretKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    type: 'nuban',
-                    name: bankAccount.account_name,
-                    account_number: bankAccount.account_number,
-                    bank_code: bankAccount.bank_code,
-                    currency: 'NGN'
-                })
-            });
-
-            const recipientData = await recipientResponse.json();
-
-            if (!recipientResponse.ok || !recipientData.status) {
-                // Revert status and refund
-                await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawal_request_id, {
-                    status: 'failed',
-                    error_message: recipientData.message || 'Failed to create transfer recipient',
-                    processed_at: new Date().toISOString()
-                });
-
-                // Refund user. A driver-wallet request debited nothing, so it
-                // has nothing to credit back: marking it failed is the refund.
-                const requestUser = refundsToBalance(withdrawalRequest)
-                    ? await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email })
-                    : [];
-                if (requestUser.length > 0) {
-                    const currentBalance = requestUser[0].referral_balance_ngn || 0;
-                    await base44.asServiceRole.entities.User.update(requestUser[0].id, {
-                        referral_balance_ngn: currentBalance + withdrawalRequest.amount
-                    });
-                }
-
-                return Response.json({ 
-                    success: false,
-                    error: 'Failed to create transfer recipient',
-                    details: recipientData
-                }, { status: 400 });
-            }
-
-            recipientCode = recipientData.data.recipient_code;
-
-            // Update bank account with recipient code
-            await base44.asServiceRole.entities.UserBankAccount.update(bankAccount.id, {
-                recipient_code: recipientCode
-            });
-        }
-
-        // Initiate transfer
-        const transferResponse = await fetch('https://api.paystack.co/transfer', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${paystackSecretKey}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                source: 'balance',
-                reason: `UrbanStays withdrawal - ${withdrawalRequest.id.substring(0, 8)}`,
-                amount: withdrawalRequest.amount * 100, // Convert to kobo
-                recipient: recipientCode,
-                reference: `WD-${withdrawalRequest.id.substring(0, 8)}-${Date.now()}`
-            })
-        });
-
-        const transferData = await transferResponse.json();
-
-        if (!transferResponse.ok || !transferData.status) {
-            // Revert status and refund
-            await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawal_request_id, {
-                status: 'failed',
-                error_message: transferData.message || 'Transfer initiation failed',
-                processed_at: new Date().toISOString()
-            });
-
-            // Refund user. A driver-wallet request debited nothing, so it
-            // has nothing to credit back: marking it failed is the refund.
-            const requestUser = refundsToBalance(withdrawalRequest)
-                ? await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email })
-                : [];
-            if (requestUser.length > 0) {
-                const currentBalance = requestUser[0].referral_balance_ngn || 0;
-                await base44.asServiceRole.entities.User.update(requestUser[0].id, {
-                    referral_balance_ngn: currentBalance + withdrawalRequest.amount
-                });
-            }
-
-            return Response.json({ 
-                success: false,
-                error: 'Transfer failed',
-                details: transferData
-            }, { status: 400 });
-        }
-
-        // Paystack accepted the transfer for processing. DO NOT mark
-        // `completed` here — the transfer is asynchronous and Paystack
-        // may still fail to settle (insufficient float, bank rejects the
-        // NUBAN, account closed). The paystackTransferWebhook listens
-        // for transfer.success / transfer.failed / transfer.reversed and
-        // flips the row to its final state, refunding the user's balance
-        // on failure or reversal.
-        await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawal_request_id, {
-            transfer_code: transferData.data.transfer_code,
-            transfer_id: transferData.data.id.toString(),
-            // status stays 'processing' until the webhook confirms outcome
-        });
-
-        return Response.json({
-            success: true,
-            message: 'Transfer initiated — Paystack will confirm settlement asynchronously.',
-            transfer_data: transferData.data
-        });
-
+        const result = await sendWithdrawal(sr, paystackClient(paystackSecretKey), withdrawalRequest, new Date().toISOString());
+        if (result.status >= 500) console.warn(`processWithdrawal ${withdrawal_request_id}:`, result.body.error);
+        return Response.json(result.body, { status: result.status });
     } catch (error) {
         console.error('Error processing withdrawal:', error);
-        return Response.json({ 
-            success: false,
-            error: error.message 
-        }, { status: 500 });
+        return Response.json({ success: false, error: (error as Error).message }, { status: 500 });
     }
 });

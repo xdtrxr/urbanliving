@@ -675,6 +675,7 @@ check('a missing row refunds nothing', refundsToBalance(null), false);
 // before it sends money. This is what makes a forged or stale row harmless.
 const driverWithdrawalProblem = make('driverWithdrawalProblem',
   constLine('processWithdrawal', 'WITHDRAWAL_THRESHOLD_NGN'), FETCH_ALL,
+  liftSrc('processWithdrawal', 'isId', 'value'),
   liftSrc('processWithdrawal', 'driverEmails', 'driver'),
   liftSrc('processWithdrawal', 'driverWithdrawals', 'driver, rows'),
   liftSrc('processWithdrawal', 'walletTotals', 'earnings, withdrawals'),
@@ -898,6 +899,490 @@ identical('driverEmails', 'driver', [WALLET_HOME, 'getDashboardStats']);
 identical('driverWithdrawals', 'driver, rows', [WALLET_HOME, 'getDashboardStats']);
 identical('walletTotals', 'earnings, withdrawals', [WALLET_HOME, 'getDashboardStats']);
 identical('driverWalletSummaries', SUMMARY_SIG, [SUMMARY_HOME, 'getDashboardStats']);
+
+// ── Payouts: sent once, never stuck, always on the ledger ──────────────────
+console.log('\n— payout safety —');
+const PW = 'processWithdrawal';
+const pw = (name, signature) => liftSrc(PW, name, signature);
+const isId = make('isId', pw('isId', 'value'));
+check('a row id is an id', isId('6a431f7ed4c9964e10f5a1b3'), true);
+// entity.get(id) is a GET on …/<id>. Each of these would fetch a row other
+// than the one every equality check in the function is looking at.
+for (const bad of ['6a431f7ed4c9964e10f5a1b3#', '6a431f7ed4c9964e10f5a1b3?x=1', '../User/6a431f7ed4c9964e10f5a1b3', 'a/b', 'a b', '', 'x'.repeat(65), 42, null, undefined, { $ne: '' }]) {
+  check(`${JSON.stringify(bad) ?? String(bad)} is not an id`, isId(bad), false);
+}
+identical('isId', 'value', [PW, 'createWithdrawalRequest']);
+
+// A real driver forges a row for far more than they earned and appends "#"
+// to their own id. get() drops the "#" and returns their driver row; before
+// this fix the request then went missing from its own ledger check.
+{
+  const sr = bank([request({ amount: 2000000, driver_id: 'drvA#' })], [releasedRow('e1', 20000)]);
+  const realGet = sr.Driver.get;
+  sr.Driver.get = (id) => realGet(String(id).split('#')[0].split('?')[0]);
+  check('a driver id with "#" on the end is refused',
+    await driverWithdrawalProblem(sr, request({ amount: 2000000, driver_id: 'drvA#' })), 'This request names no driver.');
+}
+{
+  // Whatever get() returns, it must be the row the request names.
+  const sr = bank([request({ driver_id: 'drvZ' })], [releasedRow('e1', 20000)]);
+  sr.Driver.get = async () => ({ id: 'drvA', user_email: 'emeka@work.ng' });
+  check('a lookup that answers with a different driver is refused',
+    await driverWithdrawalProblem(sr, request({ driver_id: 'drvZ' })), 'This request names no driver.');
+}
+{
+  // The request must be one of the rows the arithmetic counts.
+  const sr = bank([], [releasedRow('e1', 20000)]);
+  check('a request that is not on the driver\'s ledger is refused',
+    await driverWithdrawalProblem(sr, request()), 'This request is not on the driver\'s ledger.');
+}
+
+const transferReferenceFor = make('transferReferenceFor', pw('transferReferenceFor', 'withdrawalId'));
+const ROW_ID = '6a431f7ed4c9964e10f5a1b3';
+const REF = transferReferenceFor(ROW_ID);
+check('one withdrawal, one reference, every time', REF, transferReferenceFor(ROW_ID.toUpperCase()));
+check('…in the form Paystack accepts', /^[a-z0-9_-]{16,50}$/.test(REF), true);
+check('…and never shared between withdrawals', REF === transferReferenceFor('6a431f7ed4c9964e10f5a1b4'), false);
+const withdrawalIdFromReference = make('withdrawalIdFromReference',
+  liftSrc('paystackTransferWebhook', 'withdrawalIdFromReference', 'reference'));
+check('the webhook can get the row id back out of it', withdrawalIdFromReference(REF), ROW_ID);
+check('an old-style reference names no row', withdrawalIdFromReference('WD-6a431f7e-1760000000000'), null);
+check('no reference names no row', withdrawalIdFromReference(undefined), null);
+
+const canSend = make('canSend', pw('canSend', 'withdrawal'));
+check('a pending row can be sent', canSend({ status: 'pending' }), true);
+check('a row marked processing that never got a transfer code can be retried', canSend({ status: 'processing' }), true);
+check('a row Paystack has acknowledged cannot be sent again', canSend({ status: 'processing', transfer_code: 'TRF_1' }), false);
+for (const status of ['completed', 'failed', 'reversed']) {
+  check(`a ${status} row cannot be sent`, canSend({ status }), false);
+}
+check('no row cannot be sent', canSend(null), false);
+
+const bankBelongsTo = make('bankBelongsTo', pw('bankBelongsTo', 'bankAccount, withdrawal'));
+check('the requester\'s own account', bankBelongsTo({ user_email: 'ada@mail.ng' }, { user_email: 'Ada@Mail.ng ' }), true);
+check('someone else\'s account', bankBelongsTo({ user_email: 'ada@mail.ng' }, { user_email: 'mallory@evil.ng' }), false);
+check('an account with no owner belongs to nobody', bankBelongsTo({}, { user_email: '' }), false);
+
+// What Paystack holds for a reference. A transfer, null for a definite
+// "nothing", undefined for "could not tell". Only null may lead to a refund.
+const lookupFromResponse = make('lookupFromResponse', pw('lookupFromResponse', 'httpStatus, body'));
+check('a transfer that exists',
+  lookupFromResponse(200, { status: true, data: { transfer_code: 'TRF_1', status: 'success' } })?.transfer_code, 'TRF_1');
+check('"Transfer not found" is a definite nothing', lookupFromResponse(404, { status: false, message: 'Transfer not found' }), null);
+check('…whichever 4xx carries it', lookupFromResponse(400, { status: false, message: 'Transfer not found' }), null);
+for (const http of [0, 401, 403, 408, 429, 500, 502, 503]) {
+  check(`HTTP ${http} says nothing about whether the transfer exists`, lookupFromResponse(http, { status: false }), undefined);
+}
+check('a 200 with no transfer in it says nothing either', lookupFromResponse(200, { status: true, data: {} }), undefined);
+check('…nor does a 200 that was not JSON', lookupFromResponse(200, null), undefined);
+
+const refusalMessage = make('refusalMessage', pw('refusalMessage', 'httpStatus, body, fallback'));
+check('a refusal carries Paystack\'s reason',
+  refusalMessage(400, { status: false, message: 'Your balance is not enough to fulfil this request' }, 'x'),
+  'Your balance is not enough to fulfil this request');
+check('…or the fallback when it gave none', refusalMessage(400, { status: false }, 'Transfer initiation failed'), 'Transfer initiation failed');
+for (const http of [0, 200, 408, 429, 500, 503]) {
+  check(`HTTP ${http} is no answer, not a refusal`, refusalMessage(http, { message: 'x' }, 'y'), null);
+}
+check('a 400 that was not JSON is no answer', refusalMessage(400, null, 'y'), null);
+
+// What to do after asking Paystack to send.
+const transferOutcome = make('transferOutcome', pw('transferOutcome', 'accepted, message, lookup'));
+check('accepted: sent', transferOutcome(true, '', null), 'sent');
+check('refused, but Paystack already holds this transfer: someone else sent it first',
+  transferOutcome(false, 'Please provide a unique reference. Reference already exists on a transfer', { transfer_code: 'TRF_1' }), 'already_sent');
+check('refused for a stated reason and nothing is held: failed, so a referral is refunded',
+  transferOutcome(false, 'Your balance is not enough to fulfil this request', null), 'failed');
+// The cases where refunding would be a guess. A wrong guess pays twice.
+check('refused, and Paystack could not be asked: do not refund', transferOutcome(false, 'Invalid key', undefined), 'unconfirmed');
+check('no answer, and nothing held yet: do not refund', transferOutcome(false, null, null), 'unconfirmed');
+check('refused over the reference but nothing found: do not refund',
+  transferOutcome(false, 'Please provide a unique reference. Reference already exists on a transfer', null), 'unconfirmed');
+
+const rowStatusFor = make('rowStatusFor', pw('rowStatusFor', 'transferStatus'));
+check('a transfer the bank paid', rowStatusFor('success'), 'completed');
+check('a transfer the bank refused', rowStatusFor('failed'), 'failed');
+check('a transfer the bank sent back', rowStatusFor('reversed'), 'reversed');
+for (const status of ['pending', 'processing', 'queued', 'otp', 'received', '', undefined]) {
+  check(`a transfer that is ${JSON.stringify(status)} is not settled`, rowStatusFor(status), '');
+}
+
+// A stand-in for Paystack that keeps the one promise the fix relies on: it
+// never holds two transfers with the same reference.
+function fakePaystack(opts = {}) {
+  const transfers = new Map();
+  const calls = { find: 0, recipient: 0, send: 0 };
+  return {
+    transfers,
+    calls,
+    async find(reference) {
+      calls.find += 1;
+      if (opts.cannotAsk) return undefined;
+      // The other call's transfer landed just after this look.
+      if (opts.staleFirstFind && calls.find === 1) return null;
+      return transfers.get(reference) || null;
+    },
+    async createRecipient() {
+      calls.recipient += 1;
+      if (opts.recipientRefusal !== undefined) return { ok: false, message: opts.recipientRefusal, details: null };
+      return { ok: true, code: 'RCP_1' };
+    },
+    async send(payload) {
+      calls.send += 1;
+      if (transfers.has(payload.reference)) {
+        return { ok: false, message: 'Please provide a unique reference. Reference already exists on a transfer', details: null };
+      }
+      // refusal: a string is Paystack's stated reason; null is no answer at all.
+      if (opts.refusal !== undefined) return { ok: false, message: opts.refusal, details: { message: opts.refusal } };
+      const transfer = {
+        id: 900 + transfers.size, transfer_code: `TRF_${transfers.size + 1}`, status: 'pending',
+        amount: payload.amount, reference: payload.reference, recipient: payload.recipient,
+      };
+      transfers.set(payload.reference, transfer);
+      // Paystack took the transfer, and its answer was lost on the way back.
+      if (opts.answerLost) return { ok: false, message: null, details: null };
+      return { ok: true, transfer };
+    },
+  };
+}
+const PAYOUT = [
+  constLine(PW, 'WITHDRAWAL_THRESHOLD_NGN'), FETCH_ALL,
+  pw('isId', 'value'), pw('driverEmails', 'driver'), pw('driverWithdrawals', 'driver, rows'),
+  pw('walletTotals', 'earnings, withdrawals'), pw('refundsToBalance', 'withdrawal'),
+  pw('transferReferenceFor', 'withdrawalId'), pw('bankBelongsTo', 'bankAccount, withdrawal'),
+  pw('transferOutcome', 'accepted, message, lookup'), pw('rowStatusFor', 'transferStatus'),
+  pw('driverWithdrawalProblem', 'sr, w'), pw('refundReferralOnce', 'sr, withdrawal, nowIso'),
+  pw('sendWithdrawal', 'sr, paystack, withdrawal, nowIso'),
+];
+const sendWithdrawal = make('sendWithdrawal', ...PAYOUT);
+const refundReferralOnce = make('refundReferralOnce', ...PAYOUT);
+const SENT_AT = '2026-08-10T12:00:00.000Z';
+const referralRow = (extra = {}) => ({
+  id: ROW_ID, wallet: 'referral', user_email: 'ada@mail.ng', amount: 15000, status: 'pending', bank_account_id: 'bank1', ...extra,
+});
+const driverRow = (extra = {}) => request({ bank_account_id: 'bank1', ...extra });
+// Everything a payout reads and writes. The person asking starts with ₦5,000
+// of referral balance, so a refund shows as 5,000 + the amount.
+const payWorld = (row, extra = {}) => ({
+  WithdrawalRequest: fakeEntity([row]),
+  UserBankAccount: fakeEntity([{
+    id: 'bank1', user_email: row.user_email, account_name: 'Ada Obi', account_number: '0123456789', bank_code: '058',
+    recipient_code: 'RCP_0', ...(extra.bank || {}),
+  }]),
+  User: fakeEntity([{ id: 'u1', email: row.user_email, referral_balance_ngn: 5000 }]),
+  Driver: fakeEntity([{ id: 'drvA', user_email: 'emeka@work.ng', previous_user_emails: [] }]),
+  DriverEarning: fakeEntity(extra.earnings || []),
+});
+const rowOf = (sr) => sr.WithdrawalRequest.rows[0];
+const balanceOf = (sr) => sr.User.rows[0].referral_balance_ngn;
+
+{
+  const sr = payWorld(referralRow());
+  const ps = fakePaystack();
+  const r = await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('a pending withdrawal is sent', r.status === 200 && r.body.success === true && !r.body.already_sent, true);
+  check('…as one transfer', ps.transfers.size, 1);
+  check('…for the amount in kobo', ps.transfers.get(REF)?.amount, 1500000);
+  check('…to the account\'s recipient', ps.transfers.get(REF)?.recipient, 'RCP_0');
+  check('…and the row is processing', rowOf(sr).status, 'processing');
+  check('…carrying its reference', rowOf(sr).transfer_reference, REF);
+  check('…and Paystack\'s transfer code', rowOf(sr).transfer_code, 'TRF_1');
+}
+{
+  // The finding. Both calls read the row while it was still pending.
+  const sr = payWorld(referralRow());
+  const ps = fakePaystack();
+  const [a, b] = await Promise.all([
+    sendWithdrawal(sr, ps, referralRow(), SENT_AT),
+    sendWithdrawal(sr, ps, referralRow(), SENT_AT),
+  ]);
+  check('two calls at the same moment: one transfer', ps.transfers.size, 1);
+  check('…both asked Paystack to send, and the reference stopped the second', ps.calls.send, 2);
+  check('…one is told it had already been sent', [a, b].filter((r) => r.body.already_sent).length, 1);
+  check('…neither is told it failed', [a, b].every((r) => r.status === 200 && r.body.success === true), true);
+  check('…the row is processing with the transfer code', `${rowOf(sr).status}/${rowOf(sr).transfer_code}`, 'processing/TRF_1');
+  check('…and nobody was refunded', balanceOf(sr), 5000);
+}
+{
+  const sr = payWorld(referralRow());
+  const ps = fakePaystack();
+  await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  // A second tab that loaded the list before the first press.
+  const again = await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('a second press from a stale tab asks first, and sends nothing', ps.calls.send, 1);
+  check('…and says so', again.body.already_sent, true);
+}
+{
+  const sr = payWorld(referralRow());
+  const ps = fakePaystack({ answerLost: true });
+  const r = await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('Paystack took the transfer but its answer was lost: found by reference', r.body.already_sent, true);
+  check('…the row has the transfer code', rowOf(sr).transfer_code, 'TRF_1');
+  check('…and nobody was refunded', balanceOf(sr), 5000);
+}
+{
+  const sr = payWorld(referralRow());
+  const r = await sendWithdrawal(sr, fakePaystack({ refusal: null }), referralRow(), SENT_AT);
+  check('no answer from Paystack: not confirmed', `${r.status}/${r.body.code}`, '502/UNCONFIRMED');
+  check('…the row waits as processing, with its reference and no transfer code',
+    `${rowOf(sr).status}/${rowOf(sr).transfer_reference}/${rowOf(sr).transfer_code || ''}`, `processing/${REF}/`);
+  check('…which is the state admin can retry', canSend(rowOf(sr)), true);
+  check('…and nobody was refunded', balanceOf(sr), 5000);
+  const ps = fakePaystack();
+  const retry = await sendWithdrawal(sr, ps, { ...rowOf(sr) }, SENT_AT);
+  check('the retry sends it, once', `${retry.body.success}/${ps.transfers.size}`, 'true/1');
+}
+{
+  const sr = payWorld(referralRow());
+  const ps = fakePaystack({ cannotAsk: true });
+  const r = await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('Paystack cannot be asked what it holds: nothing is sent', `${r.body.code}/${ps.calls.send}`, 'UNCONFIRMED/0');
+  check('…and the row is left as it was', rowOf(sr).status, 'pending');
+}
+{
+  const sr = payWorld(referralRow());
+  const r = await sendWithdrawal(sr, fakePaystack({ refusal: 'Your balance is not enough to fulfil this request' }), referralRow(), SENT_AT);
+  check('refused by Paystack for a stated reason: failed', `${r.status}/${rowOf(sr).status}`, '400/failed');
+  check('…with the reason on the row', rowOf(sr).error_message, 'Your balance is not enough to fulfil this request');
+  check('…and in the answer admin sees', `${r.body.error}: ${r.body.details?.message}`, 'Transfer failed: Your balance is not enough to fulfil this request');
+  check('…a referral withdrawal is credited back', balanceOf(sr), 20000);
+  check('…and stamped', rowOf(sr).refunded_at, SENT_AT);
+  check('a second refund attempt credits nothing',
+    `${await refundReferralOnce(sr, { ...rowOf(sr) }, SENT_AT)}/${balanceOf(sr)}`, 'false/20000');
+}
+{
+  const sr = payWorld(driverRow(), { earnings: [releasedRow('e1', 20000)] });
+  const ps = fakePaystack();
+  const r = await sendWithdrawal(sr, ps, driverRow(), SENT_AT);
+  check('a driver-wallet request the ledger covers is sent', `${r.body.success}/${ps.transfers.size}`, 'true/1');
+}
+{
+  const sr = payWorld(driverRow(), { earnings: [releasedRow('e1', 20000)] });
+  await sendWithdrawal(sr, fakePaystack({ refusal: 'Your balance is not enough to fulfil this request' }), driverRow(), SENT_AT);
+  check('a refused driver-wallet payout is failed', rowOf(sr).status, 'failed');
+  check('…and credits no referral cash: failing the row is its refund', balanceOf(sr), 5000);
+}
+{
+  const sr = payWorld(driverRow({ amount: 500000 }), { earnings: [releasedRow('e1', 20000)] });
+  const ps = fakePaystack();
+  const r = await sendWithdrawal(sr, ps, driverRow({ amount: 500000 }), SENT_AT);
+  check('a driver-wallet request the ledger does not cover is closed', `${r.status}/${r.body.code}/${rowOf(sr).status}`, '409/NOT_COVERED/failed');
+  check('…and nothing is sent', ps.calls.send, 0);
+}
+{
+  // Stuck as processing, the pay behind it reversed since, and the first
+  // attempt DID reach the bank. Failing the row here would free the money
+  // to be withdrawn a second time.
+  const stuck = driverRow({ status: 'processing' });
+  const sr = payWorld(stuck, { earnings: [] });
+  const ps = fakePaystack();
+  ps.transfers.set(transferReferenceFor(stuck.id), { id: 8, transfer_code: 'TRF_8', status: 'pending' });
+  await sendWithdrawal(sr, ps, stuck, SENT_AT);
+  check('a payout that already went out is never failed, whatever the ledger says now',
+    `${rowOf(sr).status}/${rowOf(sr).transfer_code}`, 'processing/TRF_8');
+}
+{
+  const sr = payWorld(referralRow({ status: 'processing' }));
+  const ps = fakePaystack();
+  ps.transfers.set(REF, { id: 7, transfer_code: 'TRF_7', status: 'success' });
+  const r = await sendWithdrawal(sr, ps, referralRow({ status: 'processing' }), SENT_AT);
+  check('a stuck row whose transfer the bank has paid is completed by Retry',
+    `${rowOf(sr).status}/${rowOf(sr).transfer_code}/${r.body.status}`, 'completed/TRF_7/completed');
+  check('…and nothing is sent', ps.calls.send, 0);
+}
+{
+  const sr = payWorld(referralRow({ status: 'processing' }));
+  const ps = fakePaystack();
+  ps.transfers.set(REF, { id: 7, transfer_code: 'TRF_7', status: 'failed' });
+  await sendWithdrawal(sr, ps, referralRow({ status: 'processing' }), SENT_AT);
+  check('a stuck row whose transfer the bank refused is failed and credited back',
+    `${rowOf(sr).status}/${balanceOf(sr)}`, 'failed/20000');
+}
+{
+  const sr = payWorld(referralRow(), { bank: { user_email: 'someone@else.ng' } });
+  const ps = fakePaystack();
+  const r = await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('a request naming someone else\'s bank account is not sent', `${r.status}/${r.body.code}/${ps.calls.send}`, '409/BANK_MISMATCH/0');
+  check('…and is left exactly as it was, for a person to look at', `${rowOf(sr).status}/${balanceOf(sr)}`, 'pending/5000');
+}
+{
+  const sr = payWorld(referralRow({ bank_account_id: 'bank1#' }));
+  const ps = fakePaystack();
+  const r = await sendWithdrawal(sr, ps, referralRow({ bank_account_id: 'bank1#' }), SENT_AT);
+  check('a bank account id that is not a plain id is never looked up', `${r.status}/${r.body.code}/${ps.calls.send}`, '404/NO_BANK/0');
+}
+{
+  const sr = payWorld(referralRow(), { bank: { recipient_code: '' } });
+  const ps = fakePaystack();
+  await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('a first payout to an account creates its Paystack recipient', sr.UserBankAccount.rows[0].recipient_code, 'RCP_1');
+  check('…and sends to it', ps.transfers.get(REF)?.recipient, 'RCP_1');
+}
+{
+  const sr = payWorld(referralRow(), { bank: { recipient_code: '' } });
+  const ps = fakePaystack({ recipientRefusal: 'Account number is invalid' });
+  const r = await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('an account Paystack will not accept: failed and credited back',
+    `${r.body.error}/${rowOf(sr).status}/${balanceOf(sr)}/${ps.calls.send}`, 'Failed to create transfer recipient/failed/20000/0');
+}
+{
+  const sr = payWorld(referralRow(), { bank: { recipient_code: '' } });
+  const r = await sendWithdrawal(sr, fakePaystack({ recipientRefusal: null }), referralRow(), SENT_AT);
+  check('no answer while creating the recipient: not confirmed, not refunded',
+    `${r.body.code}/${rowOf(sr).status}/${balanceOf(sr)}`, 'UNCONFIRMED/processing/5000');
+}
+
+{
+  // The settlement webhook was quicker than this call: the row is already
+  // completed, but the copy this call read, and its look at Paystack, are older.
+  const sr = payWorld(referralRow({ status: 'completed', transfer_code: 'TRF_7' }));
+  const ps = fakePaystack();
+  ps.transfers.set(REF, { id: 7, transfer_code: 'TRF_7', status: 'pending' });
+  const r = await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('a row the webhook already completed is not put back to processing', `${rowOf(sr).status}/${r.body.status}`, 'completed/completed');
+}
+{
+  const sr = payWorld(referralRow({ status: 'reversed', transfer_code: 'TRF_7', refunded_at: SENT_AT }));
+  const ps = fakePaystack();
+  ps.transfers.set(REF, { id: 7, transfer_code: 'TRF_7', status: 'success' });
+  await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('…and a row the bank reversed is not put back to completed', `${rowOf(sr).status}/${balanceOf(sr)}`, 'reversed/5000');
+}
+{
+  // The other call's transfer landed just after this call looked, settled,
+  // and the webhook completed the row before this call marked it processing.
+  // The duplicate is refused, and the second look puts the row right.
+  const sr = payWorld(referralRow({ status: 'completed', transfer_code: 'TRF_7' }));
+  const ps = fakePaystack({ staleFirstFind: true });
+  ps.transfers.set(REF, { id: 7, transfer_code: 'TRF_7', status: 'success' });
+  const r = await sendWithdrawal(sr, ps, referralRow(), SENT_AT);
+  check('a completed row marked processing by a late call is completed again by that same call',
+    `${rowOf(sr).status}/${ps.transfers.size}/${r.body.already_sent}`, 'completed/1/true');
+}
+
+// ── Every order two calls could run in ─────────────────────────────────────
+// Nothing on the platform locks a row, so two calls interleave at every
+// database or Paystack request. Each request is one step here, and a schedule
+// says whose step runs next. everySchedule walks all of them, each against a
+// fresh world. Task R02 uses the same walker for assignments.
+const viaGate = (target, gate, ops) => {
+  const view = { ...target };
+  for (const op of ops) view[op] = async (...args) => { await gate(); return target[op](...args); };
+  return view;
+};
+const gatedWorld = (world, gate) => Object.fromEntries(Object.entries(world)
+  .map(([name, entity]) => [name, viaGate(entity, gate, ['filter', 'create', 'update', 'get'])]));
+
+// Run the actors to the end, with `choose` picking whose step goes next.
+async function interleave(actors, choose) {
+  const pending = actors.map(() => null);
+  const done = actors.map(() => false);
+  const results = actors.map(() => undefined);
+  let wake = () => {};
+  const parked = () => pending.every((p, i) => p || done[i]);
+  const sleep = () => new Promise((r) => { wake = r; });
+  actors.forEach((run, i) => {
+    const gate = () => new Promise((go) => { pending[i] = go; wake(); });
+    Promise.resolve().then(() => run(gate)).then(
+      (r) => { results[i] = r; },
+      (e) => { results[i] = { threw: String((e && e.message) || e) }; },
+    ).then(() => { done[i] = true; wake(); });
+  });
+  for (;;) {
+    // Wait until every actor is parked at a step or has finished.
+    while (!parked()) await sleep();
+    const ready = pending.map((p, i) => (p ? i : -1)).filter((i) => i >= 0);
+    if (ready.length === 0) return results;
+    const pick = choose(ready);
+    const go = pending[pick];
+    pending[pick] = null;
+    go();
+  }
+}
+
+// Depth-first over schedules. `maxSwitches` bounds how often the turn may pass
+// to another actor while the current one could still go on; Infinity walks
+// every schedule there is. setup() answers { world, actors }, where an actor
+// is (gate) => promise. Answers { runs, problem, schedule }.
+async function everySchedule(setup, verdict, maxSwitches = Infinity) {
+  const stack = [[]];
+  let runs = 0;
+  while (stack.length > 0) {
+    const prefix = stack.pop();
+    const decisions = [];
+    let last = -1;
+    let switches = 0;
+    const { world, actors } = setup();
+    const results = await interleave(actors, (ready) => {
+      if (ready.length === 1) { [last] = ready; return last; }
+      const stay = ready.includes(last) ? last : -1;
+      const i = decisions.length;
+      const pick = i < prefix.length ? prefix[i] : (stay >= 0 ? stay : ready[0]);
+      decisions.push({ ready, stay, pick, switches });
+      if (stay >= 0 && pick !== stay) switches += 1;
+      last = pick;
+      return pick;
+    });
+    // Every decision made past the prefix has siblings nobody has tried yet.
+    for (let i = prefix.length; i < decisions.length; i += 1) {
+      const d = decisions[i];
+      for (const alt of d.ready) {
+        if (alt === d.pick) continue;
+        const cost = d.stay >= 0 && alt !== d.stay ? 1 : 0;
+        if (d.switches + cost <= maxSwitches) stack.push([...decisions.slice(0, i).map((x) => x.pick), alt]);
+      }
+    }
+    runs += 1;
+    const problem = verdict(world, results);
+    if (problem) return { runs, problem, schedule: decisions.map((d) => d.pick).join('') };
+  }
+  return { runs, problem: '', schedule: '' };
+}
+
+// Two presses on one withdrawal, in every order their requests could arrive.
+const twoPresses = (row, extra) => () => {
+  const sr = payWorld(row, extra);
+  const ps = fakePaystack();
+  const press = (gate) => sendWithdrawal(
+    gatedWorld(sr, gate), viaGate(ps, gate, ['find', 'createRecipient', 'send']), { ...row }, SENT_AT);
+  return { world: { sr, ps }, actors: [press, press] };
+};
+const oneTransfer = ({ sr, ps }, results) => {
+  if (ps.transfers.size !== 1) return `${ps.transfers.size} transfers left the account`;
+  if (results.some((r) => !r || r.status !== 200 || r.body.success !== true)) {
+    return `a press was told ${JSON.stringify(results.map((r) => (r && r.body ? r.body.code || r.status : r)))}`;
+  }
+  if (rowOf(sr).status !== 'processing' || rowOf(sr).transfer_code !== 'TRF_1') {
+    return `the row ended ${rowOf(sr).status}/${rowOf(sr).transfer_code}`;
+  }
+  if (balanceOf(sr) !== 5000) return `the referral balance ended at ${balanceOf(sr)}`;
+  return '';
+};
+{
+  const out = await everySchedule(twoPresses(referralRow()), oneTransfer);
+  check(`two presses at once, every order (${out.runs}): one transfer, both told the truth, no refund`, `${out.problem}${out.schedule}`, '');
+  check('…and that was more than one order', out.runs > 100, true);
+}
+{
+  const out = await everySchedule(twoPresses(referralRow(), { bank: { recipient_code: '' } }), oneTransfer);
+  check(`…the same when the account has no Paystack recipient yet (${out.runs})`, `${out.problem}${out.schedule}`, '');
+}
+{
+  // A driver-wallet payout reads the ledger first, so each press has more
+  // steps. Every order in which the turn changes hands at most four times.
+  const out = await everySchedule(twoPresses(driverRow(), { earnings: [releasedRow('e1', 20000)] }), oneTransfer, 4);
+  check(`…and for a driver-wallet payout (${out.runs})`, `${out.problem}${out.schedule}`, '');
+}
+
+const webhookShouldAct = make('webhookShouldAct', liftSrc('paystackTransferWebhook', 'webhookShouldAct', 'eventName, status'));
+check('success on a processing row', webhookShouldAct('transfer.success', 'processing'), true);
+check('failure on a processing row', webhookShouldAct('transfer.failed', 'processing'), true);
+check('a second success on a completed row is ignored', webhookShouldAct('transfer.success', 'completed'), false);
+check('a second failure on a failed row is ignored', webhookShouldAct('transfer.failed', 'failed'), false);
+// The bank sent the money back after the transfer had succeeded.
+check('a reversal after success is acted on', webhookShouldAct('transfer.reversed', 'completed'), true);
+check('a second reversal is ignored', webhookShouldAct('transfer.reversed', 'reversed'), false);
+check('nothing acts on a pending row', webhookShouldAct('transfer.success', 'pending'), false);
 
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

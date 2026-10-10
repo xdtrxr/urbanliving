@@ -116,13 +116,21 @@ export default function WithdrawalsAdmin() {
     // screen most needs to be able to show.
     const r = await invokeFn('processWithdrawal', { withdrawal_request_id: target.id });
     if (r.ok) {
-      toast({
-        title: 'Transfer initiated',
-        description: 'Paystack accepted the transfer. Status will flip to Completed when the bank settles.',
-      });
+      toast(r.body?.already_sent
+        ? {
+          title: 'Already sent',
+          description: r.body.message || 'This withdrawal had already gone to Paystack. Nothing was sent a second time.',
+        }
+        : {
+          title: 'Transfer initiated',
+          description: 'Paystack accepted the transfer. Status will flip to Completed when the bank settles.',
+        });
     } else {
       toast({
-        title: r.code === 'NOT_COVERED' ? 'Not paid: the earnings do not cover it' : 'Transfer rejected',
+        title: r.code === 'NOT_COVERED' ? 'Not paid: the earnings do not cover it'
+          : r.code === 'UNCONFIRMED' ? 'Not confirmed yet'
+            : r.code === 'BANK_MISMATCH' ? 'Not sent: check this request'
+              : 'Transfer rejected',
         description: r.body?.details?.message ? `${r.error}: ${r.body.details.message}` : r.error,
         variant: 'destructive',
       });
@@ -187,6 +195,10 @@ export default function WithdrawalsAdmin() {
               const BadgeIcon = badge.icon;
               const isProcessing = r.status === 'processing';
               const isPending = r.status === 'pending';
+              // Marked processing, but Paystack never answered with a transfer
+              // code. Retrying is safe: the function asks Paystack what it
+              // already holds for this withdrawal before it sends anything.
+              const isStuck = isProcessing && !r.transfer_code;
               return (
                 <div
                   key={r.id}
@@ -246,7 +258,7 @@ export default function WithdrawalsAdmin() {
                         </div>
                       )}
                     </div>
-                    {isPending && (
+                    {(isPending || isStuck) && (
                       <div className="flex flex-col sm:items-end gap-2 flex-shrink-0 w-full sm:w-auto">
                         <Button
                           size="sm"
@@ -262,12 +274,17 @@ export default function WithdrawalsAdmin() {
                           ) : (
                             <>
                               <Send className="w-4 h-4 mr-2" />
-                              Process now
+                              {isStuck ? 'Retry' : 'Process now'}
                             </>
                           )}
                         </Button>
                         {bank && !bank.is_verified && (
                           <p className="text-[11px] text-rose-600 dark:text-rose-400 sm:text-right">Bank account not verified</p>
+                        )}
+                        {isStuck && (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-300 sm:text-right sm:max-w-[220px]">
+                            Paystack never confirmed this one. Retrying cannot send it twice.
+                          </p>
                         )}
                       </div>
                     )}
@@ -282,7 +299,9 @@ export default function WithdrawalsAdmin() {
       <AlertDialog open={!!confirmTarget} onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Process withdrawal?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {confirmTarget?.status === 'processing' ? 'Retry this withdrawal?' : 'Process withdrawal?'}
+            </AlertDialogTitle>
             <AlertDialogDescription className="space-y-2">
               {confirmTarget && (
                 <>
@@ -298,6 +317,11 @@ export default function WithdrawalsAdmin() {
                   <span className="block text-xs text-slate-500 dark:text-slate-400">
                     Paystack will accept the transfer and settle async. The status will flip to Completed when the bank confirms; if it fails, the user's balance is refunded automatically.
                   </span>
+                  {confirmTarget.status === 'processing' && (
+                    <span className="block text-xs text-amber-700 dark:text-amber-300">
+                      Paystack never confirmed the first attempt. It is asked what it already holds for this withdrawal before anything is sent, so the money cannot go out twice.
+                    </span>
+                  )}
                 </>
               )}
             </AlertDialogDescription>

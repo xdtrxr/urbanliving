@@ -35,6 +35,10 @@
       "type": "string",
       "description": "Paystack transfer ID"
     },
+    "transfer_reference": {
+      "type": "string",
+      "description": "The reference sent to Paystack for this withdrawal: wd-<row id>, fixed per row, so Paystack never holds two transfers for one withdrawal. Written before the transfer is requested, so the settlement webhook can find the row even if Paystack's answer never arrived."
+    },
     "error_message": {
       "type": "string",
       "description": "Error details if the withdrawal failed"

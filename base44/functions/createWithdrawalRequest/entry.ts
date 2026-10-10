@@ -112,6 +112,15 @@ function walletTotals(earnings: any[], withdrawals: any[]) {
     };
 }
 
+// An id that arrived in a request, or sits on a row a browser could have
+// written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
+// row "abc" while every equality check here sees a different string, and
+// "../User/abc" fetches a row of another entity altogether. Only a plain id
+// is ever used. Lockstep copy, see processWithdrawal.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
 // The amount asked for: a positive whole number of naira, or null. Kobo are
 // refused rather than rounded, so the figure the user typed is the figure
 // that is reserved and the figure that is sent.
@@ -141,6 +150,9 @@ Deno.serve(async (req) => {
 
         if (body?.amount === undefined || body?.amount === null || !bank_account_id) {
             return refuse(400, 'Missing required fields: amount and bank_account_id');
+        }
+        if (!isId(bank_account_id)) {
+            return refuse(400, 'Invalid bank account');
         }
         const amount = parseWithdrawalAmount(body.amount);
         if (amount === null) {

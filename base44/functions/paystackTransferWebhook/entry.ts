@@ -20,9 +20,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 // doesn't verify is silently ack'd (we still 200 so Paystack stops retrying)
 // but takes no DB action — same pattern as paystackWebhook.
 //
-// Idempotency: lookup is by transfer_code (preferred, set by processWithdrawal)
-// or the transfer reference fallback. We refuse to act on rows that aren't in
-// `processing` state, so a re-delivered webhook is a no-op.
+// Finding the row: processWithdrawal sends the reference wd-<row id>, so the
+// row is read by that id and by nothing else. Transfers sent before
+// references had that form are matched on transfer_code, then transfer_id.
+//
+// Idempotency: a row is settled once. A re-delivered success or failure finds
+// it already final and is a no-op. The one event that acts on a final row is
+// transfer.reversed on a completed one (see webhookShouldAct).
 
 async function hmacSha512Hex(secret: string, body: string): Promise<string> {
     const enc = new TextEncoder();
@@ -96,6 +100,22 @@ async function notifyAdmin(opts: {
 // processWithdrawal.
 function refundsToBalance(withdrawal: any) {
     return !!withdrawal && withdrawal.wallet !== 'driver';
+}
+
+// The row id inside a reference built by processWithdrawal (wd-<row id>), or
+// null for anything else.
+function withdrawalIdFromReference(reference: string) {
+    const m = /^wd-([a-z0-9_-]{1,64})$/.exec(String(reference || ''));
+    return m ? m[1] : null;
+}
+
+// Whether an event should change a row in this state. A row is settled once:
+// a re-delivered success or failure finds it already final and is ignored.
+// The one event that acts on a final row is a reversal after success, when
+// the bank sends the money back: the payout must stop counting as paid.
+function webhookShouldAct(eventName: string, status: string) {
+    if (status === 'processing') return true;
+    return eventName === 'transfer.reversed' && status === 'completed';
 }
 
 // Refunds the user's referral_balance_ngn for a failed/reversed transfer.
@@ -173,18 +193,31 @@ Deno.serve(async (req) => {
     const sdk = createClientFromRequest(req);
 
     try {
-        // Prefer lookup by transfer_code (we stamped it on the row at initiation).
-        // Fall back to transfer_id if Paystack only sends id for this event type.
         let withdrawals: any[] = [];
-        if (transferCode) {
-            withdrawals = await sdk.asServiceRole.entities.WithdrawalRequest.filter({
-                transfer_code: transferCode,
-            });
-        }
-        if (withdrawals.length === 0 && event?.data?.id) {
-            withdrawals = await sdk.asServiceRole.entities.WithdrawalRequest.filter({
-                transfer_id: String(event.data.id),
-            });
+        const rowId = withdrawalIdFromReference(reference || '');
+        if (rowId) {
+            // The reference names the row. Nothing else is tried: a row that
+            // merely carries the same transfer code is not this withdrawal.
+            // This also finds a row whose transfer code was never written
+            // because Paystack's answer to processWithdrawal was lost.
+            try {
+                const row = await sdk.asServiceRole.entities.WithdrawalRequest.get(rowId);
+                if (row && row.id === rowId) withdrawals = [row];
+            } catch (_err) {
+                // No such row.
+            }
+        } else {
+            // A transfer sent before references carried the row id.
+            if (transferCode) {
+                withdrawals = await sdk.asServiceRole.entities.WithdrawalRequest.filter({
+                    transfer_code: transferCode,
+                });
+            }
+            if (withdrawals.length === 0 && event?.data?.id) {
+                withdrawals = await sdk.asServiceRole.entities.WithdrawalRequest.filter({
+                    transfer_id: String(event.data.id),
+                });
+            }
         }
         const withdrawal = withdrawals[0];
         if (!withdrawal) {
@@ -192,10 +225,10 @@ Deno.serve(async (req) => {
             return ack({ skipped: 'withdrawal_not_found' });
         }
 
-        // Idempotency: we only act on rows still in `processing`. A re-delivered
-        // success would have already flipped to `completed`; a re-delivered
-        // failure would already be `failed` and refunded.
-        if (withdrawal.status !== 'processing') {
+        // Idempotency: a re-delivered success would have already flipped to
+        // `completed`; a re-delivered failure would already be `failed` and
+        // refunded. A reversal of a completed transfer is the exception.
+        if (!webhookShouldAct(eventName, withdrawal.status)) {
             console.log(`Withdrawal ${withdrawal.id} not in processing (is: ${withdrawal.status}) — skipping`);
             return ack({ skipped: 'not_processing', status: withdrawal.status });
         }
@@ -206,6 +239,8 @@ Deno.serve(async (req) => {
             await sdk.asServiceRole.entities.WithdrawalRequest.update(withdrawal.id, {
                 status: 'completed',
                 processed_at: nowIso,
+                // A row found by its reference may never have had its code written.
+                ...(transferCode && !withdrawal.transfer_code ? { transfer_code: transferCode } : {}),
             });
             await notifyAdmin({
                 title: '✅ *Withdrawal SETTLED*',
@@ -229,6 +264,7 @@ Deno.serve(async (req) => {
             status: newStatus,
             error_message: reason || `Transfer ${newStatus}`,
             processed_at: nowIso,
+            ...(transferCode && !withdrawal.transfer_code ? { transfer_code: transferCode } : {}),
         });
         await refundUser(sdk, { ...withdrawal, status: newStatus });
         await notifyAdmin({

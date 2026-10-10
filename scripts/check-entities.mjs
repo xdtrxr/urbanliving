@@ -118,6 +118,7 @@ check('WithdrawalRequest.wallet is referral | driver',
   sameList(prop('WithdrawalRequest', 'wallet')?.enum, ['referral', 'driver']));
 check('WithdrawalRequest.wallet defaults to referral', prop('WithdrawalRequest', 'wallet')?.default === 'referral');
 check('WithdrawalRequest.driver_id', prop('WithdrawalRequest', 'driver_id')?.type === 'string');
+check('WithdrawalRequest.transfer_reference', prop('WithdrawalRequest', 'transfer_reference')?.type === 'string');
 check('WithdrawalRequest update is admin-only', adminOnly(entities.WithdrawalRequest?.rls?.update));
 
 check('Driver.user_email', prop('Driver', 'user_email')?.type === 'string');
