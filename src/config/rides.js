@@ -278,3 +278,10 @@ export function typedDriverPay(hasLogin, typed, computedAmount) {
 // compares them with the shipped constants.
 export const REPORT_CATEGORIES = ['rude', 'abusive', 'threatening', 'unsafe', 'no_show', 'damage', 'other'];
 export const REPORT_LIMITS = { minDescription: 10, maxDescription: 2000, maxPhotos: 3 };
+
+// A stored report photo, if it is safe to use as an <img src>: a plain https
+// link with no spaces, quotes or angle brackets. Same rule the server applies
+// when a report is filed; applied again here because a row can also be typed
+// into the data browser. Anything else is simply not shown.
+export const safePhotoUrl = (url) =>
+  (typeof url === 'string' && /^https:\/\/[^\s"'<>]+$/.test(url) ? url : null);

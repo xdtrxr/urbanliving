@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Loader2, RefreshCw, Car, MapPin, Mail, Phone, Users,
-  Check, X, CalendarClock, UserPlus, Inbox, IdCard, Banknote,
+  Check, X, CalendarClock, UserPlus, Inbox, IdCard, Banknote, Flag,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { invokeFn } from '@/lib/invokeFn';
@@ -22,6 +22,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DriversAdmin from '@/components/admin/DriversAdmin';
 import DriverEarningsAdmin from '@/components/admin/DriverEarningsAdmin';
+import RideReportsAdmin from '@/components/admin/RideReportsAdmin';
 
 // RidesAdmin — the in-app twin of the Telegram approve/reject keyboard.
 //
@@ -835,7 +836,7 @@ export default function RidesAdmin() {
 
   return (
     <Tabs value={innerTab} onValueChange={setInnerTab} className="space-y-4">
-      <TabsList className="grid w-full grid-cols-3 max-w-xl">
+      <TabsList className="grid w-full grid-cols-4 max-w-2xl">
         <TabsTrigger value="requests">
           <Inbox className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Requests</span>
         </TabsTrigger>
@@ -844,6 +845,9 @@ export default function RidesAdmin() {
         </TabsTrigger>
         <TabsTrigger value="earnings">
           <Banknote className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Earnings</span>
+        </TabsTrigger>
+        <TabsTrigger value="reports">
+          <Flag className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Reports</span>
         </TabsTrigger>
       </TabsList>
 
@@ -857,6 +861,10 @@ export default function RidesAdmin() {
 
       <TabsContent value="earnings">
         <DriverEarningsAdmin />
+      </TabsContent>
+
+      <TabsContent value="reports">
+        <RideReportsAdmin />
       </TabsContent>
     </Tabs>
   );

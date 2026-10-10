@@ -334,6 +334,18 @@ check('shortest description', rides.REPORT_LIMITS?.minDescription, make('MIN_DES
 check('longest description', rides.REPORT_LIMITS?.maxDescription, make('MAX_DESCRIPTION', LIMITS));
 check('most photos', rides.REPORT_LIMITS?.maxPhotos, make('MAX_EVIDENCE', LIMITS));
 
+// ── Photos on the admin inbox ──────────────────────────────────────────────
+// Review focus 2, second line of defence: what the inbox will use as <img src>.
+console.log('\n— photo sources —');
+check('an uploaded photo is shown', rides.safePhotoUrl('https://base44.app/files/a.jpg'), 'https://base44.app/files/a.jpg');
+for (const bad of [
+  'javascript:alert(1)', 'JAVASCRIPT:alert(1)', 'http://example.com/a.jpg', 'data:image/png;base64,AAAA',
+  '//example.com/a.jpg', ' https://example.com/a.jpg', 'https://example.com/a b.jpg',
+  'https://example.com/a.jpg" onerror="x', '', null, undefined, 42, {},
+]) {
+  check(`${JSON.stringify(bad) ?? String(bad)} is not used as an image source`, rides.safePhotoUrl(bad), null);
+}
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
