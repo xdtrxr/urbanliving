@@ -1,7 +1,7 @@
 {
   "name": "LoyaltyTransaction",
   "type": "object",
-  "description": "One row per points award. TEMPORARY: create is owner-or-admin again until the client that routes every award through awardPoints is published (planned 2026-09-20); the admin-only rule is staged in docs/entity-rules-pending-publish.",
+  "description": "One row per points award. Create is admin-only: rows are written by the awardPoints function under the service role, so a user cannot mint their own history. Read stays owner-or-admin.",
   "properties": {
     "user_email": {
       "type": "string",
@@ -63,16 +63,9 @@
   ],
   "rls": {
     "create": {
-      "$or": [
-        {
-          "data.user_email": "{{user.email}}"
-        },
-        {
-          "user_condition": {
-            "role": "admin"
-          }
-        }
-      ]
+      "user_condition": {
+        "role": "admin"
+      }
     },
     "read": {
       "$or": [
