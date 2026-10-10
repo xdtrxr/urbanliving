@@ -58,6 +58,9 @@ admin-only costing|VehicleCosting
 nav says Book a Ride|Book a Ride
 stay cancel via function|cancelBooking
 stay payment via function|startStayPayment
+driver pages|getDriverRides
+driver wallet|getDriverWallet
+readable function refusals|Could not reach the server. Check your connection and try again.
 id upload via function|submitBookingId
 points via function|awardPoints
 MARKERS
@@ -74,7 +77,7 @@ done
 echo; echo "── entities reachable (401/403=exists, 404=schema NOT DEPLOYED) ──"
 # VehicleCosting is admin-only in every direction, so an unauthenticated read
 # is refused — but refused is not the same as missing.
-for e in VehicleCosting; do
+for e in VehicleCosting DriverEarning; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 "$API/entities/$e?limit=1")
   [ "$code" = "404" ] && no "$e schema NOT DEPLOYED" || ok "$e (HTTP $code)"
 done
@@ -82,10 +85,16 @@ done
 echo; echo "── functions reachable (500=exists+needs auth, 404=NOT DEPLOYED) ──"
 for f in checkRideAvailability decideRideBooking assignRideDriver getRideDriverContact \
          startRidePayment verifyRidePayment cancelRideBooking getRideBookings \
-         cancelBooking startStayPayment submitBookingId awardPoints; do
+         cancelBooking startStayPayment submitBookingId awardPoints \
+         getDriverProfile getDriverRides getDriverWallet getDriverEarningsAdmin \
+         settleDriverEarning completeRide; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
          -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
-  [ "$code" = "404" ] && no "$f NOT DEPLOYED" || ok "$f (HTTP $code)"
+  # 402 is the platform refusing to run ANY function for this workspace (the
+  # plan has no backend functions). It is not "deployed and fine".
+  if [ "$code" = "404" ]; then no "$f NOT DEPLOYED"
+  elif [ "$code" = "402" ]; then no "$f BLOCKED BY THE PLATFORM (HTTP 402: the workspace plan cannot run backend functions)"
+  else ok "$f (HTTP $code)"; fi
 done
 
 echo; echo "── vehicle data migration ──"

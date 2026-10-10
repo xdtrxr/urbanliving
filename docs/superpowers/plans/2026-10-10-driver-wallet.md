@@ -7602,3 +7602,132 @@ git add scripts/check-driver-wallet.mjs base44/functions/getDashboardStats/entry
 git commit -m "feat(rides): driver pay owed on the admin overview; wallets told apart on the withdrawals list" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A15: Ship and verify
+
+No code. This task takes the branch to production and proves the feature end to end. It needs three things that are outside the repo: the Base44 connector authorised for this session, a workspace plan that can run backend functions, and the owner's go-ahead to publish.
+
+**Files:**
+- Modify: `scripts/check-deploy.sh` (so the deploy check knows the new functions and the new client)
+
+**Interfaces:**
+- Consumes: everything in Tasks A01 to A14.
+- Produces: the feature live, with the staged `WithdrawalRequest` rule applied.
+
+- [ ] **Step 1: Teach the deploy check about this feature**
+
+`scripts/check-deploy.sh` answers "is the code that is serving traffic the code in this repo?". It needs to look for this revision.
+
+**Edit `scripts/check-deploy.sh`** — find:
+
+```bash
+stay payment via function|startStayPayment
+```
+
+replace with:
+
+```bash
+stay payment via function|startStayPayment
+driver pages|getDriverRides
+driver wallet|getDriverWallet
+readable function refusals|Could not reach the server. Check your connection and try again.
+```
+
+The new ledger table and the six new functions join the lists the script probes. A function that answers 402 is also now reported as a failure: on 2026-10-10 every function on the live app answered 402 because the workspace plan had lost backend functions, and the script called that "ok" because it was not a 404.
+
+**Edit `scripts/check-deploy.sh`** — find:
+
+```bash
+for e in VehicleCosting; do
+```
+
+replace with:
+
+```bash
+for e in VehicleCosting DriverEarning; do
+```
+
+**Edit `scripts/check-deploy.sh`** — find:
+
+```bash
+         cancelBooking startStayPayment submitBookingId awardPoints; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
+         -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
+  [ "$code" = "404" ] && no "$f NOT DEPLOYED" || ok "$f (HTTP $code)"
+done
+```
+
+replace with:
+
+```bash
+         cancelBooking startStayPayment submitBookingId awardPoints \
+         getDriverProfile getDriverRides getDriverWallet getDriverEarningsAdmin \
+         settleDriverEarning completeRide; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
+         -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
+  # 402 is the platform refusing to run ANY function for this workspace (the
+  # plan has no backend functions). It is not "deployed and fine".
+  if [ "$code" = "404" ]; then no "$f NOT DEPLOYED"
+  elif [ "$code" = "402" ]; then no "$f BLOCKED BY THE PLATFORM (HTTP 402: the workspace plan cannot run backend functions)"
+  else ok "$f (HTTP $code)"; fi
+done
+```
+
+- [ ] **Step 2: Everything passes locally**
+
+Run: `npm run lint && npm run check && (set -a; . ./.env; set +a; npm run build)`
+
+Expected: no lint output, four `PASS` lines, `✓ built in …`.
+
+Run: `for f in assignRideDriver cancelRideBooking autoCancelExpiredBookings verifyRidePayment paystackWebhook getRideDriverContact checkRideAvailability getDriverProfile getDriverRides getDriverWallet createWithdrawalRequest processWithdrawal paystackTransferWebhook settleDriverEarning completeRide getDriverEarningsAdmin getDashboardStats; do node_modules/.bin/esbuild base44/functions/$f/entry.ts --format=esm --target=esnext --outfile=/dev/null --log-level=error || echo "PARSE FAIL $f"; done`
+
+Expected: no output.
+
+- [ ] **Step 3: Confirm the platform can run functions at all**
+
+Run: `set -a; . ./.env; set +a; curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'Content-Type: application/json' -d '{}' "$VITE_BASE44_BACKEND_URL/api/apps/$VITE_BASE44_APP_ID/functions/getRideBookings"`
+
+Expected: `401` (the function ran and asked for a session). On 2026-10-10 this returned `402` with "Functions are blocked - app owner lacks backend functions capability": the workspace plan no longer includes backend functions. Nothing below can be verified, and nothing server-side works on the live site, until the workspace owner restores that. Stop here if you see 402.
+
+- [ ] **Step 4: Schemas first**
+
+The entity changes are additive, so they are safe under whatever client is live. Merge the branch to `main`, push, then `git pull --ff-only` (Base44 commits package bumps back to GitHub after a push). Create a checkpoint with the Base44 connector (`create_checkpoint`); it applies `base44/entities/*.jsonc` within minutes to hours. To apply at once, send each changed file with `update_entity_schema` (`RideBooking`, `WithdrawalRequest`, `Driver`, `UserBankAccount`) and `create_entity_schema` (`DriverEarning`). When updating, pass the whole file: a field-level `rls` block left out of an update is kept by the platform, and `"rls": {}` clears one.
+
+Verify: `list_entity_schemas` shows `DriverEarning` with all four operations admin-only, and `WithdrawalRequest` with `wallet` and `driver_id`.
+
+- [ ] **Step 5: Publish**
+
+Functions and the client only ship when someone presses **Publish** in the Base44 dashboard. After it, run `scripts/check-deploy.sh`.
+
+Expected: every marker passes and no function answers 404.
+
+- [ ] **Step 6: Apply the staged rule**
+
+Only after Step 5 (the function that was live before creates withdrawal rows as the user, and would break under this rule). Copy `docs/entity-rules-pending-publish/WithdrawalRequest.jsonc` over `base44/entities/WithdrawalRequest.jsonc`, remove its `"description"` line so the live description stays as it was, commit, push it with `update_entity_schema`, and delete the staged file in the same commit. Run `npm run check`.
+
+Verify from a non-admin browser console: `await base44.entities.WithdrawalRequest.create({ user_email: '<own email>', bank_account_id: 'x', amount: 10000 })` is refused.
+
+- [ ] **Step 7: Walk the money through, once**
+
+Use Paystack test keys and a test driver linked to a test login.
+
+1. Set a driver cost on a test vehicle (Vehicles → Internal costing). Link the driver (Rides → Drivers → Login email).
+2. As a guest: request a one-hour ride a few minutes ahead. As admin: approve. As the guest: pay.
+3. As admin: assign the driver, leaving the pay box empty. Expected: the toast names the held amount.
+4. As the driver: My rides shows the ride with the passenger's name, a Call button and "₦… held · releases …". Wallet shows the amount under Held.
+5. Three hours and a few minutes after the start, POST to `autoCancelExpiredBookings` as admin. Expected: `rides.completed: 1`, `rides.released: 1`.
+6. As the driver: Wallet shows the amount under Available. If it is ₦10,000 or more, withdraw it; otherwise release a second test ride first.
+7. As admin: Withdrawals shows the request with a "Driver earnings" badge. Process it. Expected: "Transfer initiated".
+8. Reassign a second held ride to another driver, and cancel a third. Expected: the first driver's rows for both are Reversed in Rides → Earnings.
+
+- [ ] **Step 8: Dark mode**
+
+With the dev server running and a driver session, screenshot `/DriverRides`, `/DriverWallet`, `/Withdrawals?wallet=driver` and Admin → Rides → Earnings in light and dark at 1280 and 375 wide, using `$HOME/.claude/skills/gstack/browse/dist/browse` and the scanner at `~/.gstack/projects/xdtrxr-urbanliving/designs/design-audit-20260909/darkscan.js`.
+
+Expected: no light islands other than intentional white primary buttons, no text under 2.5:1 against its background, no horizontal scroll at 375.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add scripts/check-deploy.sh
+git commit -m "chore(rides): deploy check covers the driver wallet" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
