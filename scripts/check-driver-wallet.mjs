@@ -638,6 +638,83 @@ same('exactly these ledger fields reach the driver',
   ['amount_ngn', 'booking_reference', 'held_at', 'id', 'on_hold', 'release_at', 'released_at', 'reversed_at',
     'ride_booking_id', 'service_date', 'status', 'vehicle_name']);
 
+// ── Withdrawals from the driver wallet ─────────────────────────────────────
+console.log('\n— withdrawals —');
+for (const dir of ['createWithdrawalRequest', 'processWithdrawal']) {
+  identical('driverEmails', 'driver', [WALLET_HOME, dir]);
+  identical('driverWithdrawals', 'driver, rows', [WALLET_HOME, dir]);
+  identical('walletTotals', 'earnings, withdrawals', [WALLET_HOME, dir]);
+  check(`one withdrawal minimum: ${dir} agrees with ${WALLET_HOME}`,
+    constLine(dir, 'WITHDRAWAL_THRESHOLD_NGN'), constLine(WALLET_HOME, 'WITHDRAWAL_THRESHOLD_NGN'));
+}
+identical('findDriverForUser', FIND_DRIVER_SIG, ['getDriverProfile', 'createWithdrawalRequest']);
+identical('refundsToBalance', 'withdrawal', ['processWithdrawal', 'paystackTransferWebhook']);
+
+const parseWithdrawalAmount = make('parseWithdrawalAmount', liftSrc('createWithdrawalRequest', 'parseWithdrawalAmount', 'raw'));
+check('a whole naira amount is taken as it is', parseWithdrawalAmount(15000), 15000);
+check('kobo are refused, not rounded', parseWithdrawalAmount(15000.5), null);
+check('a string is refused', parseWithdrawalAmount('15000'), null);
+check('zero is refused', parseWithdrawalAmount(0), null);
+check('negative is refused', parseWithdrawalAmount(-15000), null);
+check('NaN is refused', parseWithdrawalAmount(NaN), null);
+check('Infinity is refused', parseWithdrawalAmount(Infinity), null);
+check('nothing is refused', parseWithdrawalAmount(undefined), null);
+
+// A failed transfer credits a stored balance only if one was debited.
+const refundsToBalance = make('refundsToBalance', liftSrc('processWithdrawal', 'refundsToBalance', 'withdrawal'));
+check('a referral withdrawal is refunded to the referral balance', refundsToBalance({ wallet: 'referral' }), true);
+check('a row from before wallets existed is a referral withdrawal', refundsToBalance({ amount: 10000 }), true);
+check('a driver-wallet withdrawal is never credited to referral cash', refundsToBalance({ wallet: 'driver' }), false);
+check('a missing row refunds nothing', refundsToBalance(null), false);
+
+// processWithdrawal re-checks a driver-wallet request against the ledger just
+// before it sends money. This is what makes a forged or stale row harmless.
+const driverWithdrawalProblem = make('driverWithdrawalProblem',
+  constLine('processWithdrawal', 'WITHDRAWAL_THRESHOLD_NGN'), FETCH_ALL,
+  liftSrc('processWithdrawal', 'driverEmails', 'driver'),
+  liftSrc('processWithdrawal', 'driverWithdrawals', 'driver, rows'),
+  liftSrc('processWithdrawal', 'walletTotals', 'earnings, withdrawals'),
+  liftSrc('processWithdrawal', 'driverWithdrawalProblem', 'sr, w'));
+const bank = (requests, earnings, drivers = [{ id: 'drvA', user_email: 'emeka@work.ng', previous_user_emails: ['emeka@gmail.com'] }]) => ({
+  Driver: fakeEntity(drivers), DriverEarning: fakeEntity(earnings), WithdrawalRequest: fakeEntity(requests),
+});
+const request = (extra = {}) => ({
+  id: 'w1', wallet: 'driver', driver_id: 'drvA', user_email: 'emeka@work.ng', amount: 20000, status: 'pending', ...extra,
+});
+const releasedRow = (id, amount_ngn) => ({ id, driver_id: 'drvA', status: 'released', amount_ngn });
+const problemFor = async (req, earnings, others = [], drivers) =>
+  driverWithdrawalProblem(bank([req, ...others], earnings, drivers), req);
+
+check('a request the ledger covers may be paid', await problemFor(request(), [releasedRow('e1', 20000)]), '');
+check('…with the login typed in capitals', await problemFor(request({ user_email: 'Emeka@Work.NG' }), [releasedRow('e1', 20000)]), '');
+// Hand-made in the browser console: half a million against ₦20,000 of earnings.
+check('a request for more than was ever earned is refused',
+  (await problemFor(request({ amount: 500000 }), [releasedRow('e1', 20000)])).includes('short by ₦480,000'), true);
+check('held pay does not cover a withdrawal',
+  (await problemFor(request(), [{ id: 'e1', driver_id: 'drvA', status: 'held', amount_ngn: 20000 }])).includes('short by ₦20,000'), true);
+// Honest request, then admin reversed the ride's pay before processing it.
+check('pay reversed after the request was made: refused',
+  (await problemFor(request(), [{ id: 'e1', driver_id: 'drvA', status: 'reversed', amount_ngn: 20000 }])).includes('short by ₦20,000'), true);
+check('money already paid out is not paid again',
+  (await problemFor(request(), [releasedRow('e1', 20000)], [request({ id: 'w0', status: 'completed' })])).includes('short by ₦20,000'), true);
+check('a failed earlier attempt does not block a retry',
+  await problemFor(request(), [releasedRow('e1', 20000)], [request({ id: 'w0', status: 'failed' })]), '');
+check('a stranger naming this driver is refused',
+  await problemFor(request({ user_email: 'mallory@evil.ng' }), [releasedRow('e1', 20000)]),
+  'This login is not the one linked to the driver profile.');
+check('a login the driver was unlinked from cannot start a withdrawal',
+  await problemFor(request({ user_email: 'emeka@gmail.com' }), [releasedRow('e1', 20000)]),
+  'This login is not the one linked to the driver profile.');
+check('a request naming no driver is refused',
+  await problemFor(request({ driver_id: '' }), [releasedRow('e1', 20000)]), 'This request names no driver.');
+check('a request for a driver who no longer exists is refused',
+  await problemFor(request(), [releasedRow('e1', 20000)], [], []), 'The driver profile for this request no longer exists.');
+for (const bad of [9999, 20000.5, 'abc', Infinity, -20000, null]) {
+  check(`an amount of ${JSON.stringify(bad)} is refused`,
+    await problemFor(request({ amount: bad }), [releasedRow('e1', 20000)]),
+    'The amount on this request is not a valid withdrawal.');
+}
+
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

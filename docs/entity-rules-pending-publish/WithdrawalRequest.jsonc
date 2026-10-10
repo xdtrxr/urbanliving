@@ -1,0 +1,109 @@
+{
+  "name": "WithdrawalRequest",
+  "type": "object",
+  "description": "STAGED for the next publish: identical to base44/entities/WithdrawalRequest.jsonc except that only the server may create a row. createWithdrawalRequest creates under the service role from the driver wallet work onwards, so nothing a user does needs to create one directly. Copy this file over the live one only after that function is published.",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "Email of the user requesting withdrawal"
+    },
+    "bank_account_id": {
+      "type": "string",
+      "description": "Reference to the UserBankAccount used for this withdrawal"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Amount to withdraw in NGN"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "reversed"
+      ],
+      "default": "pending",
+      "description": "Current status of the withdrawal"
+    },
+    "transfer_code": {
+      "type": "string",
+      "description": "Paystack transfer code/reference"
+    },
+    "transfer_id": {
+      "type": "string",
+      "description": "Paystack transfer ID"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error details if the withdrawal failed"
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the withdrawal was requested"
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the withdrawal was completed/failed"
+    },
+    "refunded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Set by paystackTransferWebhook when a failed/reversed transfer's reserved balance has been credited back to the user. Used as an idempotency guard so re-delivered webhooks can't double-refund."
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "Internal notes from admin review"
+    },
+    "wallet": {
+      "type": "string",
+      "enum": [
+        "referral",
+        "driver"
+      ],
+      "default": "referral",
+      "description": "Which money this pays out. referral: debited from User.referral_balance_ngn at request time and refunded on failure. driver: nothing is debited; the row itself is the reservation against the driver's released earnings, and a failed row simply stops counting. Rows written before this field existed are referral."
+    },
+    "driver_id": {
+      "type": "string",
+      "description": "FK to Driver, set only when wallet is driver. The driver's balance counts withdrawals by this id."
+    }
+  },
+  "required": [
+    "user_email",
+    "bank_account_id",
+    "amount"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

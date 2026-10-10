@@ -1,5 +1,128 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
+// processWithdrawal
+// ----------------------------------------------------------------------------
+// Admin sends a pending withdrawal to Paystack.
+//
+// A referral withdrawal was debited from User.referral_balance_ngn when it was
+// requested, so it is refunded there if Paystack turns the transfer down.
+//
+// A driver-wallet withdrawal was not debited from anywhere: the row is the
+// reservation against the driver's released earnings. So before any money
+// moves, the request is checked against the ledger again here. That is the
+// guard that matters, because nothing about the row itself can be trusted: a
+// browser can create a WithdrawalRequest row directly until the stricter
+// create rule staged in docs/entity-rules-pending-publish is live, and an
+// honest request can be overtaken by a reversal of the pay it relied on.
+
+const WITHDRAWAL_THRESHOLD_NGN = 10000;
+
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+// ── Wallet arithmetic — lockstep copies, see getDriverWallet ────────────────
+
+// Every login this driver is, or was, linked to. Lower-cased, once each.
+function driverEmails(driver: any) {
+    const all = [driver && driver.user_email].concat((driver && driver.previous_user_emails) || []);
+    const out = [];
+    for (const raw of all) {
+        const email = String(raw || '').trim().toLowerCase();
+        if (email && !out.includes(email)) out.push(email);
+    }
+    return out;
+}
+
+// The withdrawal rows that count against this driver's balance: driver-wallet
+// rows carrying this driver's id AND made by a login that is, or was, linked
+// to this driver. The second condition is not decoration. Until the staged
+// rule that stops browsers creating WithdrawalRequest rows is live, any
+// signed-in user can create one for their own email with any driver_id on it;
+// the email is the one field the access rule pins to the creator.
+function driverWithdrawals(driver: any, rows: any[]) {
+    if (!driver) return [];
+    const emails = driverEmails(driver);
+    return (rows || []).filter((w) => !!w
+        && w.wallet === 'driver'
+        && w.driver_id === driver.id
+        && emails.includes(String(w.user_email || '').trim().toLowerCase()));
+}
+
+// The driver's position in whole naira. Pass withdrawals through
+// driverWithdrawals first. A failed or reversed transfer counts nowhere, so it
+// needs no refund. If pay is reversed after it was withdrawn, available stops
+// at zero and the difference is carried as shortfall until later pay covers it.
+function walletTotals(earnings: any[], withdrawals: any[]) {
+    const naira = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+    };
+    let held = 0;
+    let released = 0;
+    for (const e of earnings || []) {
+        if (!e) continue;
+        if (e.status === 'held') held += naira(e.amount_ngn);
+        else if (e.status === 'released') released += naira(e.amount_ngn);
+    }
+    let paidOut = 0;
+    let reserved = 0;
+    for (const w of withdrawals || []) {
+        if (!w) continue;
+        if (w.status === 'completed') paidOut += naira(w.amount);
+        else if (w.status === 'pending' || w.status === 'processing') reserved += naira(w.amount);
+    }
+    const net = released - paidOut - reserved;
+    return {
+        held,
+        released,
+        paid_out: paidOut,
+        reserved,
+        available: Math.max(0, net),
+        shortfall: Math.max(0, -net),
+    };
+}
+
+// Only a withdrawal that debited a stored balance is refunded to one. A row
+// written before wallets existed is a referral withdrawal. Lockstep copy in
+// paystackTransferWebhook.
+function refundsToBalance(withdrawal: any) {
+    return !!withdrawal && withdrawal.wallet !== 'driver';
+}
+
+// Why a driver-wallet withdrawal must not be paid, or '' when it may be.
+// The request itself is one of the rows walletTotals counts, so "the ledger
+// covers it" is the same as "there is no shortfall".
+async function driverWithdrawalProblem(sr: any, w: any) {
+    const amount = Number(w.amount);
+    if (typeof w.amount !== 'number' || !Number.isInteger(amount) || amount < WITHDRAWAL_THRESHOLD_NGN) {
+        return 'The amount on this request is not a valid withdrawal.';
+    }
+    if (!w.driver_id) return 'This request names no driver.';
+    const driver = await sr.Driver.get(w.driver_id);
+    if (!driver) return 'The driver profile for this request no longer exists.';
+    // Only the login linked to the driver right now may start a withdrawal.
+    const requester = String(w.user_email || '').trim().toLowerCase();
+    if (!requester || requester !== String(driver.user_email || '').trim().toLowerCase()) {
+        return 'This login is not the one linked to the driver profile.';
+    }
+    const earnings = await fetchAll(sr.DriverEarning, { driver_id: driver.id });
+    const rows = await fetchAll(sr.WithdrawalRequest, { driver_id: driver.id });
+    const totals = walletTotals(earnings, driverWithdrawals(driver, rows));
+    if (totals.shortfall > 0) {
+        return `The driver's released earnings do not cover this request (short by ₦${totals.shortfall.toLocaleString()}).`;
+    }
+    return '';
+}
+
 Deno.serve(async (req) => {
     try {
         const base44 = createClientFromRequest(req);
@@ -29,6 +152,22 @@ Deno.serve(async (req) => {
             return Response.json({ 
                 error: `Withdrawal is already ${withdrawalRequest.status}` 
             }, { status: 400 });
+        }
+
+        // A driver-wallet request is only as good as the ledger behind it.
+        // Checked here, after the "still pending" guard and before anything
+        // is sent, and a request that fails is closed so it cannot be retried
+        // into a payout later.
+        if (withdrawalRequest.wallet === 'driver') {
+            const problem = await driverWithdrawalProblem(base44.asServiceRole.entities, withdrawalRequest);
+            if (problem) {
+                await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawal_request_id, {
+                    status: 'failed',
+                    error_message: problem,
+                    processed_at: new Date().toISOString(),
+                });
+                return Response.json({ success: false, error: problem, code: 'NOT_COVERED' }, { status: 409 });
+            }
         }
 
         // Get bank account details
@@ -77,8 +216,11 @@ Deno.serve(async (req) => {
                     processed_at: new Date().toISOString()
                 });
 
-                // Refund user
-                const requestUser = await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email });
+                // Refund user. A driver-wallet request debited nothing, so it
+                // has nothing to credit back: marking it failed is the refund.
+                const requestUser = refundsToBalance(withdrawalRequest)
+                    ? await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email })
+                    : [];
                 if (requestUser.length > 0) {
                     const currentBalance = requestUser[0].referral_balance_ngn || 0;
                     await base44.asServiceRole.entities.User.update(requestUser[0].id, {
@@ -127,8 +269,11 @@ Deno.serve(async (req) => {
                 processed_at: new Date().toISOString()
             });
 
-            // Refund user
-            const requestUser = await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email });
+            // Refund user. A driver-wallet request debited nothing, so it
+            // has nothing to credit back: marking it failed is the refund.
+            const requestUser = refundsToBalance(withdrawalRequest)
+                ? await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email })
+                : [];
             if (requestUser.length > 0) {
                 const currentBalance = requestUser[0].referral_balance_ngn || 0;
                 await base44.asServiceRole.entities.User.update(requestUser[0].id, {

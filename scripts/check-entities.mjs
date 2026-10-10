@@ -142,6 +142,42 @@ for (const op of ['create', 'update', 'delete']) {
   check(`UserBankAccount ${op} stays owner-only`, JSON.stringify(entities.UserBankAccount?.rls?.[op]) === OWNER);
 }
 
+// ── Rules staged for the next publish ──────────────────────────────────────
+// docs/entity-rules-pending-publish/ holds stricter copies of some schemas.
+// On publish day each one is copied over the live file. A staged copy that is
+// missing a field the live schema has since gained would DELETE that field
+// from production, so the two must always list the same fields.
+console.log('\n— staged rules —');
+const STAGED = path.join(ROOT, 'docs/entity-rules-pending-publish');
+const stagedFiles = fs.existsSync(STAGED) ? fs.readdirSync(STAGED).filter((f) => f.endsWith('.jsonc')).sort() : [];
+for (const file of stagedFiles) {
+  const stem = file.replace(/\.jsonc$/, '');
+  let staged;
+  try {
+    staged = JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, file), 'utf8')));
+  } catch (err) {
+    check(`staged ${file} parses`, false, err.message);
+    continue;
+  }
+  const live = entities[stem];
+  const stagedFields = Object.keys(staged.properties || {}).sort();
+  const liveFields = Object.keys(live?.properties || {}).sort();
+  const dropped = liveFields.filter((k) => !stagedFields.includes(k));
+  const invented = stagedFields.filter((k) => !liveFields.includes(k));
+  check(`staged ${file} lists exactly the live fields`, !!live && dropped.length === 0 && invented.length === 0,
+    !live ? 'no live schema of that name' : `would drop: [${dropped.join(', ')}] would add: [${invented.join(', ')}]`);
+  check(`staged ${file} requires the same fields`, JSON.stringify(staged.required || []) === JSON.stringify(live?.required || []));
+}
+const stagedWithdrawal = stagedFiles.includes('WithdrawalRequest.jsonc')
+  ? JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, 'WithdrawalRequest.jsonc'), 'utf8')))
+  : null;
+// Until this is live, a signed-in user can create a pending withdrawal row by
+// hand. createWithdrawalRequest already creates under the service role, so
+// the strict rule breaks nothing once that function is published.
+check('staged WithdrawalRequest: only the server may create a row', adminOnly(stagedWithdrawal?.rls?.create));
+check('staged WithdrawalRequest: reading is unchanged',
+  JSON.stringify(stagedWithdrawal?.rls?.read) === JSON.stringify(entities.WithdrawalRequest?.rls?.read));
+
 // ── Result ─────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

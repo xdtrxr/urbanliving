@@ -4188,3 +4188,878 @@ git add scripts/check-driver-wallet.mjs base44/functions/getDriverWallet/entry.t
 git commit -m "feat(rides): driver wallet with a balance derived from the earnings ledger" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
+### Task A09: Withdrawing from the driver wallet (the three functions)
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (withdrawals section, above `// ---- result ----`)
+- Modify: `scripts/check-entities.mjs` (staged rule files must carry every live field)
+- Replace: `base44/functions/createWithdrawalRequest/entry.ts`
+- Modify: `base44/functions/processWithdrawal/entry.ts` (ledger re-check before paying; refunds skip driver-wallet rows)
+- Modify: `base44/functions/paystackTransferWebhook/entry.ts` (refund skips driver-wallet rows; wording)
+- Create: `docs/entity-rules-pending-publish/WithdrawalRequest.jsonc`
+- Modify: `docs/entity-rules-pending-publish/README.md`
+
+**Interfaces:**
+- Consumes: `findDriverForUser` (Task A06), `driverEmails`, `driverWithdrawals`, `walletTotals`, `WITHDRAWAL_THRESHOLD_NGN` (Task A08), all copied character for character; `WithdrawalRequest.wallet`, `WithdrawalRequest.driver_id` (Task A01); `fakeEntity`, `FETCH_ALL` (Task A03).
+- Produces: `createWithdrawalRequest` accepts `wallet: 'referral' | 'driver'` (default `'referral'`) beside `amount` and `bank_account_id`. Its answers keep their existing shape (`{ success: true, withdrawal_request, message }`, or `{ success: false, error, code }` with a 4xx). New codes: `INVALID_WALLET` (400), `INVALID_AMOUNT` (400), `NOT_A_DRIVER` (403). The row is created under the service role and carries `wallet`, plus `driver_id` for the driver wallet. Helper `parseWithdrawalAmount(raw) → integer | null`.
+- Produces, in `processWithdrawal/entry.ts`: `async driverWithdrawalProblem(sr, withdrawal) → string` (`''` means "may be paid") and the refusal `NOT_COVERED` (409), which also marks the row `failed`. `refundsToBalance(withdrawal) → boolean`, identical in `processWithdrawal` and `paystackTransferWebhook`.
+- Produces: staged rule `docs/entity-rules-pending-publish/WithdrawalRequest.jsonc` (`create` admin-only), to apply after the next publish.
+
+**Why the row is the reservation.** A referral withdrawal debits `User.referral_balance_ngn` when it is requested and credits it back if the transfer fails. The driver wallet has no stored balance to debit. A pending or processing driver-wallet row simply counts against `walletTotals`, and a failed or reversed one stops counting. So for `wallet: 'driver'` nothing is debited on request and nothing is refunded on failure, and the two refund paths must skip those rows or a failed driver payout would credit referral cash that was never taken.
+
+- [ ] **Step 1: Write the failing checks**
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── Withdrawals from the driver wallet ─────────────────────────────────────
+console.log('\n— withdrawals —');
+for (const dir of ['createWithdrawalRequest', 'processWithdrawal']) {
+  identical('driverEmails', 'driver', [WALLET_HOME, dir]);
+  identical('driverWithdrawals', 'driver, rows', [WALLET_HOME, dir]);
+  identical('walletTotals', 'earnings, withdrawals', [WALLET_HOME, dir]);
+  check(`one withdrawal minimum: ${dir} agrees with ${WALLET_HOME}`,
+    constLine(dir, 'WITHDRAWAL_THRESHOLD_NGN'), constLine(WALLET_HOME, 'WITHDRAWAL_THRESHOLD_NGN'));
+}
+identical('findDriverForUser', FIND_DRIVER_SIG, ['getDriverProfile', 'createWithdrawalRequest']);
+identical('refundsToBalance', 'withdrawal', ['processWithdrawal', 'paystackTransferWebhook']);
+
+const parseWithdrawalAmount = make('parseWithdrawalAmount', liftSrc('createWithdrawalRequest', 'parseWithdrawalAmount', 'raw'));
+check('a whole naira amount is taken as it is', parseWithdrawalAmount(15000), 15000);
+check('kobo are refused, not rounded', parseWithdrawalAmount(15000.5), null);
+check('a string is refused', parseWithdrawalAmount('15000'), null);
+check('zero is refused', parseWithdrawalAmount(0), null);
+check('negative is refused', parseWithdrawalAmount(-15000), null);
+check('NaN is refused', parseWithdrawalAmount(NaN), null);
+check('Infinity is refused', parseWithdrawalAmount(Infinity), null);
+check('nothing is refused', parseWithdrawalAmount(undefined), null);
+
+// A failed transfer credits a stored balance only if one was debited.
+const refundsToBalance = make('refundsToBalance', liftSrc('processWithdrawal', 'refundsToBalance', 'withdrawal'));
+check('a referral withdrawal is refunded to the referral balance', refundsToBalance({ wallet: 'referral' }), true);
+check('a row from before wallets existed is a referral withdrawal', refundsToBalance({ amount: 10000 }), true);
+check('a driver-wallet withdrawal is never credited to referral cash', refundsToBalance({ wallet: 'driver' }), false);
+check('a missing row refunds nothing', refundsToBalance(null), false);
+
+// processWithdrawal re-checks a driver-wallet request against the ledger just
+// before it sends money. This is what makes a forged or stale row harmless.
+const driverWithdrawalProblem = make('driverWithdrawalProblem',
+  constLine('processWithdrawal', 'WITHDRAWAL_THRESHOLD_NGN'), FETCH_ALL,
+  liftSrc('processWithdrawal', 'driverEmails', 'driver'),
+  liftSrc('processWithdrawal', 'driverWithdrawals', 'driver, rows'),
+  liftSrc('processWithdrawal', 'walletTotals', 'earnings, withdrawals'),
+  liftSrc('processWithdrawal', 'driverWithdrawalProblem', 'sr, w'));
+const bank = (requests, earnings, drivers = [{ id: 'drvA', user_email: 'emeka@work.ng', previous_user_emails: ['emeka@gmail.com'] }]) => ({
+  Driver: fakeEntity(drivers), DriverEarning: fakeEntity(earnings), WithdrawalRequest: fakeEntity(requests),
+});
+const request = (extra = {}) => ({
+  id: 'w1', wallet: 'driver', driver_id: 'drvA', user_email: 'emeka@work.ng', amount: 20000, status: 'pending', ...extra,
+});
+const releasedRow = (id, amount_ngn) => ({ id, driver_id: 'drvA', status: 'released', amount_ngn });
+const problemFor = async (req, earnings, others = [], drivers) =>
+  driverWithdrawalProblem(bank([req, ...others], earnings, drivers), req);
+
+check('a request the ledger covers may be paid', await problemFor(request(), [releasedRow('e1', 20000)]), '');
+check('…with the login typed in capitals', await problemFor(request({ user_email: 'Emeka@Work.NG' }), [releasedRow('e1', 20000)]), '');
+// Hand-made in the browser console: half a million against ₦20,000 of earnings.
+check('a request for more than was ever earned is refused',
+  (await problemFor(request({ amount: 500000 }), [releasedRow('e1', 20000)])).includes('short by ₦480,000'), true);
+check('held pay does not cover a withdrawal',
+  (await problemFor(request(), [{ id: 'e1', driver_id: 'drvA', status: 'held', amount_ngn: 20000 }])).includes('short by ₦20,000'), true);
+// Honest request, then admin reversed the ride's pay before processing it.
+check('pay reversed after the request was made: refused',
+  (await problemFor(request(), [{ id: 'e1', driver_id: 'drvA', status: 'reversed', amount_ngn: 20000 }])).includes('short by ₦20,000'), true);
+check('money already paid out is not paid again',
+  (await problemFor(request(), [releasedRow('e1', 20000)], [request({ id: 'w0', status: 'completed' })])).includes('short by ₦20,000'), true);
+check('a failed earlier attempt does not block a retry',
+  await problemFor(request(), [releasedRow('e1', 20000)], [request({ id: 'w0', status: 'failed' })]), '');
+check('a stranger naming this driver is refused',
+  await problemFor(request({ user_email: 'mallory@evil.ng' }), [releasedRow('e1', 20000)]),
+  'This login is not the one linked to the driver profile.');
+check('a login the driver was unlinked from cannot start a withdrawal',
+  await problemFor(request({ user_email: 'emeka@gmail.com' }), [releasedRow('e1', 20000)]),
+  'This login is not the one linked to the driver profile.');
+check('a request naming no driver is refused',
+  await problemFor(request({ driver_id: '' }), [releasedRow('e1', 20000)]), 'This request names no driver.');
+check('a request for a driver who no longer exists is refused',
+  await problemFor(request(), [releasedRow('e1', 20000)], [], []), 'The driver profile for this request no longer exists.');
+for (const bad of [9999, 20000.5, 'abc', Infinity, -20000, null]) {
+  check(`an amount of ${JSON.stringify(bad)} is refused`,
+    await problemFor(request({ amount: bad }), [releasedRow('e1', 20000)]),
+    'The amount on this request is not a valid withdrawal.');
+}
+
+// ---- result ----
+```
+
+**Edit `scripts/check-entities.mjs`** — find:
+
+```js
+// ── Result ─────────────────────────────────────────────────────────────────
+```
+
+replace with:
+
+```js
+// ── Rules staged for the next publish ──────────────────────────────────────
+// docs/entity-rules-pending-publish/ holds stricter copies of some schemas.
+// On publish day each one is copied over the live file. A staged copy that is
+// missing a field the live schema has since gained would DELETE that field
+// from production, so the two must always list the same fields.
+console.log('\n— staged rules —');
+const STAGED = path.join(ROOT, 'docs/entity-rules-pending-publish');
+const stagedFiles = fs.existsSync(STAGED) ? fs.readdirSync(STAGED).filter((f) => f.endsWith('.jsonc')).sort() : [];
+for (const file of stagedFiles) {
+  const stem = file.replace(/\.jsonc$/, '');
+  let staged;
+  try {
+    staged = JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, file), 'utf8')));
+  } catch (err) {
+    check(`staged ${file} parses`, false, err.message);
+    continue;
+  }
+  const live = entities[stem];
+  const stagedFields = Object.keys(staged.properties || {}).sort();
+  const liveFields = Object.keys(live?.properties || {}).sort();
+  const dropped = liveFields.filter((k) => !stagedFields.includes(k));
+  const invented = stagedFields.filter((k) => !liveFields.includes(k));
+  check(`staged ${file} lists exactly the live fields`, !!live && dropped.length === 0 && invented.length === 0,
+    !live ? 'no live schema of that name' : `would drop: [${dropped.join(', ')}] would add: [${invented.join(', ')}]`);
+  check(`staged ${file} requires the same fields`, JSON.stringify(staged.required || []) === JSON.stringify(live?.required || []));
+}
+const stagedWithdrawal = stagedFiles.includes('WithdrawalRequest.jsonc')
+  ? JSON.parse(stripComments(fs.readFileSync(path.join(STAGED, 'WithdrawalRequest.jsonc'), 'utf8')))
+  : null;
+// Until this is live, a signed-in user can create a pending withdrawal row by
+// hand. createWithdrawalRequest already creates under the service role, so
+// the strict rule breaks nothing once that function is published.
+check('staged WithdrawalRequest: only the server may create a row', adminOnly(stagedWithdrawal?.rls?.create));
+check('staged WithdrawalRequest: reading is unchanged',
+  JSON.stringify(stagedWithdrawal?.rls?.read) === JSON.stringify(entities.WithdrawalRequest?.rls?.read));
+
+// ── Result ─────────────────────────────────────────────────────────────────
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: `Error: could not find driverEmails in base44/functions/createWithdrawalRequest/entry.ts`.
+
+Run: `node scripts/check-entities.mjs`
+
+Expected: the three existing staged files pass, then ` FAIL  staged WithdrawalRequest: only the server may create a row` and ` FAIL  staged WithdrawalRequest: reading is unchanged`.
+
+- [ ] **Step 3: Rewrite `createWithdrawalRequest`**
+
+The referral path does exactly what it did (same checks, same debit, same race defence) with three differences: the amount must be a whole number, the row is created under the service role, and the row carries `wallet: 'referral'`.
+
+**Replace `base44/functions/createWithdrawalRequest/entry.ts` with:**
+
+```ts
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+// createWithdrawalRequest
+// ----------------------------------------------------------------------------
+// A user asks for money to be sent to their bank. Admin then processes the
+// request (processWithdrawal), and Paystack confirms the outcome later
+// (paystackTransferWebhook).
+//
+// Two wallets, two ways of reserving the money:
+//
+//   referral  User.referral_balance_ngn is a stored number. The amount is
+//             DEBITED here and credited back if the transfer fails.
+//   driver    There is no stored balance. What a driver can withdraw is
+//             walletTotals() over their released earnings and their earlier
+//             driver-wallet withdrawals. Nothing is debited: the pending row
+//             written here IS the reservation, and a failed row simply stops
+//             counting. processWithdrawal re-checks the ledger before paying.
+//
+// The row is created under the service role. It used to be created as the
+// user, which is why the WithdrawalRequest create rule lets a browser write
+// one directly; the stricter rule staged in docs/entity-rules-pending-publish
+// can be applied once this version is published.
+//
+// One withdrawal in flight per person, across both wallets.
+
+const WITHDRAWAL_THRESHOLD_NGN = 10000;
+
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+// The Driver row this login belongs to, or null. Lockstep copy, see
+// getDriverProfile.
+async function findDriverForUser(sr: any, email: string) {
+    const raw = String(email || '').trim();
+    const lower = raw.toLowerCase();
+    if (!lower) return null;
+    let rows = await sr.Driver.filter({ user_email: lower });
+    if ((!rows || rows.length === 0) && raw !== lower) rows = await sr.Driver.filter({ user_email: raw });
+    if (!rows || rows.length === 0) return null;
+    rows.sort((a, b) => String(a.created_date || '').localeCompare(String(b.created_date || '')));
+    return rows[0];
+}
+
+// ── Wallet arithmetic — lockstep copies, see getDriverWallet ────────────────
+
+// Every login this driver is, or was, linked to. Lower-cased, once each.
+function driverEmails(driver: any) {
+    const all = [driver && driver.user_email].concat((driver && driver.previous_user_emails) || []);
+    const out = [];
+    for (const raw of all) {
+        const email = String(raw || '').trim().toLowerCase();
+        if (email && !out.includes(email)) out.push(email);
+    }
+    return out;
+}
+
+// The withdrawal rows that count against this driver's balance: driver-wallet
+// rows carrying this driver's id AND made by a login that is, or was, linked
+// to this driver. The second condition is not decoration. Until the staged
+// rule that stops browsers creating WithdrawalRequest rows is live, any
+// signed-in user can create one for their own email with any driver_id on it;
+// the email is the one field the access rule pins to the creator.
+function driverWithdrawals(driver: any, rows: any[]) {
+    if (!driver) return [];
+    const emails = driverEmails(driver);
+    return (rows || []).filter((w) => !!w
+        && w.wallet === 'driver'
+        && w.driver_id === driver.id
+        && emails.includes(String(w.user_email || '').trim().toLowerCase()));
+}
+
+// The driver's position in whole naira. Pass withdrawals through
+// driverWithdrawals first. A failed or reversed transfer counts nowhere, so it
+// needs no refund. If pay is reversed after it was withdrawn, available stops
+// at zero and the difference is carried as shortfall until later pay covers it.
+function walletTotals(earnings: any[], withdrawals: any[]) {
+    const naira = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+    };
+    let held = 0;
+    let released = 0;
+    for (const e of earnings || []) {
+        if (!e) continue;
+        if (e.status === 'held') held += naira(e.amount_ngn);
+        else if (e.status === 'released') released += naira(e.amount_ngn);
+    }
+    let paidOut = 0;
+    let reserved = 0;
+    for (const w of withdrawals || []) {
+        if (!w) continue;
+        if (w.status === 'completed') paidOut += naira(w.amount);
+        else if (w.status === 'pending' || w.status === 'processing') reserved += naira(w.amount);
+    }
+    const net = released - paidOut - reserved;
+    return {
+        held,
+        released,
+        paid_out: paidOut,
+        reserved,
+        available: Math.max(0, net),
+        shortfall: Math.max(0, -net),
+    };
+}
+
+// The amount asked for: a positive whole number of naira, or null. Kobo are
+// refused rather than rounded, so the figure the user typed is the figure
+// that is reserved and the figure that is sent.
+function parseWithdrawalAmount(raw: unknown) {
+    if (typeof raw !== 'number' || !Number.isInteger(raw) || raw <= 0) return null;
+    return raw;
+}
+
+const refuse = (status: number, error: string, code?: string) =>
+    Response.json({ success: false, error, ...(code ? { code } : {}) }, { status });
+
+Deno.serve(async (req) => {
+    try {
+        const base44 = createClientFromRequest(req);
+
+        const user = await base44.auth.me();
+        if (!user) return refuse(401, 'Unauthorized');
+
+        const body = await req.json().catch(() => ({}));
+        const bank_account_id = body?.bank_account_id;
+
+        if (body?.wallet !== undefined && body.wallet !== 'referral' && body.wallet !== 'driver') {
+            return refuse(400, 'Unknown wallet.', 'INVALID_WALLET');
+        }
+        const wallet = body?.wallet === 'driver' ? 'driver' : 'referral';
+        const label = wallet === 'driver' ? 'driver earnings' : 'referral earnings';
+
+        if (body?.amount === undefined || body?.amount === null || !bank_account_id) {
+            return refuse(400, 'Missing required fields: amount and bank_account_id');
+        }
+        const amount = parseWithdrawalAmount(body.amount);
+        if (amount === null) {
+            return refuse(400, 'Enter the amount in whole naira.', 'INVALID_AMOUNT');
+        }
+        if (amount < WITHDRAWAL_THRESHOLD_NGN) {
+            return refuse(400, `Minimum withdrawal amount is ₦${WITHDRAWAL_THRESHOLD_NGN.toLocaleString()}`);
+        }
+
+        const sr = base44.asServiceRole.entities;
+
+        // ── Which money, and how much of it is there ────────────────────
+        let driver: any = null;
+        let available = 0;
+        if (wallet === 'driver') {
+            // Resolved from the session email. Nothing the browser sends
+            // chooses whose wallet this is.
+            driver = await findDriverForUser(sr, user.email);
+            if (!driver) {
+                return refuse(403, 'This account is not linked to a driver profile.', 'NOT_A_DRIVER');
+            }
+            const [earnings, rows] = await Promise.all([
+                fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+                fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
+            ]);
+            available = walletTotals(earnings, driverWithdrawals(driver, rows)).available;
+        } else {
+            available = Number(user.referral_balance_ngn) || 0;
+        }
+
+        if (available < WITHDRAWAL_THRESHOLD_NGN) {
+            return refuse(400, `You need at least ₦${WITHDRAWAL_THRESHOLD_NGN.toLocaleString()} in ${label} to withdraw. Current balance: ₦${available.toLocaleString()}.`);
+        }
+        if (amount > available) {
+            return refuse(400, `Insufficient balance. You have ₦${available.toLocaleString()} available.`);
+        }
+
+        // ── The destination must be the caller's own verified account ───
+        let bankAccount: any = null;
+        try {
+            bankAccount = await base44.entities.UserBankAccount.get(bank_account_id);
+        } catch (_err) {
+            bankAccount = null;
+        }
+        if (!bankAccount || bankAccount.user_email !== user.email) {
+            return refuse(400, 'Invalid bank account');
+        }
+        if (!bankAccount.is_verified) {
+            return refuse(400, 'Bank account is not verified. Please verify your account first.');
+        }
+
+        // ── One in flight per person, whichever wallet ──────────────────
+        const inFlight = { user_email: user.email, status: { $in: ['pending', 'processing'] } };
+        const pendingWithdrawals = await sr.WithdrawalRequest.filter(inFlight);
+        if (pendingWithdrawals.length > 0) {
+            return refuse(400, 'You have a pending withdrawal request. Please wait for it to complete.');
+        }
+
+        const withdrawalRequest = await sr.WithdrawalRequest.create({
+            user_email: user.email,
+            bank_account_id,
+            amount,
+            status: 'pending',
+            requested_at: new Date().toISOString(),
+            wallet,
+            ...(driver ? { driver_id: driver.id } : {}),
+        });
+
+        // ── Race defence ────────────────────────────────────────────────
+        // Two requests sent at the same instant both pass every check above.
+        // Now that this row exists, look again: there must be exactly one in
+        // flight, and the money must still cover it. If not, this request
+        // loses and is marked failed.
+        const livePending = await sr.WithdrawalRequest.filter(inFlight);
+        let stillCovered = false;
+        let referralUser: any = null;
+        if (wallet === 'driver') {
+            const [earnings, rows] = await Promise.all([
+                fetchAll(sr.DriverEarning, { driver_id: driver.id }),
+                fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
+            ]);
+            // This request is now one of the rows, so "covered" means the
+            // ledger shows no shortfall with it counted.
+            stillCovered = walletTotals(earnings, driverWithdrawals(driver, rows)).shortfall === 0;
+        } else {
+            const fresh = await sr.User.filter({ email: user.email });
+            referralUser = fresh[0] || null;
+            stillCovered = !!referralUser && (Number(referralUser.referral_balance_ngn) || 0) >= amount;
+        }
+
+        if (livePending.length > 1 || !stillCovered) {
+            await sr.WithdrawalRequest.update(withdrawalRequest.id, {
+                status: 'failed',
+                error_message: 'Concurrent withdrawal detected — request rejected.',
+                processed_at: new Date().toISOString(),
+            });
+            return refuse(409, 'A concurrent withdrawal request was detected. Please try again in a moment.');
+        }
+
+        // Referral money is reserved by taking it off the stored balance.
+        // Driver money needs no write: the pending row above is the reservation.
+        if (wallet === 'referral') {
+            await sr.User.update(referralUser.id, {
+                referral_balance_ngn: (Number(referralUser.referral_balance_ngn) || 0) - amount,
+            });
+        }
+
+        return Response.json({
+            success: true,
+            withdrawal_request: withdrawalRequest,
+            message: 'Withdrawal request created successfully. It will be processed within 24-48 hours.',
+        });
+    } catch (error) {
+        console.error('Error creating withdrawal request:', error);
+        return Response.json({ success: false, error: (error as Error).message }, { status: 500 });
+    }
+});
+```
+
+- [ ] **Step 4: `processWithdrawal` re-checks a driver-wallet request against the ledger**
+
+**Edit `base44/functions/processWithdrawal/entry.ts`** — find:
+
+```ts
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+Deno.serve(async (req) => {
+```
+
+replace with:
+
+```ts
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
+
+// processWithdrawal
+// ----------------------------------------------------------------------------
+// Admin sends a pending withdrawal to Paystack.
+//
+// A referral withdrawal was debited from User.referral_balance_ngn when it was
+// requested, so it is refunded there if Paystack turns the transfer down.
+//
+// A driver-wallet withdrawal was not debited from anywhere: the row is the
+// reservation against the driver's released earnings. So before any money
+// moves, the request is checked against the ledger again here. That is the
+// guard that matters, because nothing about the row itself can be trusted: a
+// browser can create a WithdrawalRequest row directly until the stricter
+// create rule staged in docs/entity-rules-pending-publish is live, and an
+// honest request can be overtaken by a reversal of the pay it relied on.
+
+const WITHDRAWAL_THRESHOLD_NGN = 10000;
+
+const PAGE = 500;
+async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
+    const out: any[] = [];
+    for (let skip = 0; skip < 50000; skip += PAGE) {
+        const page = await entity.filter(query, undefined, PAGE, skip);
+        if (!Array.isArray(page) || page.length === 0) break;
+        out.push(...page);
+        if (page.length < PAGE) break;
+    }
+    return out;
+}
+
+// ── Wallet arithmetic — lockstep copies, see getDriverWallet ────────────────
+
+// Every login this driver is, or was, linked to. Lower-cased, once each.
+function driverEmails(driver: any) {
+    const all = [driver && driver.user_email].concat((driver && driver.previous_user_emails) || []);
+    const out = [];
+    for (const raw of all) {
+        const email = String(raw || '').trim().toLowerCase();
+        if (email && !out.includes(email)) out.push(email);
+    }
+    return out;
+}
+
+// The withdrawal rows that count against this driver's balance: driver-wallet
+// rows carrying this driver's id AND made by a login that is, or was, linked
+// to this driver. The second condition is not decoration. Until the staged
+// rule that stops browsers creating WithdrawalRequest rows is live, any
+// signed-in user can create one for their own email with any driver_id on it;
+// the email is the one field the access rule pins to the creator.
+function driverWithdrawals(driver: any, rows: any[]) {
+    if (!driver) return [];
+    const emails = driverEmails(driver);
+    return (rows || []).filter((w) => !!w
+        && w.wallet === 'driver'
+        && w.driver_id === driver.id
+        && emails.includes(String(w.user_email || '').trim().toLowerCase()));
+}
+
+// The driver's position in whole naira. Pass withdrawals through
+// driverWithdrawals first. A failed or reversed transfer counts nowhere, so it
+// needs no refund. If pay is reversed after it was withdrawn, available stops
+// at zero and the difference is carried as shortfall until later pay covers it.
+function walletTotals(earnings: any[], withdrawals: any[]) {
+    const naira = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+    };
+    let held = 0;
+    let released = 0;
+    for (const e of earnings || []) {
+        if (!e) continue;
+        if (e.status === 'held') held += naira(e.amount_ngn);
+        else if (e.status === 'released') released += naira(e.amount_ngn);
+    }
+    let paidOut = 0;
+    let reserved = 0;
+    for (const w of withdrawals || []) {
+        if (!w) continue;
+        if (w.status === 'completed') paidOut += naira(w.amount);
+        else if (w.status === 'pending' || w.status === 'processing') reserved += naira(w.amount);
+    }
+    const net = released - paidOut - reserved;
+    return {
+        held,
+        released,
+        paid_out: paidOut,
+        reserved,
+        available: Math.max(0, net),
+        shortfall: Math.max(0, -net),
+    };
+}
+
+// Only a withdrawal that debited a stored balance is refunded to one. A row
+// written before wallets existed is a referral withdrawal. Lockstep copy in
+// paystackTransferWebhook.
+function refundsToBalance(withdrawal: any) {
+    return !!withdrawal && withdrawal.wallet !== 'driver';
+}
+
+// Why a driver-wallet withdrawal must not be paid, or '' when it may be.
+// The request itself is one of the rows walletTotals counts, so "the ledger
+// covers it" is the same as "there is no shortfall".
+async function driverWithdrawalProblem(sr: any, w: any) {
+    const amount = Number(w.amount);
+    if (typeof w.amount !== 'number' || !Number.isInteger(amount) || amount < WITHDRAWAL_THRESHOLD_NGN) {
+        return 'The amount on this request is not a valid withdrawal.';
+    }
+    if (!w.driver_id) return 'This request names no driver.';
+    const driver = await sr.Driver.get(w.driver_id);
+    if (!driver) return 'The driver profile for this request no longer exists.';
+    // Only the login linked to the driver right now may start a withdrawal.
+    const requester = String(w.user_email || '').trim().toLowerCase();
+    if (!requester || requester !== String(driver.user_email || '').trim().toLowerCase()) {
+        return 'This login is not the one linked to the driver profile.';
+    }
+    const earnings = await fetchAll(sr.DriverEarning, { driver_id: driver.id });
+    const rows = await fetchAll(sr.WithdrawalRequest, { driver_id: driver.id });
+    const totals = walletTotals(earnings, driverWithdrawals(driver, rows));
+    if (totals.shortfall > 0) {
+        return `The driver's released earnings do not cover this request (short by ₦${totals.shortfall.toLocaleString()}).`;
+    }
+    return '';
+}
+
+Deno.serve(async (req) => {
+```
+
+**Edit `base44/functions/processWithdrawal/entry.ts`** — find:
+
+```ts
+        // Get bank account details
+        const bankAccount = await base44.asServiceRole.entities.UserBankAccount.get(withdrawalRequest.bank_account_id);
+```
+
+replace with:
+
+```ts
+        // A driver-wallet request is only as good as the ledger behind it.
+        // Checked here, after the "still pending" guard and before anything
+        // is sent, and a request that fails is closed so it cannot be retried
+        // into a payout later.
+        if (withdrawalRequest.wallet === 'driver') {
+            const problem = await driverWithdrawalProblem(base44.asServiceRole.entities, withdrawalRequest);
+            if (problem) {
+                await base44.asServiceRole.entities.WithdrawalRequest.update(withdrawal_request_id, {
+                    status: 'failed',
+                    error_message: problem,
+                    processed_at: new Date().toISOString(),
+                });
+                return Response.json({ success: false, error: problem, code: 'NOT_COVERED' }, { status: 409 });
+            }
+        }
+
+        // Get bank account details
+        const bankAccount = await base44.asServiceRole.entities.UserBankAccount.get(withdrawalRequest.bank_account_id);
+```
+
+- [ ] **Step 5: The two refund paths in `processWithdrawal` skip driver-wallet rows**
+
+The same three lines appear twice, at two indentation depths: once where creating the Paystack recipient fails, once where the transfer itself is refused.
+
+**Edit `base44/functions/processWithdrawal/entry.ts`** — find:
+
+```ts
+                // Refund user
+                const requestUser = await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email });
+                if (requestUser.length > 0) {
+```
+
+replace with:
+
+```ts
+                // Refund user. A driver-wallet request debited nothing, so it
+                // has nothing to credit back: marking it failed is the refund.
+                const requestUser = refundsToBalance(withdrawalRequest)
+                    ? await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email })
+                    : [];
+                if (requestUser.length > 0) {
+```
+
+**Edit `base44/functions/processWithdrawal/entry.ts`** — find:
+
+```ts
+            // Refund user
+            const requestUser = await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email });
+            if (requestUser.length > 0) {
+```
+
+replace with:
+
+```ts
+            // Refund user. A driver-wallet request debited nothing, so it
+            // has nothing to credit back: marking it failed is the refund.
+            const requestUser = refundsToBalance(withdrawalRequest)
+                ? await base44.asServiceRole.entities.User.filter({ email: withdrawalRequest.user_email })
+                : [];
+            if (requestUser.length > 0) {
+```
+
+- [ ] **Step 6: The transfer webhook skips them too**
+
+**Edit `base44/functions/paystackTransferWebhook/entry.ts`** — find:
+
+```ts
+// Refunds the user's referral_balance_ngn for a failed/reversed transfer.
+```
+
+replace with:
+
+```ts
+// Only a withdrawal that debited a stored balance is refunded to one. A row
+// written before wallets existed is a referral withdrawal. Lockstep copy in
+// processWithdrawal.
+function refundsToBalance(withdrawal: any) {
+    return !!withdrawal && withdrawal.wallet !== 'driver';
+}
+
+// Refunds the user's referral_balance_ngn for a failed/reversed transfer.
+```
+
+**Edit `base44/functions/paystackTransferWebhook/entry.ts`** — find:
+
+```ts
+async function refundUser(sdk: any, withdrawal: any) {
+    if (withdrawal.refunded_at) {
+```
+
+replace with:
+
+```ts
+async function refundUser(sdk: any, withdrawal: any) {
+    // A driver-wallet payout was never debited from a stored balance. Its
+    // failed or reversed row stops counting against the driver's earnings by
+    // itself; crediting referral_balance_ngn here would be free money.
+    if (!refundsToBalance(withdrawal)) {
+        console.log(`Withdrawal ${withdrawal.id} is a driver-wallet payout: nothing to credit back`);
+        return;
+    }
+    if (withdrawal.refunded_at) {
+```
+
+**Edit `base44/functions/paystackTransferWebhook/entry.ts`** — find:
+
+```ts
+            body: `We've refunded ₦${(Number(withdrawal.amount) || 0).toLocaleString()} to your referral balance. Tap to try again.`,
+            url: '/Withdrawals',
+```
+
+replace with:
+
+```ts
+            body: refundsToBalance(withdrawal)
+                ? `We've refunded ₦${(Number(withdrawal.amount) || 0).toLocaleString()} to your referral balance. Tap to try again.`
+                : `₦${(Number(withdrawal.amount) || 0).toLocaleString()} is back in your driver wallet. Tap to try again.`,
+            url: refundsToBalance(withdrawal) ? '/Withdrawals' : '/DriverWallet',
+```
+
+- [ ] **Step 7: Stage the stricter create rule**
+
+It cannot go live before this version of `createWithdrawalRequest` is published: the function that is live today creates the row as the user, and an admin-only create rule would make every withdrawal request fail.
+
+**Create `docs/entity-rules-pending-publish/WithdrawalRequest.jsonc`:**
+
+```json
+{
+  "name": "WithdrawalRequest",
+  "type": "object",
+  "description": "STAGED for the next publish: identical to base44/entities/WithdrawalRequest.jsonc except that only the server may create a row. createWithdrawalRequest creates under the service role from the driver wallet work onwards, so nothing a user does needs to create one directly. Copy this file over the live one only after that function is published.",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "Email of the user requesting withdrawal"
+    },
+    "bank_account_id": {
+      "type": "string",
+      "description": "Reference to the UserBankAccount used for this withdrawal"
+    },
+    "amount": {
+      "type": "number",
+      "description": "Amount to withdraw in NGN"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "reversed"
+      ],
+      "default": "pending",
+      "description": "Current status of the withdrawal"
+    },
+    "transfer_code": {
+      "type": "string",
+      "description": "Paystack transfer code/reference"
+    },
+    "transfer_id": {
+      "type": "string",
+      "description": "Paystack transfer ID"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error details if the withdrawal failed"
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the withdrawal was requested"
+    },
+    "processed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the withdrawal was completed/failed"
+    },
+    "refunded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Set by paystackTransferWebhook when a failed/reversed transfer's reserved balance has been credited back to the user. Used as an idempotency guard so re-delivered webhooks can't double-refund."
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "Internal notes from admin review"
+    },
+    "wallet": {
+      "type": "string",
+      "enum": [
+        "referral",
+        "driver"
+      ],
+      "default": "referral",
+      "description": "Which money this pays out. referral: debited from User.referral_balance_ngn at request time and refunded on failure. driver: nothing is debited; the row itself is the reservation against the driver's released earnings, and a failed row simply stops counting. Rows written before this field existed are referral."
+    },
+    "driver_id": {
+      "type": "string",
+      "description": "FK to Driver, set only when wallet is driver. The driver's balance counts withdrawals by this id."
+    }
+  },
+  "required": [
+    "user_email",
+    "bank_account_id",
+    "amount"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "data.user_email": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
+```
+
+**Edit `docs/entity-rules-pending-publish/README.md`** — find:
+
+```md
+| `User.jsonc` | field-level `write` admin-only on `loyalty_points` and `loyalty_tier` | same as above |
+```
+
+replace with:
+
+```md
+| `User.jsonc` | field-level `write` admin-only on `loyalty_points` and `loyalty_tier` | same as above |
+| `WithdrawalRequest.jsonc` | `create` admin-only | `createWithdrawalRequest` from the driver wallet work (2026-10), which creates the row under the service role. Until this rule is live a signed-in user can create a pending withdrawal row by hand; driver-wallet rows are re-checked against the ledger by `processWithdrawal`, referral rows are not |
+```
+
+**Edit `docs/entity-rules-pending-publish/README.md`** — find:
+
+```md
+4. Copy the three files here over the same names in `base44/entities/`, commit, and push each
+```
+
+replace with:
+
+```md
+4. Copy every `.jsonc` file here over the same name in `base44/entities/`, commit, and push each
+```
+
+- [ ] **Step 8: Run the checks**
+
+Run: `npm run check`
+
+Expected: four `PASS` lines. `check-entities` now ends with a `— staged rules —` section in which every staged file "lists exactly the live fields".
+
+Run: `for f in createWithdrawalRequest processWithdrawal paystackTransferWebhook; do node_modules/.bin/esbuild base44/functions/$f/entry.ts --format=esm --target=esnext --outfile=/dev/null || echo "PARSE FAIL $f"; done`
+
+Expected: no `PARSE FAIL` line.
+
+- [ ] **Step 9: Sandbox checklist (after the next publish)**
+
+1. As a user with ₦10,000 or more of referral balance and a verified bank account, request a withdrawal from the Withdrawals page. Expected: created exactly as before; the row has `wallet: referral`; the referral balance drops by the amount.
+2. As a linked driver with ₦10,000 or more released, call `await base44.functions.invoke('createWithdrawalRequest', { amount: 10000, bank_account_id: '<own verified account>', wallet: 'driver' })`. Expected: `success: true`; the row has `wallet: driver` and the driver's id; `User.referral_balance_ngn` is unchanged; `getDriverWallet` shows available reduced by 10,000 and `pending_withdrawal` set.
+3. As that driver, from the console, create a row by hand: `await base44.entities.WithdrawalRequest.create({ user_email: '<own email>', bank_account_id: '<own account>', amount: 5000000, status: 'pending', wallet: 'driver', driver_id: '<own driver id>' })`. Then, as admin, press Process now on it. Expected: refused with "The driver's released earnings do not cover this request…", the row is `failed`, nothing is sent to Paystack.
+4. Apply the staged rule, then repeat the hand-made create. Expected: refused by the platform.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs scripts/check-entities.mjs base44/functions/createWithdrawalRequest/entry.ts base44/functions/processWithdrawal/entry.ts base44/functions/paystackTransferWebhook/entry.ts docs/entity-rules-pending-publish/WithdrawalRequest.jsonc docs/entity-rules-pending-publish/README.md
+git commit -m "feat(rides): withdraw from the driver wallet, re-checked against the ledger before paying" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+

@@ -91,11 +91,25 @@ async function notifyAdmin(opts: {
     }
 }
 
+// Only a withdrawal that debited a stored balance is refunded to one. A row
+// written before wallets existed is a referral withdrawal. Lockstep copy in
+// processWithdrawal.
+function refundsToBalance(withdrawal: any) {
+    return !!withdrawal && withdrawal.wallet !== 'driver';
+}
+
 // Refunds the user's referral_balance_ngn for a failed/reversed transfer.
 // Idempotent on the WithdrawalRequest row's `refunded_at` stamp — if that
 // field is already set we skip the credit, so re-delivered webhooks (or a
 // reversal that follows a failure that already refunded) can't double-credit.
 async function refundUser(sdk: any, withdrawal: any) {
+    // A driver-wallet payout was never debited from a stored balance. Its
+    // failed or reversed row stops counting against the driver's earnings by
+    // itself; crediting referral_balance_ngn here would be free money.
+    if (!refundsToBalance(withdrawal)) {
+        console.log(`Withdrawal ${withdrawal.id} is a driver-wallet payout: nothing to credit back`);
+        return;
+    }
     if (withdrawal.refunded_at) {
         console.log(`Withdrawal ${withdrawal.id} already refunded at ${withdrawal.refunded_at} — skipping`);
         return;
@@ -227,8 +241,10 @@ Deno.serve(async (req) => {
         await tryPush(sdk, {
             user_email: withdrawal.user_email,
             title: newStatus === 'reversed' ? '↩️ Withdrawal reversed' : '❌ Withdrawal failed',
-            body: `We've refunded ₦${(Number(withdrawal.amount) || 0).toLocaleString()} to your referral balance. Tap to try again.`,
-            url: '/Withdrawals',
+            body: refundsToBalance(withdrawal)
+                ? `We've refunded ₦${(Number(withdrawal.amount) || 0).toLocaleString()} to your referral balance. Tap to try again.`
+                : `₦${(Number(withdrawal.amount) || 0).toLocaleString()} is back in your driver wallet. Tap to try again.`,
+            url: refundsToBalance(withdrawal) ? '/Withdrawals' : '/DriverWallet',
             tag: `withdrawal-${withdrawal.id}`,
         });
         return ack({ processed: true, withdrawal_id: withdrawal.id, status: newStatus });
