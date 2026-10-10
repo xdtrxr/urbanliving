@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { estimateStayPrice, nightsBetween, SERVICE_FEE_RATE, bookingOptionsOf, priceStay } from '../src/config/stays.js';
+import { estimateStayPrice, nightsBetween, SERVICE_FEE_RATE, bookingOptionsOf, priceStay, optionForSearch, stayPricingFromProperty, stayPricingToSave } from '../src/config/stays.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = path.join(ROOT, 'base44/functions/checkAvailabilityWebhook/entry.ts');
@@ -126,6 +126,28 @@ both('an option the property does not offer cannot be priced', [duplex, '2026-12
 both('several options and none chosen cannot be priced', [duplex, '2026-12-01', '2026-12-03', undefined], (p) => p === null);
 both('one option needs no choosing', [{ bedrooms: 3, price_per_night: 90000 }, '2026-12-01', '2026-12-02', undefined], (p) => p.subtotal === 90000);
 both('no nights, no price', [duplex, '2026-12-03', '2026-12-03', 4], (p) => p === null);
+
+// ── search and the admin form (browser only) ────────────────────────────────
+check('a 2-bedroom search finds the duplex by its 2-bedroom option', optionForSearch(duplex, 2).price_per_night, 160000);
+check('a 4+ search finds the 4-bedroom option', optionForSearch(duplex, 4).bedrooms, 4);
+check('a whole-house 4BR is not in a 2-bedroom search', optionForSearch({ bedrooms: 4, price_per_night: 210000, max_guests: 8 }, 2), null);
+check('an option too small for the party does not match', optionForSearch(duplex, 1, 3), null);
+
+const form = stayPricingFromProperty(duplex);
+check('the form opens on "multiple" for a property with options', [form.option_mode, form.booking_options.length], ['multiple', 4]);
+const saved = stayPricingToSave({ ...form, bedrooms: '4' });
+check('saving the form gives back the same prices', priceStay({ ...duplex, ...saved.fields }, '2026-12-13', '2026-12-17', 4), priceStay(duplex, '2026-12-13', '2026-12-17', 4));
+check('the row keeps the cheapest price and the largest guest count', [saved.fields.price_per_night, saved.fields.max_guests, saved.fields.bedrooms], [100000, 8, 4]);
+const season = (name, start_date, end_date) => ({ name, start_date, end_date, prices: { full: '90000' } });
+const whole = { option_mode: 'full', price_per_night: '60000', max_guests: '4', bedrooms: '2', booking_options: [], seasonal_rates: [] };
+check('a full-property season prices the whole place', stayPricingToSave({ ...whole, seasonal_rates: [season('Easter', '2027-03-26', '2027-03-29')] }).fields.seasonal_rates[0].prices, [{ bedrooms: 2, price_per_night: 90000 }]);
+check('full property saves no options', stayPricingToSave(whole).fields.booking_options, []);
+check('two seasons on the same night are refused', /overlaps/.test(stayPricingToSave({ ...whole, seasonal_rates: [season('A', '2027-03-26', '2027-03-29'), season('B', '2027-03-29', '2027-04-02')] }).error), true);
+check('back-to-back seasons are fine', stayPricingToSave({ ...whole, seasonal_rates: [season('A', '2027-03-26', '2027-03-29'), season('B', '2027-03-30', '2027-04-02')] }).fields.seasonal_rates.length, 2);
+check('a season that ends before it starts is refused', /ends before/.test(stayPricingToSave({ ...whole, seasonal_rates: [season('A', '2027-03-29', '2027-03-26')] }).error), true);
+check('a season with no price is refused', /at least one price/.test(stayPricingToSave({ ...whole, seasonal_rates: [{ ...season('A', '2027-03-26', '2027-03-29'), prices: {} }] }).error), true);
+check('one option is not "multiple"', /at least two/.test(stayPricingToSave({ ...whole, option_mode: 'multiple', booking_options: [{ bedrooms: '1', price_per_night: '1', max_guests: '2' }] }).error), true);
+check('the same bedroom count twice is refused', /listed twice/.test(stayPricingToSave({ ...whole, option_mode: 'multiple', booking_options: [{ bedrooms: '1', price_per_night: '1', max_guests: '2' }, { bedrooms: '1', price_per_night: '2', max_guests: '2' }] }).error), true);
 
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -4,6 +4,8 @@ import { UploadFile } from '@/integrations/Core';
 import { SupportTicket } from '@/entities/SupportTicket';
 import { SupportMessage } from '@/entities/SupportMessage';
 import { base44 } from "@/api/base44Client";
+import StayPricingFields from '@/components/admin/StayPricingFields';
+import { EMPTY_STAY_PRICING, stayPricingFromProperty, stayPricingToSave } from '@/config/stays';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -114,6 +116,7 @@ function InFlightBookingRow({ booking, onExpire }) {
             <code className="text-xs font-mono text-slate-500 dark:text-slate-400">{booking.property_id}</code>
             {' · '}{booking.check_in} → {booking.check_out}
             {' · '}{booking.guests} guest{booking.guests === 1 ? '' : 's'}
+            {booking.bedrooms_booked > 0 && <>{' · '}{booking.bedrooms_booked}-bedroom option</>}
             {' · '}₦{(booking.total_price || 0).toLocaleString()}
           </p>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
@@ -189,7 +192,8 @@ export default function AdminPage() {
     host_name: '',
     host_phone: '',
     arrival_instructions: '',
-    instant_book: false
+    instant_book: false,
+    ...EMPTY_STAY_PRICING
   });
   const [isSavingProperty, setIsSavingProperty] = useState(false); // Renamed from isSubmittingForm
   const [isUploadingImages, setIsUploadingImages] = useState(false);
@@ -395,7 +399,8 @@ export default function AdminPage() {
       host_name: property.host_name || '',
       host_phone: property.host_phone || '',
       arrival_instructions: property.arrival_instructions || '',
-      instant_book: property.instant_book || false
+      instant_book: property.instant_book || false,
+      ...stayPricingFromProperty(property)
     });
     setActiveAdminTab('add-manual'); // Switch to the "Add/Edit Property" tab
     window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to the form
@@ -485,6 +490,11 @@ export default function AdminPage() {
 
   const handlePropertyFormSubmit = async (e) => {
     e.preventDefault();
+    const stayPricing = stayPricingToSave(propertyFormData);
+    if (stayPricing.error) {
+      alert(stayPricing.error);
+      return;
+    }
     setIsSavingProperty(true); // Renamed from isSubmittingForm
 
     try {
@@ -498,11 +508,13 @@ export default function AdminPage() {
           address: propertyFormData.location.address,
           coordinates: { lat: 0, lng: 0 } // Default coordinates
         },
-        price_per_night: parseFloat(propertyFormData.price_per_night) || 0, // Ensure number
+        price_per_night: stayPricing.fields.price_per_night, // cheapest option when there are several
         currency: 'NGN', // Explicitly set to NGN as per new pricing section in outline
         caution_fee: parseFloat(propertyFormData.caution_fee) || 0, // NEW field
-        max_guests: parseInt(propertyFormData.max_guests) || 1, // Ensure number
-        bedrooms: parseInt(propertyFormData.bedrooms) || 1, // Ensure number
+        max_guests: stayPricing.fields.max_guests, // largest option when there are several
+        bedrooms: stayPricing.fields.bedrooms,
+        booking_options: stayPricing.fields.booking_options,
+        seasonal_rates: stayPricing.fields.seasonal_rates,
         bathrooms: parseInt(propertyFormData.bathrooms) || 1, // Ensure number
         property_type: propertyFormData.property_type,
         amenities: propertyFormData.amenities ? propertyFormData.amenities.split(',').map(a => a.trim().toLowerCase()) : [],
@@ -545,7 +557,8 @@ export default function AdminPage() {
         host_name: '',
         host_phone: '',
         arrival_instructions: '',
-        instant_book: false
+        instant_book: false,
+        ...EMPTY_STAY_PRICING
       });
       setEditingPropertyId(null); // Clear editing state
       await loadProperties(); // Refresh the property list
@@ -1181,7 +1194,7 @@ export default function AdminPage() {
                     <Button variant="ghost" size="sm" onClick={() => {
                         setEditingPropertyId(null);
                         setPropertyFormData({
-                          title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', host_phone: '', arrival_instructions: '', instant_book: false
+                          title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', host_phone: '', arrival_instructions: '', instant_book: false, ...EMPTY_STAY_PRICING
                         });
                       }} className="mt-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-950/40">
                       <XCircle className="w-3 h-3 mr-1" /> Clear Edit
@@ -1281,6 +1294,7 @@ export default function AdminPage() {
                       Pricing
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {propertyFormData.option_mode !== 'multiple' && (
                       <div>
                         <Label htmlFor="price_per_night">Price per Night (NGN) *</Label>
                         <Input
@@ -1293,6 +1307,7 @@ export default function AdminPage() {
                           className="mt-1"
                         />
                       </div>
+                      )}
                       <div>
                         <Label htmlFor="caution_fee">Refundable Caution Fee (NGN)</Label>
                         <Input
@@ -1306,6 +1321,7 @@ export default function AdminPage() {
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Optional refundable deposit for property security</p>
                       </div>
                     </div>
+                    <StayPricingFields form={propertyFormData} setForm={setPropertyFormData} />
                   </div>
 
                   {/* Property Details */}
@@ -1315,6 +1331,7 @@ export default function AdminPage() {
                       Property Details
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {propertyFormData.option_mode !== 'multiple' && (
                       <div>
                         <Label htmlFor="max_guests">Max Guests *</Label>
                         <Input
@@ -1327,8 +1344,9 @@ export default function AdminPage() {
                           className="mt-1"
                         />
                       </div>
+                      )}
                       <div>
-                        <Label htmlFor="bedrooms">Bedrooms</Label>
+                        <Label htmlFor="bedrooms">{propertyFormData.option_mode === 'multiple' ? 'Total bedrooms' : 'Bedrooms'}</Label>
                         <Input
                           id="bedrooms"
                           type="number"
@@ -1509,7 +1527,7 @@ export default function AdminPage() {
                       onClick={() => {
                         setEditingPropertyId(null); // Clear editing state on cancel
                         setPropertyFormData({ // Reset form data
-                          title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', host_phone: '', arrival_instructions: '', instant_book: false
+                          title: '', description: '', location: { city: '', country: '', address: '' }, price_per_night: '', caution_fee: '', max_guests: '', bedrooms: '', bathrooms: '', property_type: 'apartment', amenities: '', images: [], videos: [], host_name: '', host_phone: '', arrival_instructions: '', instant_book: false, ...EMPTY_STAY_PRICING
                         });
                         setActiveAdminTab('manage-properties'); // Go back to manage tab
                       }}

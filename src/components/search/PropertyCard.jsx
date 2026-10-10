@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
+import { bookingOptionsOf } from "@/config/stays";
 
 const amenityIcons = {
   wifi: Wifi,
@@ -30,6 +31,11 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
 
   const mainImage = property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800';
   const currencySymbol = currencySymbols[property.currency] || '₦';
+  // A bedroom search attaches the option it matched (propertyService); the
+  // card then shows that option's price and guests, and links straight to it.
+  const options = bookingOptionsOf(property);
+  const matched = options.length > 1 ? property.matched_option || null : null;
+  const optionQuery = matched ? `&bedrooms=${matched.bedrooms}` : '';
 
   // The parent owns the wishlist write — this card just emits the click.
   // (Previously both this card AND the parent wrote to user.wishlist on every
@@ -80,7 +86,9 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
 
         <div className="absolute bottom-4 left-4 flex flex-col gap-2">
           <Badge className="bg-white/95 dark:bg-slate-900/95 text-slate-900 dark:text-white font-semibold px-3 py-1 rounded-full">
-            {currencySymbol}{property.price_per_night.toLocaleString()}/night
+            {matched
+              ? `${currencySymbol}${matched.price_per_night.toLocaleString()}/night`
+              : `${options.length > 1 ? 'From ' : ''}${currencySymbol}${(property.price_per_night || 0).toLocaleString()}/night`}
           </Badge>
           {property.caution_fee > 0 && (
             <Badge className="bg-amber-100/95 dark:bg-amber-900/60 text-amber-900 dark:text-amber-100 font-medium px-3 py-1 rounded-full flex items-center gap-1">
@@ -103,17 +111,26 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
                 {property.location?.city}, {property.location?.country}
               </span>
             </div>
+            {matched ? (
+              <p className="text-sm font-medium text-amber-700 dark:text-amber-300 mt-2">
+                {matched.bedrooms} bedroom option available{matched.max_guests > 0 ? `, up to ${matched.max_guests} guests` : ''}
+              </p>
+            ) : options.length > 1 && (
+              <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+                Book {options.map((o) => o.bedrooms).join(', ').replace(/, (\d+)$/, ' or $1')} bedrooms
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 text-slate-600 dark:text-slate-300">
               <div className="flex items-center gap-1">
                 <Users className="w-4 h-4" />
-                <span className="text-sm font-medium">{property.max_guests}</span>
+                <span className="text-sm font-medium">{matched && matched.max_guests > 0 ? matched.max_guests : property.max_guests}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Bed className="w-4 h-4" />
-                <span className="text-sm font-medium">{property.bedrooms || 1}</span>
+                <span className="text-sm font-medium">{matched ? matched.bedrooms : property.bedrooms || 1}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Bath className="w-4 h-4" />
@@ -147,14 +164,14 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
           </div>
 
           <div className="space-y-2">
-            <Link to={createPageUrl(`Property?id=${property.id}`)}>
+            <Link to={createPageUrl(`Property?id=${property.id}${optionQuery}`)}>
               <Button variant="outline" className="w-full rounded-xl transition-all duration-300 hover:shadow-lg">
                 View Details
               </Button>
             </Link>
             
             {isAuthenticated ? (
-              <Link to={createPageUrl(`Checkout?property=${property.id}&checkIn=2024-02-15&checkOut=2024-02-18&guests=2`)}>
+              <Link to={createPageUrl(`Checkout?property=${property.id}${optionQuery}`)}>
                 <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg dark:from-white dark:to-slate-200 dark:text-slate-900">
                   Book Now
                 </Button>

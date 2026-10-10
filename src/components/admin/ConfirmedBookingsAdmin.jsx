@@ -94,6 +94,7 @@ export default function ConfirmedBookingsAdmin() {
                     <div className="mt-1 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-3 flex-wrap">
                       <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {fmtDate(b.check_in)} → {fmtDate(b.check_out)}</span>
                       <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {b.guests} guest{b.guests === 1 ? '' : 's'}</span>
+                      {b.bedrooms_booked > 0 && <span>{b.bedrooms_booked}-bedroom option</span>}
                       <span>₦{Number(b.total_price || 0).toLocaleString()}</span>
                       <span className="text-slate-400 dark:text-slate-500">Booking <code>{b.id.slice(0, 8)}…</code></span>
                     </div>

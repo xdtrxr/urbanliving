@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar, MapPin, Users, ArrowLeft, CheckCircle, Loader2, Clock, AlertCircle, Shield, Phone } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
-import { estimateStayPrice } from '@/config/stays';
+import { bookingOptionsOf, priceStay } from '@/config/stays';
 import { createPageUrl } from '@/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -24,6 +24,12 @@ import {
   AlertTitle,
 } from "@/components/ui/alert";
 
+// The option a bedroom count names, or the smallest when it names none.
+function chosenOption(property, bedrooms) {
+  const options = bookingOptionsOf(property);
+  return options.find((o) => o.bedrooms === bedrooms) || options[0] || null;
+}
+
 export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -38,6 +44,8 @@ export default function CheckoutPage() {
     guests: 2,
     specialRequests: ''
   });
+  // The booking option the guest wants, as a bedroom count. 0 = the smallest.
+  const [bedrooms, setBedrooms] = useState(0);
   const [totalPrice, setTotalPrice] = useState(0);
   const [nights, setNights] = useState(0);
   // Presentational only. The server prices from the Property row and the
@@ -139,6 +147,7 @@ export default function CheckoutPage() {
         check_in: format(bookingDetails.checkIn, 'yyyy-MM-dd'),
         check_out: format(bookingDetails.checkOut, 'yyyy-MM-dd'),
         guests: bookingDetails.guests,
+        bedrooms: bookingOptionsOf(property).length > 1 ? chosenOption(property, bedrooms)?.bedrooms : undefined,
         special_requests: bookingDetails.specialRequests || '',
       });
 
@@ -215,6 +224,7 @@ export default function CheckoutPage() {
           guests: booking.guests,
           specialRequests: booking.special_requests || ''
         });
+        setBedrooms(Number(booking.bedrooms_booked) || 0);
 
         setAvailabilityStatus('available');
         setAdminResponse('Your booking has been approved by admin. Complete payment to confirm.');
@@ -229,7 +239,10 @@ export default function CheckoutPage() {
 
         const checkIn = checkInStr ? new Date(checkInStr) : null;
         const checkOut = checkOutStr ? new Date(checkOutStr) : null;
-        const guests = guestsStr ? parseInt(guestsStr) : 2;
+        const wanted = chosenOption(propertyData, Number(params.get('bedrooms')) || 0);
+        setBedrooms(wanted ? wanted.bedrooms : 0);
+        const asked = guestsStr ? parseInt(guestsStr) : 2;
+        const guests = wanted && wanted.max_guests > 0 ? Math.min(asked, wanted.max_guests) : asked;
 
         setBookingDetails({
           checkIn,
@@ -291,9 +304,13 @@ export default function CheckoutPage() {
       const nightCount = differenceInDays(bookingDetails.checkOut, bookingDetails.checkIn);
       setNights(nightCount);
       
-      const est = nightCount > 0 && property ? estimateStayPrice(property, nightCount) : null;
+      const option = chosenOption(property, bedrooms);
+      const est = nightCount > 0 && property && option
+        ? priceStay(property, format(bookingDetails.checkIn, 'yyyy-MM-dd'), format(bookingDetails.checkOut, 'yyyy-MM-dd'), option.bedrooms)
+        : null;
       setBreakdown(est);
-      setTotalPrice(est ? est.total : 0);
+      // An approved booking is charged what the server stored for it.
+      setTotalPrice(Number(existingBooking?.total_price) > 0 ? Number(existingBooking.total_price) : est ? est.total : 0);
       
       if (!existingBooking) {
         setAvailabilityStatus('unknown');
@@ -309,7 +326,7 @@ export default function CheckoutPage() {
         setAdminResponse('');
       }
     }
-  }, [bookingDetails.checkIn, bookingDetails.checkOut, property, existingBooking]);
+  }, [bookingDetails.checkIn, bookingDetails.checkOut, property, existingBooking, bedrooms]);
 
   if (isLoading) {
     return (
@@ -329,6 +346,11 @@ export default function CheckoutPage() {
       </div>
     );
   }
+
+  const options = bookingOptionsOf(property);
+  const option = chosenOption(property, bedrooms);
+  const guestLimit = option ? option.max_guests : 0;
+  const formLocked = isCheckingAvailability || availabilityStatus === 'pending' || !!existingBooking;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
@@ -581,7 +603,55 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
+                {options.length > 1 && (
+                  <fieldset disabled={formLocked}>
+                    <legend className="text-sm font-medium leading-none">How many bedrooms do you want?</legend>
+                    <div className="mt-2 space-y-2">
+                      {options.map((o) => (
+                        <label
+                          key={o.bedrooms}
+                          className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${formLocked ? 'opacity-70' : 'cursor-pointer'} ${option?.bedrooms === o.bedrooms ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-700'}`}
+                        >
+                          <input
+                            type="radio"
+                            name="booking_option"
+                            checked={option?.bedrooms === o.bedrooms}
+                            onChange={() => {
+                              setBedrooms(o.bedrooms);
+                              if (o.max_guests > 0 && Number(bookingDetails.guests) > o.max_guests) {
+                                setBookingDetails(prev => ({ ...prev, guests: o.max_guests }));
+                              }
+                            }}
+                          />
+                          <span className="flex-1 text-sm text-slate-800 dark:text-slate-100">
+                            {o.bedrooms} bedroom{o.bedrooms > 1 ? 's' : ''}
+                            {o.max_guests > 0 && <span className="block text-xs text-slate-500 dark:text-slate-400">Up to {o.max_guests} guests</span>}
+                          </span>
+                          <span className="text-sm font-semibold text-slate-900 dark:text-white">₦{o.price_per_night.toLocaleString()}/night</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
 
+                <div>
+                  <Label htmlFor="guests">Guests</Label>
+                  <Input
+                    id="guests"
+                    type="number"
+                    min="1"
+                    max={guestLimit > 0 ? guestLimit : undefined}
+                    value={bookingDetails.guests}
+                    onChange={(e) => setBookingDetails(prev => ({ ...prev, guests: e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1) }))}
+                    className="mt-1"
+                    disabled={formLocked}
+                  />
+                  {guestLimit > 0 && (
+                    <p className={`text-[11px] mt-1 ${Number(bookingDetails.guests) > guestLimit ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {options.length > 1 ? `The ${option.bedrooms}-bedroom option takes` : 'This property takes'} up to {guestLimit} guests
+                    </p>
+                  )}
+                </div>
 
                 <div>
                   <Label>Special Requests</Label>
@@ -597,7 +667,7 @@ export default function CheckoutPage() {
                 {!existingBooking && (
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
                     {availabilityStatus !== 'available' && (() => {
-                      const requirementsMet = !!bookingDetails.checkIn && !!bookingDetails.checkOut && Number(bookingDetails.guests) > 0;
+                      const requirementsMet = !!bookingDetails.checkIn && !!bookingDetails.checkOut && Number(bookingDetails.guests) > 0 && !(guestLimit > 0 && Number(bookingDetails.guests) > guestLimit);
                       const isBusy = isCheckingAvailability || availabilityStatus === 'pending';
                       const showGreen = requirementsMet && !isBusy;
                       return (
@@ -659,10 +729,18 @@ export default function CheckoutPage() {
 
                 {nights > 0 && (
                   <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl space-y-2">
-                    <div className="flex justify-between">
-                      <span>₦{property.price_per_night.toLocaleString()} × {nights} nights</span>
-                      <span>₦{(breakdown?.subtotal ?? property.price_per_night * nights).toLocaleString()}</span>
-                    </div>
+                    {options.length > 1 && option && (
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{option.bedrooms}-bedroom option</p>
+                    )}
+                    {(breakdown?.lines || []).map((line) => (
+                      <div key={line.from} className="flex justify-between gap-3">
+                        <span>
+                          ₦{line.rate.toLocaleString()} × {line.nights} night{line.nights > 1 ? 's' : ''}
+                          {line.season && <span className="block text-xs text-amber-700 dark:text-amber-300">{line.season}</span>}
+                        </span>
+                        <span>₦{(line.rate * line.nights).toLocaleString()}</span>
+                      </div>
+                    ))}
                     <div className="flex justify-between">
                       <span>Service Fee (2.5%)</span>
                       <span>₦{(breakdown?.serviceFee ?? 0).toLocaleString()}</span>

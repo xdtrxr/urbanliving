@@ -7,13 +7,19 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import LeadOtpGate from './LeadOtpGate';
+import { bookingOptionsOf, priceStay } from '@/config/stays';
 
 const SERVICE_FEE_RATE = 0.025;
 
 // Computes canonical pricing from the property + dates so we don't trust LLM
 // math. Falls back to whatever booking values Nova sent if property isn't
 // available yet. Mirrors the breakdown shown on the Checkout page.
-function computeBreakdown(booking, property) {
+function computeBreakdown(booking, property, option) {
+  // The same night-by-night sum the server charges, once the property is in.
+  const priced = property && option ? priceStay(property, booking?.check_in, booking?.check_out, option.bedrooms) : null;
+  if (priced) {
+    return { nightly: option.price_per_night, nights: priced.nights, subtotal: priced.subtotal, serviceFee: priced.serviceFee, caution: priced.cautionFee, total: priced.total, lines: priced.lines };
+  }
   const nightlyFromProp = Number(property?.price_per_night);
   const nightly = Number.isFinite(nightlyFromProp) && nightlyFromProp > 0
     ? nightlyFromProp
@@ -58,7 +64,16 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
     return () => { cancelled = true; };
   }, [booking?.property_id]);
 
-  const breakdown = useMemo(() => computeBreakdown(booking, property), [booking, property]);
+  // Which booking option, as a bedroom count. Until the guest picks: the one
+  // the chat named, else the smallest that fits the party.
+  const [bedrooms, setBedrooms] = useState(0);
+  const options = useMemo(() => bookingOptionsOf(property), [property]);
+  const option = options.find((o) => o.bedrooms === bedrooms)
+    || options.find((o) => o.bedrooms === Number(booking?.bedrooms))
+    || options.find((o) => !(o.max_guests > 0 && o.max_guests < Number(booking?.guests)))
+    || options[0]
+    || null;
+  const breakdown = useMemo(() => computeBreakdown(booking, property, option), [booking, property, option]);
 
   const safeDate = (s) => {
     try { return format(parseISO(s), 'EEE, MMM d, yyyy'); }
@@ -76,7 +91,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
         check_in: booking.check_in,
         check_out: booking.check_out,
         guests: booking.guests,
-        total_price: breakdown.total,
+        bedrooms: options.length > 1 && option ? option.bedrooms : undefined,
         special_requests: booking.special_requests || '',
       });
       const data = result?.data;
@@ -180,11 +195,42 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
           </div>
         </div>
 
+        {options.length > 1 && (
+          <fieldset className="mb-4" disabled={status === 'submitting' || status === 'submitted'}>
+            <legend className="text-sm font-medium text-slate-900 dark:text-white mb-2">How many bedrooms do you want?</legend>
+            <div className="space-y-2">
+              {options.map((o) => (
+                <label
+                  key={o.bedrooms}
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-sm cursor-pointer ${option?.bedrooms === o.bedrooms ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-700'}`}
+                >
+                  <input type="radio" name={`booking_option_${booking.property_id}`} checked={option?.bedrooms === o.bedrooms} onChange={() => setBedrooms(o.bedrooms)} />
+                  <span className="flex-1 text-slate-800 dark:text-slate-100">
+                    {o.bedrooms} bedroom{o.bedrooms > 1 ? 's' : ''}
+                    {o.max_guests > 0 && <span className="block text-xs text-slate-500 dark:text-slate-400">Up to {o.max_guests} guests</span>}
+                  </span>
+                  <span className="font-semibold text-slate-900 dark:text-white">₦{o.price_per_night.toLocaleString()}/night</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+
         <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 mb-4 space-y-2 text-sm">
+          {breakdown.lines ? breakdown.lines.map((line) => (
+            <div key={line.from} className="flex justify-between gap-3 text-slate-700 dark:text-slate-200">
+              <span>
+                ₦{line.rate.toLocaleString()} × {line.nights} {line.nights === 1 ? 'night' : 'nights'}
+                {line.season && <span className="block text-xs text-amber-700 dark:text-amber-300">{line.season}</span>}
+              </span>
+              <span className="font-medium">₦{(line.rate * line.nights).toLocaleString()}</span>
+            </div>
+          )) : (
           <div className="flex justify-between text-slate-700 dark:text-slate-200">
             <span>₦{breakdown.nightly.toLocaleString()} × {breakdown.nights} {breakdown.nights === 1 ? 'night' : 'nights'}</span>
             <span className="font-medium">₦{breakdown.subtotal.toLocaleString()}</span>
           </div>
+          )}
           <div className="flex justify-between text-slate-700 dark:text-slate-200">
             <span>Service fee (2.5%)</span>
             <span className="font-medium">₦{breakdown.serviceFee.toLocaleString()}</span>

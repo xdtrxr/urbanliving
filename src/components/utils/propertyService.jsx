@@ -4,6 +4,7 @@
  */
 
 import { base44 } from '@/api/base44Client';
+import { optionForSearch } from '@/config/stays';
 
 class PropertyService {
   constructor() {
@@ -276,8 +277,13 @@ class PropertyService {
 
       // Bedrooms / property type from the bedrooms picker.
       // Exact match for 1, 2, 3 — picking "One Bedroom" should NOT return
-      // 4-bedroom apartments. Picking "Four Bedroom" stays $gte 4 to match the
-      // "4+ Bedrooms" label used by the chat booking assistant.
+      // 4-bedroom apartments that only let as a whole. Picking "Four Bedroom"
+      // means 4 and up, to match the "4+ Bedrooms" label used by the chat
+      // booking assistant. A property counts when ONE OF ITS BOOKING OPTIONS
+      // has that many bedrooms, so a 4-bedroom duplex that also lets 2
+      // bedrooms shows up in a 2-bedroom search. Options live in an array on
+      // the row, so that match is made below, on the rows the query returns.
+      let bedroomsWanted = 0;
       if (params.bedrooms && params.bedrooms !== 'any') {
         if (params.bedrooms === 'studio') {
           filter.property_type = 'studio';
@@ -285,8 +291,10 @@ class PropertyService {
           filter.property_type = 'loft';
         } else {
           const n = parseInt(params.bedrooms);
-          if (Number.isFinite(n)) {
-            filter.bedrooms = n >= 4 ? { $gte: 4 } : n;
+          if (Number.isFinite(n) && n >= 1) {
+            bedroomsWanted = n;
+            // No smaller than the option asked for; the exact match is below.
+            filter.bedrooms = { $gte: n };
           }
         }
       }
@@ -298,7 +306,9 @@ class PropertyService {
 
       // Price range — push to DB instead of trimming client-side
       const priceRange = {};
-      if (typeof params.minPrice === 'number' && params.minPrice > 0) priceRange.$gte = params.minPrice;
+      // price_per_night is the CHEAPEST option, so with a bedroom search the
+      // lower bound is checked below against the option that matched.
+      if (typeof params.minPrice === 'number' && params.minPrice > 0 && !bedroomsWanted) priceRange.$gte = params.minPrice;
       if (typeof params.maxPrice === 'number' && params.maxPrice > 0) priceRange.$lte = params.maxPrice;
       if (Object.keys(priceRange).length > 0) {
         filter.price_per_night = priceRange;
@@ -314,8 +324,21 @@ class PropertyService {
       const properties = await base44.entities.Property.filter(
         Object.keys(filter).length > 0 ? filter : {},
         '-created_date',
-        params.limit || 50
+        bedroomsWanted ? 200 : params.limit || 50
       );
+
+      if (bedroomsWanted) {
+        const matched = [];
+        for (const p of properties || []) {
+          const option = optionForSearch(p, bedroomsWanted, params.guests);
+          if (!option) continue;
+          if (typeof params.minPrice === 'number' && params.minPrice > 0 && option.price_per_night < params.minPrice) continue;
+          if (typeof params.maxPrice === 'number' && params.maxPrice > 0 && option.price_per_night > params.maxPrice) continue;
+          matched.push({ ...p, matched_option: option });
+        }
+        console.log(`[PropertyService] ✅ ${matched.length} of ${properties.length} have a ${bedroomsWanted}-bedroom option`);
+        return matched.slice(0, params.limit || 50);
+      }
 
       console.log(`[PropertyService] ✅ Database query successful: ${properties.length} properties found`);
       return properties || [];

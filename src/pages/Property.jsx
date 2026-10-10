@@ -14,6 +14,7 @@ import { createPageUrl } from '@/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext';
 import MediaLightbox from '@/components/media/MediaLightbox';
+import { bookingOptionsOf, nightlyRate } from '@/config/stays';
 
 const amenityIcons = {
   wifi: Wifi,
@@ -66,6 +67,9 @@ export default function PropertyPage() {
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState(0);
     const location = useLocation();
+    // Which booking option the guest picked, as a bedroom count. A search for
+    // N bedrooms arrives with ?bedrooms=N and opens on that option.
+    const [chosenBedrooms, setChosenBedrooms] = useState(() => Number(new URLSearchParams(window.location.search).get('bedrooms')) || 0);
 
     useEffect(() => {
         const loadProperty = async () => {
@@ -140,6 +144,17 @@ export default function PropertyPage() {
     }
     
     const currencySymbol = currencySymbols[property.currency] || '₦';
+    const options = bookingOptionsOf(property);
+    const option = options.find((o) => o.bedrooms === chosenBedrooms) || options[0] || null;
+    const today = new Date().toISOString().slice(0, 10);
+    const shortDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    // Seasonal rates still to come that change the chosen option's price.
+    const seasons = option
+        ? (property.seasonal_rates || [])
+            .filter((s) => s && s.end_date >= today)
+            .map((s) => ({ ...s, rate: nightlyRate({ seasonal_rates: [s] }, option, s.start_date) }))
+            .filter((s) => s.rate.season)
+        : [];
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
@@ -265,7 +280,7 @@ export default function PropertyPage() {
                             <div className="lg:col-span-2">
                                 <div className="border-b pb-6 mb-6">
                                     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-slate-700 dark:text-slate-200">
-                                        <div className="flex items-center gap-2"><Users className="w-5 h-5 text-amber-500 dark:text-amber-400" /> <span>{property.max_guests} guests</span></div>
+                                        <div className="flex items-center gap-2"><Users className="w-5 h-5 text-amber-500 dark:text-amber-400" /> <span>{options.length > 1 ? 'Up to ' : ''}{property.max_guests} guests</span></div>
                                         <div className="flex items-center gap-2"><Bed className="w-5 h-5 text-amber-500 dark:text-amber-400" /> <span>{property.bedrooms || 1} bedroom(s)</span></div>
                                         <div className="flex items-center gap-2"><Bath className="w-5 h-5 text-amber-500 dark:text-amber-400" /> <span>{property.bathrooms || 1} bathroom(s)</span></div>
                                     </div>
@@ -319,9 +334,48 @@ export default function PropertyPage() {
                                 <Card className="bg-slate-50/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
                                     <div className="mb-6">
                                         <div className="text-3xl font-bold text-slate-900 dark:text-white">
-                                            {currencySymbol}{property.price_per_night.toLocaleString()}
+                                            {currencySymbol}{(option ? option.price_per_night : property.price_per_night || 0).toLocaleString()}
                                         </div>
-                                        <div className="text-base text-slate-600 dark:text-slate-300 mt-1">per night</div>
+                                        <div className="text-base text-slate-600 dark:text-slate-300 mt-1">
+                                            per night{option && option.max_guests > 0 && options.length > 1 ? `, up to ${option.max_guests} guests` : ''}
+                                        </div>
+
+                                        {options.length > 1 && (
+                                            <fieldset className="mt-4">
+                                                <legend className="text-sm font-semibold text-slate-900 dark:text-white mb-2">How many bedrooms do you want?</legend>
+                                                <div className="space-y-2">
+                                                    {options.map((o) => (
+                                                        <label
+                                                            key={o.bedrooms}
+                                                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${option.bedrooms === o.bedrooms ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-700 hover:border-amber-300'}`}
+                                                        >
+                                                            <input
+                                                                type="radio"
+                                                                name="booking_option"
+                                                                checked={option.bedrooms === o.bedrooms}
+                                                                onChange={() => setChosenBedrooms(o.bedrooms)}
+                                                            />
+                                                            <span className="flex-1 text-sm text-slate-800 dark:text-slate-100">
+                                                                {o.bedrooms} bedroom{o.bedrooms > 1 ? 's' : ''}
+                                                                {o.max_guests > 0 && <span className="block text-xs text-slate-500 dark:text-slate-400">Up to {o.max_guests} guests</span>}
+                                                            </span>
+                                                            <span className="text-sm font-semibold text-slate-900 dark:text-white">{currencySymbol}{o.price_per_night.toLocaleString()}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Whichever you choose, the property is yours alone for the stay.</p>
+                                            </fieldset>
+                                        )}
+
+                                        {seasons.length > 0 && (
+                                            <div className="mt-3 space-y-1">
+                                                {seasons.map((s) => (
+                                                    <p key={`${s.name}-${s.start_date}`} className="text-xs text-slate-600 dark:text-slate-300">
+                                                        <span className="font-semibold">{s.rate.season}</span> ({shortDate(s.start_date)} to {shortDate(s.end_date)}): {currencySymbol}{s.rate.rate.toLocaleString()} per night
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        )}
                                         
                                         {property.caution_fee > 0 && (
                                             <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl">
@@ -371,7 +425,7 @@ export default function PropertyPage() {
                                             </Button>
                                         </Link>
                                     ) : (
-                                        <Link to={createPageUrl(`Checkout?property=${property.id}`)}>
+                                        <Link to={createPageUrl(`Checkout?property=${property.id}${options.length > 1 && option ? `&bedrooms=${option.bedrooms}` : ''}`)}>
                                             <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                                                 Book Now
                                             </Button>

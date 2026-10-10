@@ -98,6 +98,7 @@ async function sendAdminTelegram(opts: {
     userEmail: string;
     userMobile: string;
     guests: number;
+    optionLabel: string;
     checkIn: string;
     checkOut: string;
     totalPrice: number;
@@ -141,7 +142,7 @@ async function sendAdminTelegram(opts: {
 • Name: ${opts.userName}
 • Email: ${opts.userEmail}
 • Mobile: ${opts.userMobile || 'Not provided'}
-• Guests: ${opts.guests}
+• Guests: ${opts.guests}${opts.optionLabel ? `\n• Booking: ${opts.optionLabel}` : ''}
 
 📅 *Requested Dates:*
 • Check-in: ${opts.checkIn}
@@ -446,6 +447,7 @@ Deno.serve(async (req) => {
                 userEmail: user.email,
                 userMobile: user.phone_number || '',
                 guests: guests || 1,
+                optionLabel: options.length > 1 ? `${pricing.option.bedrooms}-bedroom option` : '',
                 checkIn: check_in,
                 checkOut: check_out,
                 totalPrice: total_price,
