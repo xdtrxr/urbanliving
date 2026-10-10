@@ -53,6 +53,71 @@ function windowsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: numb
     return aStart < bEnd + buffer && aEnd + buffer > bStart;
 }
 
+// ── Driver pay model ────────────────────────────────────────────────────────
+// What a driver is paid for a ride, read off the vehicle's VehicleCosting row.
+// MIRRORED client-side by driverPayoutFor in src/config/rides.js, which draws
+// the figure in the Assign driver dialog before anything is submitted. This
+// copy is the one that reaches the ledger; scripts/check-driver-wallet.mjs
+// executes both and fails if they disagree for any duration tier.
+//
+// Held pay becomes releasable two hours after the booked end, so an
+// extra-hour settlement or a complaint from either side can land first.
+const RELEASE_BUFFER_MS = 2 * HOUR_MS;
+const MAX_PAYOUT_NGN = 50000000;
+
+function driverPayoutFor(costing: any, tier: string, hours?: number, days?: number) {
+    if (!costing) return null;
+    const perHour = Math.round(Number(costing.driver_cost_per_hour_ngn) || 0);
+    const perDay = Math.round(Number(costing.driver_cost_per_day_ngn) || 0);
+    let basis = 'daily';
+    let rate = perDay;
+    let units = 1;
+    switch (tier) {
+        case 'hourly':
+            basis = 'hourly';
+            rate = perHour;
+            units = Math.min(MAX_HOURLY, Math.max(1, Math.round(Number(hours) || 1)));
+            break;
+        case '12hr':
+        case '24hr':
+            break;
+        case 'multi_day':
+            units = Math.max(1, Math.round(Number(days) || 1));
+            break;
+        case 'weekly':
+            units = 7;
+            break;
+        case 'monthly':
+            units = 30;
+            break;
+        default:
+            return null;
+    }
+    // Zero means "nobody entered a driver cost", never "this driver is free".
+    if (rate <= 0) return null;
+    return { amount: rate * units, basis, rate, units };
+}
+
+function releaseAtFor(endAtIso: string) {
+    const endMs = Date.parse(endAtIso || '');
+    if (Number.isNaN(endMs)) return null;
+    return new Date(endMs + RELEASE_BUFFER_MS).toISOString();
+}
+
+// The pay figure admin typed, if any. { ok: true, value: null } means nothing
+// was typed and the costing row decides. Anything that is not a whole-naira
+// amount between 0 and the ceiling is refused rather than coerced, so NaN or
+// "25,000" read as 25 can never reach the ledger.
+function parsePayoutOverride(raw: unknown) {
+    if (raw === undefined || raw === null) return { ok: true, value: null };
+    if (typeof raw === 'string' && raw.trim() === '') return { ok: true, value: null };
+    const n = typeof raw === 'string' ? Number(raw.trim()) : raw;
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > MAX_PAYOUT_NGN) {
+        return { ok: false, value: null };
+    }
+    return { ok: true, value: Math.round(n) };
+}
+
 const PAGE = 500;
 async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
     const out: any[] = [];

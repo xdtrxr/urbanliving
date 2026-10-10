@@ -133,6 +133,52 @@ export function markupFor(vehicle, costing) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// What a driver is paid for a ride, read off the vehicle's VehicleCosting row.
+//
+// MIRROR of driverPayoutFor in base44/functions/assignRideDriver/entry.ts. The
+// server figure is the one written to the driver's ledger; this exists only so
+// the Assign driver dialog can show admin the number before they confirm.
+// scripts/check-driver-wallet.mjs runs both and fails if they ever disagree.
+// ─────────────────────────────────────────────────────────────────────────────
+// Held pay becomes releasable this long after the booked end of the ride.
+export const RELEASE_BUFFER_HOURS = 2;
+
+const MAX_HOURLY_HOURS = 8;
+
+export function driverPayoutFor(costing, tier, { hours, days } = {}) {
+  if (!costing) return null;
+  const perHour = Math.round(Number(costing.driver_cost_per_hour_ngn) || 0);
+  const perDay = Math.round(Number(costing.driver_cost_per_day_ngn) || 0);
+  let basis = 'daily';
+  let rate = perDay;
+  let units = 1;
+  switch (tier) {
+    case 'hourly':
+      basis = 'hourly';
+      rate = perHour;
+      units = Math.min(MAX_HOURLY_HOURS, Math.max(1, Math.round(Number(hours) || 1)));
+      break;
+    case '12hr':
+    case '24hr':
+      break;
+    case 'multi_day':
+      units = Math.max(1, Math.round(Number(days) || 1));
+      break;
+    case 'weekly':
+      units = 7;
+      break;
+    case 'monthly':
+      units = 30;
+      break;
+    default:
+      return null;
+  }
+  // Zero means "nobody entered a driver cost", never "this driver is free".
+  if (rate <= 0) return null;
+  return { amount: rate * units, basis, rate, units };
+}
+
 // ── Legacy compatibility ────────────────────────────────────────────────────
 // Vehicles created before the category taxonomy landed carry the old
 // body-style `vehicle_type` and no `category`. Browse filters on category, so
