@@ -57,6 +57,40 @@
     "bedrooms": {
       "type": "number"
     },
+    "booking_options": {
+      "type": "array",
+      "description": "The ways this property can be booked. Empty means one way: the whole place at price_per_night for up to max_guests. When set, price_per_night and max_guests are kept equal to the cheapest and the largest option so older screens still read sensibly.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "bedrooms": { "type": "number" },
+          "price_per_night": { "type": "number", "description": "NGN" },
+          "max_guests": { "type": "number" }
+        }
+      }
+    },
+    "seasonal_rates": {
+      "type": "array",
+      "description": "Named date ranges with their own nightly prices. start_date and end_date are inclusive nights (YYYY-MM-DD). A season changes only the options it prices; ranges on one property do not overlap.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date": { "type": "string", "format": "date" },
+          "prices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "bedrooms": { "type": "number" },
+                "price_per_night": { "type": "number", "description": "NGN" }
+              }
+            }
+          }
+        }
+      }
+    },
     "bathrooms": {
       "type": "number"
     },

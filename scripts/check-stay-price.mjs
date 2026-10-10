@@ -45,7 +45,8 @@ console.log('\n— source guards —');
 check('server never destructures total_price from the body',
   /total_price,?\s*\n\s*special_requests,?\s*\n\s*\} = body/.test(SRC), false);
 check('server stores the computed total on the Booking',
-  /total_price,\s*\n\s*special_requests: special_requests \|\| '',\s*\n\s*status: 'pending'/.test(SRC), true);
+  /const total_price = pricing\.total;/.test(SRC) && /\n\s*total_price,\n[\s\S]{0,300}bedrooms_booked: pricing\.option\.bedrooms/.test(SRC), true);
+check('the price comes from priceStay, night by night', /const pricing = priceStay\(property, check_in, check_out, bedrooms\);/.test(SRC), true);
 check('server prices from the Property row', /entities\.Property\.get\(property_id\)/.test(SRC), true);
 check('server-side fee rate matches the client constant',
   new RegExp(`SERVICE_FEE_RATE = ${SERVICE_FEE_RATE};`).test(SRC), true);

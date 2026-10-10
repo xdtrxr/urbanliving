@@ -300,6 +300,7 @@ Deno.serve(async (req) => {
             check_out,
             guests,
             special_requests,
+            bedrooms,
         } = body;
 
         if (!property_id || !check_in || !check_out) {
@@ -327,14 +328,28 @@ Deno.serve(async (req) => {
         if (nights < 1) {
             return new Response(JSON.stringify({ success: false, error: 'A stay must be at least one night' }), { status: 400, headers });
         }
-        if (property.max_guests && Number(guests) > Number(property.max_guests)) {
+        // Priced night by night for the option the guest chose: each option
+        // has its own rate and guest limit, and a seasonal rate applies only
+        // to the nights that fall inside it.
+        const options = bookingOptionsOf(property);
+        const pricing = priceStay(property, check_in, check_out, bedrooms);
+        if (!pricing && options.length > 1) {
             return new Response(JSON.stringify({
                 success: false,
-                error: `This property sleeps up to ${property.max_guests} guests`,
+                error: 'Choose how many bedrooms you want to book.',
+                code: 'OPTION_REQUIRED',
+            }), { status: 400, headers });
+        }
+        const limit = pricing ? pricing.option.max_guests : 0;
+        if (limit && Number(guests) > limit) {
+            return new Response(JSON.stringify({
+                success: false,
+                error: options.length > 1
+                    ? `The ${pricing.option.bedrooms}-bedroom option sleeps up to ${limit} guests`
+                    : `This property sleeps up to ${limit} guests`,
                 code: 'TOO_MANY_GUESTS',
             }), { status: 400, headers });
         }
-        const pricing = priceForStay(property, nights);
         if (!pricing) {
             return new Response(JSON.stringify({
                 success: false,
@@ -410,6 +425,9 @@ Deno.serve(async (req) => {
             // Server-computed. The only figure the payment verifiers ever
             // compare Paystack's amount against.
             total_price,
+            // Which option was booked. The whole property is still blocked
+            // for these dates whichever option it is.
+            bedrooms_booked: pricing.option.bedrooms || undefined,
             special_requests: special_requests || '',
             status: 'pending',
             payment_status: 'unpaid',
