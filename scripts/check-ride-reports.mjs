@@ -247,7 +247,7 @@ check('a missing account row does not block', isRideBlocked(undefined), false);
 // ── Reports and money ──────────────────────────────────────────────────────
 // Review focus 5: pay that falls due while a report on its ride is open.
 console.log('\n— reports and money —');
-identical('hasOpenReport', 'sr, rideBookingId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
+identical('hasOpenGuestReport', 'sr, rideBookingId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
 for (const dir of ['getDriverRides', 'getRideBookings']) {
   identical('reportWindowOpen', 'ride, nowMs', [HOME, dir]);
   check(`one reporting window: ${dir} agrees with ${HOME}`,
@@ -255,18 +255,21 @@ for (const dir of ['getDriverRides', 'getRideBookings']) {
 }
 
 const SWEEP = 'autoCancelExpiredBookings';
-const hasOpenReport = make('hasOpenReport', liftSrc(SWEEP, 'hasOpenReport', 'sr, rideBookingId'));
+const hasOpenGuestReport = make('hasOpenGuestReport', liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId'));
 const reportsOf = (rows) => ({ RideReport: fakeEntity(rows) });
-check('an open report holds the ride', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }]), 'ride1'), true);
-check('so does one being reviewed', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'reviewing' }]), 'ride1'), true);
-check('a resolved report does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'resolved' }]), 'ride1'), false);
-check('a dismissed report does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'dismissed' }]), 'ride1'), false);
-check('a report on another ride does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'other', status: 'open' }]), 'ride1'), false);
-check('no reports at all', await hasOpenReport(reportsOf([]), 'ride1'), false);
+const filed = (reporter_role, status, ride_booking_id = 'ride1') => ({ id: 'r1', ride_booking_id, reporter_role, status });
+check('an open complaint from the guest holds the ride', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1'), true);
+check('so does one being reviewed', await hasOpenGuestReport(reportsOf([filed('guest', 'reviewing')]), 'ride1'), true);
+check('a resolved one does not', await hasOpenGuestReport(reportsOf([filed('guest', 'resolved')]), 'ride1'), false);
+check('a dismissed one does not', await hasOpenGuestReport(reportsOf([filed('guest', 'dismissed')]), 'ride1'), false);
+check('a complaint about another ride does not', await hasOpenGuestReport(reportsOf([filed('guest', 'open', 'other')]), 'ride1'), false);
+// The driver reporting an abusive customer must never delay the driver's own pay.
+check('a report the DRIVER filed never holds the driver\'s pay', await hasOpenGuestReport(reportsOf([filed('driver', 'open')]), 'ride1'), false);
+check('no reports at all', await hasOpenGuestReport(reportsOf([]), 'ride1'), false);
 
 const settleDueEarning = make('settleDueEarning',
   liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),
-  liftSrc(SWEEP, 'hasOpenReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
+  liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
 const DUE = at('2026-08-10T12:00:00.000Z');
 const dueEarning = { id: 'e1', ride_booking_id: 'ride1', driver_id: 'drvA', amount_ngn: 15000, status: 'held', on_hold: false, release_at: '2026-08-10T12:00:00.000Z' };
 const drivenRide = { id: 'ride1', driver_id: 'drvA', status: 'completed', payment_status: 'paid' };
@@ -274,27 +277,32 @@ const worldWith = (reports, rideOverride = {}) => ({
   DriverEarning: fakeEntity([dueEarning]), RideBooking: fakeEntity([{ ...drivenRide, ...rideOverride }]), RideReport: fakeEntity(reports),
 });
 {
-  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }]);
-  check('due pay is not released while a report is open', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  const sr = worldWith([filed('guest', 'open')]);
+  check('due pay is not released while the guest\'s complaint is open', await settleDueEarning(sr, 'e1', DUE), 'skipped');
   check('…it stays held', sr.DriverEarning.rows[0].status, 'held');
   // Admin closes the report; the very next tick pays.
   sr.RideReport.rows[0].status = 'resolved';
   check('once the report is resolved the next sweep releases it', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
 }
 {
-  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'reviewing' }]);
-  check('a report being reviewed holds the pay too', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  const sr = worldWith([filed('guest', 'reviewing')]);
+  check('a complaint being reviewed holds the pay too', await settleDueEarning(sr, 'e1', DUE), 'skipped');
   sr.RideReport.rows[0].status = 'dismissed';
-  check('a dismissed report lets it go', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
+  check('a dismissed complaint lets it go', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
+}
+{
+  // The driver reported a rude customer. Their pay arrives on time.
+  const sr = worldWith([filed('driver', 'open')]);
+  check('the driver\'s own report does not delay the driver\'s pay', await settleDueEarning(sr, 'e1', DUE), 'released');
 }
 {
   // A cancelled ride is reversed whether or not anyone complained about it.
-  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }], { status: 'cancelled' });
-  check('a cancelled ride is still reversed with a report open', await settleDueEarning(sr, 'e1', DUE), 'reversed');
+  const sr = worldWith([filed('guest', 'open')], { status: 'cancelled' });
+  check('a cancelled ride is still reversed with a complaint open', await settleDueEarning(sr, 'e1', DUE), 'reversed');
 }
 {
-  const sr = worldWith([{ id: 'r1', ride_booking_id: 'someone-elses-ride', status: 'open' }]);
-  check('a report on a different ride holds nothing here', await settleDueEarning(sr, 'e1', DUE), 'released');
+  const sr = worldWith([filed('guest', 'open', 'someone-elses-ride')]);
+  check('a complaint about a different ride holds nothing here', await settleDueEarning(sr, 'e1', DUE), 'released');
 }
 
 console.log('\n— what the ride lists say about reports —');

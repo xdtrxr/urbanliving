@@ -30,6 +30,8 @@ Found while reading the code the feature has to live in. None changes what a dri
 5. **A paid ride stays paid.** `verifyRidePayment` and the payment webhook treated "paid" as "paid and confirmed", so once the sweep marks rides completed, replaying an old payment reference would have flipped the ride back to confirmed. Both now key on payment status alone. `getRideDriverContact` accepts completed rides so the guest can still reach the driver card to file a report.
 6. **Withdrawal rows are created by the server, not the browser.** `createWithdrawalRequest` now writes the row under the service role, and a stricter rule (only the server may create a WithdrawalRequest) is staged for publish day. Until that rule is live a signed-in user can create a fake pending withdrawal row directly; driver-wallet payouts are protected regardless, because `processWithdrawal` re-checks the ledger before sending money.
 7. **Admin can read bank account details.** The Withdrawals admin tab looks up the destination account, but the UserBankAccount rule only let the owner read it, which leaves "Process now" disabled. Admin read is added.
+8. **Only a guest's complaint holds the driver's pay.** The first draft froze a ride's pay while any report on it was open. That would have delayed a driver's own money every time they reported an abusive customer, which punishes the behaviour this feature exists to encourage. A report the driver files never touches their pay; a complaint from the guest about the ride holds it until admin closes the report.
+9. **Refusals from the server are shown as written.** The SDK throws on any 4xx, so every screen that looked for the reason in a normal response was showing "Request failed with status code 409" instead. A small helper (`invokeFn`) now returns the server's sentence; the new screens and the ones this feature touches use it.
 
 ## Non-goals
 
@@ -112,7 +114,7 @@ assignRideDriver (paid ride, linked driver) -> DriverEarning held, release_at = 
    reassignment                             -> new driver's row held, then the old driver's row reversed
    admin cancels a paid ride                -> held rows reversed (cancelRideBooking)
 sweep pass 4 (end_at passed)                -> RideBooking status completed, completed_by system
-sweep pass 5 (release_at passed)            -> not on_hold, no open report, ride still theirs and paid:
+sweep pass 5 (release_at passed)            -> not on_hold, no open complaint from the guest, ride still theirs and paid:
                                                status released, push to driver
                                                ride cancelled or driver changed: reversed instead
 admin: Release now / Hold / Unhold / Adjust / Reverse     (settleDriverEarning)
@@ -123,7 +125,7 @@ driver: Withdraw (wallet = driver)          -> existing WithdrawalRequest flow
 
 **Self-healing.** Assignment writes the new driver's row, then the ride, then reverses the old driver's row. If it stops halfway, the release pass sees an earning whose ride belongs to another driver, or was cancelled, and reverses it rather than paying it.
 
-**Open report blocks release.** A `RideReport` in `open` or `reviewing` on the ride keeps the row held past `release_at`. Resolving or dismissing the report lets the next sweep release it. The driver's wallet shows "Under review" instead of a release date in that case.
+**A guest's open complaint blocks release.** A `RideReport` filed by the guest, in `open` or `reviewing`, keeps the row held past `release_at`. Resolving or dismissing it lets the next sweep release it, and the driver's wallet shows "Under review" instead of a release date meanwhile. A report the driver files about the guest never holds the driver's own pay.
 
 **Reversal after release.** The row flips to `reversed` and the driver's available balance drops by that amount. If they had already withdrawn it, the shortfall shows in the admin Earnings tab and is netted against their next released pay.
 

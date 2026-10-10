@@ -162,11 +162,15 @@ function releaseDecision(earning: any, ride: any) {
     return 'release';
 }
 
-// True while admin has not closed a report on this ride. Open and reviewing
-// both hold the driver's pay; resolved and dismissed let it go. Lockstep copy
-// in settleDriverEarning.
-async function hasOpenReport(sr: any, rideBookingId: string) {
-    const open = await sr.RideReport.filter({ ride_booking_id: rideBookingId, status: { $in: ['open', 'reviewing'] } });
+// True while admin has not closed a complaint the GUEST made about this ride.
+// That is a dispute about the service the driver is being paid for, so the
+// pay waits. A report the DRIVER filed about the guest never holds the
+// driver's own pay: that would punish them for speaking up. Lockstep copy in
+// settleDriverEarning.
+async function hasOpenGuestReport(sr: any, rideBookingId: string) {
+    const open = await sr.RideReport.filter({
+        ride_booking_id: rideBookingId, reporter_role: 'guest', status: { $in: ['open', 'reviewing'] },
+    });
     return Array.isArray(open) && open.length > 0;
 }
 
@@ -202,9 +206,9 @@ async function settleDueEarning(sr: any, earningId: string, nowMs: number) {
         await sr.DriverEarning.update(e.id, { on_hold: true, hold_reason: parts[1] });
         return 'held';
     }
-    // Someone has complained about this ride and admin has not closed it yet.
-    // The pay waits; the next tick after the report is closed releases it.
-    if (await hasOpenReport(sr, e.ride_booking_id)) return 'skipped';
+    // The guest has complained about this ride and admin has not closed it
+    // yet. The pay waits; the next tick after the report is closed releases it.
+    if (await hasOpenGuestReport(sr, e.ride_booking_id)) return 'skipped';
     await sr.DriverEarning.update(e.id, {
         status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
     });

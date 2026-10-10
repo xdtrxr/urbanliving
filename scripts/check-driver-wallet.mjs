@@ -379,7 +379,7 @@ check('a refunded ride is put on hold for admin', releaseDecision(due(), drivenR
 
 const settleDueEarning = make('settleDueEarning',
   sweepSrc('isReleasable', 'earning, nowMs'), sweepSrc('releaseDecision', 'earning, ride'),
-  sweepSrc('hasOpenReport', 'sr, rideBookingId'), sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
+  sweepSrc('hasOpenGuestReport', 'sr, rideBookingId'), sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
 // No reports on any ride here; scripts/check-ride-reports.mjs covers the cases with one.
 const world = (earning, ride) => ({
   DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []), RideReport: fakeEntity([]),

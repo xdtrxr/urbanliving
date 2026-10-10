@@ -95,11 +95,15 @@ function releaseDecision(earning: any, ride: any) {
     return 'release';
 }
 
-// True while admin has not closed a report on this ride. Open and reviewing
-// both hold the driver's pay; resolved and dismissed let it go. Lockstep copy,
+// True while admin has not closed a complaint the GUEST made about this ride.
+// That is a dispute about the service the driver is being paid for, so the
+// pay waits. A report the DRIVER filed about the guest never holds the
+// driver's own pay: that would punish them for speaking up. Lockstep copy,
 // see autoCancelExpiredBookings.
-async function hasOpenReport(sr: any, rideBookingId: string) {
-    const open = await sr.RideReport.filter({ ride_booking_id: rideBookingId, status: { $in: ['open', 'reviewing'] } });
+async function hasOpenGuestReport(sr: any, rideBookingId: string) {
+    const open = await sr.RideReport.filter({
+        ride_booking_id: rideBookingId, reporter_role: 'guest', status: { $in: ['open', 'reviewing'] },
+    });
     return Array.isArray(open) && open.length > 0;
 }
 
@@ -158,10 +162,10 @@ Deno.serve(async (req) => {
             }
             // Releasing around an open complaint would make the report
             // pointless. Admin closes it first, in Rides → Reports.
-            if (await hasOpenReport(sr, earning.ride_booking_id)) {
+            if (await hasOpenGuestReport(sr, earning.ride_booking_id)) {
                 return json({
                     success: false,
-                    error: 'A report on this ride is still open. Resolve or dismiss it under Rides → Reports first.',
+                    error: 'The guest has an open report on this ride. Resolve or dismiss it under Rides → Reports first.',
                     code: 'OPEN_REPORT',
                 }, 409);
             }

@@ -119,7 +119,7 @@ function ledgerView(earning: any, underReview: boolean) {
         amount_ngn: Math.max(0, Math.round(Number(earning.amount_ngn) || 0)),
         status: earning.status,
         on_hold: !!earning.on_hold,
-        // A report on this ride is open, so the held pay waits for admin.
+        // The guest has an open complaint about this ride, so the held pay waits.
         under_review: earning.status === 'held' && !!underReview,
         release_at: earning.release_at || null,
         held_at: earning.held_at || earning.created_date || null,
@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
         const [earnings, withdrawalRows, openReports] = await Promise.all([
             fetchAll(sr.DriverEarning, { driver_id: driver.id }),
             fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
-            fetchAll(sr.RideReport, { status: { $in: ['open', 'reviewing'] } }),
+            fetchAll(sr.RideReport, { reporter_role: 'guest', status: { $in: ['open', 'reviewing'] } }),
         ]);
         const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
         const mine = driverWithdrawals(driver, withdrawalRows);

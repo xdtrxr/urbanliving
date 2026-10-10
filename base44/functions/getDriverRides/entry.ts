@@ -154,7 +154,7 @@ function driverRideView(ride: any, bucket: string, win: any, earning: any, flags
             on_hold: !!earning.on_hold,
             release_at: earning.release_at || null,
             released_at: earning.released_at || null,
-            // A report on this ride is open, so the held pay waits for admin.
+            // The guest has an open complaint about this ride, so the held pay waits.
             under_review: earning.status === 'held' && !!(flags && flags.under_review),
         } : null,
     };
@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
             fetchAll(sr.RideBooking, { driver_id: driver.id }),
             fetchAll(sr.DriverEarning, { driver_id: driver.id }),
             fetchAll(sr.RideReport, { reporter_email: user.email }),
-            fetchAll(sr.RideReport, { status: { $in: ['open', 'reviewing'] } }),
+            fetchAll(sr.RideReport, { reporter_role: 'guest', status: { $in: ['open', 'reviewing'] } }),
         ]);
         const reportedRides = new Set(myReports.map((r: any) => r.ride_booking_id));
         const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));

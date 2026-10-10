@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let a driver report a rude or abusive customer, and a guest report a driver, on any paid ride; put every report in front of admin with a Telegram ping; let admin dismiss, warn or block; and keep a ride's driver pay held while a report on it is open.
+**Goal:** Let a driver report a rude or abusive customer, and a guest report a driver, on any paid ride; put every report in front of admin with a Telegram ping; let admin dismiss, warn or block; and keep a ride's driver pay held while the guest has an open complaint about it.
 
-**Architecture:** A `RideReport` entity that only two functions write: `createRideReport` (checks the caller is a party to the ride and inside the reporting window) and `resolveRideReport` (admin). A block sets `User.ride_blocked`, which `checkRideAvailability` refuses, or deactivates the driver. The sweep and admin's Release now both skip an earning whose ride has an open report. One shared dialog serves the driver's ride card and the guest's driver card; a fourth inner tab on the admin Rides screen is the inbox.
+**Architecture:** A `RideReport` entity that only two functions write: `createRideReport` (checks the caller is a party to the ride and inside the reporting window) and `resolveRideReport` (admin). A block sets `User.ride_blocked`, which `checkRideAvailability` refuses, or deactivates the driver. The sweep and admin's Release now both skip an earning whose ride has an open complaint from the guest. A report the driver files never holds the driver's own pay. One shared dialog serves the driver's ride card and the guest's driver card; a fourth inner tab on the admin Rides screen is the inbox.
 
 **Tech Stack:** Base44 Deno functions and entity schemas, React 18 + Vite + Tailwind + shadcn/ui, the `UploadFile` integration for photos, Telegram and web push (all existing). Checks: eslint, node scripts that execute the shipped helpers off disk, esbuild parse, vite build.
 
@@ -37,7 +37,7 @@ Five things the spec implies, that a person will hit, and that are easy to get w
 2. **A "photo" that is `javascript:alert(1)`, an `http://` link, or a URL with a space or a quote in it.** Refused before anything is stored. Pinned in Task B02 (`validateReportInput` cases) and Task B07 (the admin tab only renders `https://` sources).
 3. **A report filed at the first or last moment of the window.** Allowed at the ride's start and at exactly seven days after its end, refused one millisecond either side, in WAT. Pinned in Task B02 (`reportWindowOpen` cases with exact UTC instants).
 4. **A guest with two reports against them, one resolved as blocked, when admin clears the other.** They stay blocked. Pinned in Task B03 (`guestBlockAfter` cases).
-5. **Pay that falls due while a report on its ride is open, and after the report is closed.** Not released while open; released on the next sweep once closed. Pinned in Task B05 (`settleDueEarning` cases with an open, a reviewing and a resolved report).
+5. **Pay that falls due while a report on its ride is open, and who filed it.** A guest's complaint holds the pay until admin closes it, then the next sweep releases it. A report the driver filed about the guest never delays the driver's own pay. Pinned in Task B05 (`settleDueEarning` cases for a guest's open, reviewing and resolved complaint, and for a driver's report).
 
 ---
 
@@ -1306,20 +1306,20 @@ git add scripts/check-ride-reports.mjs base44/functions/checkRideAvailability/en
 git commit -m "feat(rides): a blocked guest cannot request a ride; refusals on the request screen are readable" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task B05: An open report holds the pay, and the ride lists know about reports
+### Task B05: A guest's open complaint holds the pay, and the ride lists know about reports
 
 **Files:**
 - Modify: `scripts/check-ride-reports.mjs` (reports and money section, above `// ---- result ----`)
 - Modify: `scripts/check-driver-wallet.mjs` (the sweep's settle helper now needs a report table; two allow-lists gain fields)
-- Modify: `base44/functions/autoCancelExpiredBookings/entry.ts` (`hasOpenReport`; the release pass skips a ride under review)
-- Modify: `base44/functions/settleDriverEarning/entry.ts` (`hasOpenReport`; Release now refuses with `OPEN_REPORT`)
+- Modify: `base44/functions/autoCancelExpiredBookings/entry.ts` (`hasOpenGuestReport`; the release pass skips a ride under review)
+- Modify: `base44/functions/settleDriverEarning/entry.ts` (`hasOpenGuestReport`; Release now refuses with `OPEN_REPORT`)
 - Modify: `base44/functions/getDriverRides/entry.ts` (`reportWindowOpen`; `can_report`, `already_reported`, `earning.under_review`)
 - Modify: `base44/functions/getDriverWallet/entry.ts` (`under_review` on ledger rows)
 - Modify: `base44/functions/getRideBookings/entry.ts` (`reportWindowOpen`; `can_report`, `already_reported` for the guest)
 
 **Interfaces:**
 - Consumes: entity `RideReport` (Task B01); `reportWindowOpen`, `REPORT_WINDOW_AFTER_END_MS` (Task B02, copied); `settleDueEarning`, `isReleasable`, `releaseDecision` (wallet plan, Task A05); `driverRideView`, `ledgerView` (wallet plan, Tasks A07 and A08).
-- Produces: `async hasOpenReport(sr, rideBookingId) → boolean`, identical in `autoCancelExpiredBookings` and `settleDriverEarning`. `settleDriverEarning` gains the refusal `OPEN_REPORT` (409) for `release`.
+- Produces: `async hasOpenGuestReport(sr, rideBookingId) → boolean` (true only for a report with `reporter_role: 'guest'` in `open` or `reviewing`), identical in `autoCancelExpiredBookings` and `settleDriverEarning`. `settleDriverEarning` gains the refusal `OPEN_REPORT` (409) for `release`.
 - Changes: `driverRideView(ride, bucket, win, earning, flags)` where `flags` is `{ reported, under_review, window_open }`; every ride from `getDriverRides` now carries `already_reported: boolean`, `can_report: boolean`, and `earning.under_review: boolean`. `ledgerView(earning, underReview)`; every ledger row from `getDriverWallet` carries `under_review: boolean`. Every ride from `getRideBookings` with `scope: 'mine'` carries `already_reported` and `can_report`.
 
 - [ ] **Step 1: Write the failing checks**
@@ -1334,9 +1334,10 @@ replace with:
 
 ```js
 // ── Reports and money ──────────────────────────────────────────────────────
-// Review focus 5: pay that falls due while a report on its ride is open.
+// Review focus 5: pay that falls due while a report on its ride is open, and
+// who filed that report.
 console.log('\n— reports and money —');
-identical('hasOpenReport', 'sr, rideBookingId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
+identical('hasOpenGuestReport', 'sr, rideBookingId', ['autoCancelExpiredBookings', 'settleDriverEarning']);
 for (const dir of ['getDriverRides', 'getRideBookings']) {
   identical('reportWindowOpen', 'ride, nowMs', [HOME, dir]);
   check(`one reporting window: ${dir} agrees with ${HOME}`,
@@ -1344,18 +1345,21 @@ for (const dir of ['getDriverRides', 'getRideBookings']) {
 }
 
 const SWEEP = 'autoCancelExpiredBookings';
-const hasOpenReport = make('hasOpenReport', liftSrc(SWEEP, 'hasOpenReport', 'sr, rideBookingId'));
+const hasOpenGuestReport = make('hasOpenGuestReport', liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId'));
 const reportsOf = (rows) => ({ RideReport: fakeEntity(rows) });
-check('an open report holds the ride', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }]), 'ride1'), true);
-check('so does one being reviewed', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'reviewing' }]), 'ride1'), true);
-check('a resolved report does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'resolved' }]), 'ride1'), false);
-check('a dismissed report does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'ride1', status: 'dismissed' }]), 'ride1'), false);
-check('a report on another ride does not', await hasOpenReport(reportsOf([{ id: 'r1', ride_booking_id: 'other', status: 'open' }]), 'ride1'), false);
-check('no reports at all', await hasOpenReport(reportsOf([]), 'ride1'), false);
+const filed = (reporter_role, status, ride_booking_id = 'ride1') => ({ id: 'r1', ride_booking_id, reporter_role, status });
+check('an open complaint from the guest holds the ride', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1'), true);
+check('so does one being reviewed', await hasOpenGuestReport(reportsOf([filed('guest', 'reviewing')]), 'ride1'), true);
+check('a resolved one does not', await hasOpenGuestReport(reportsOf([filed('guest', 'resolved')]), 'ride1'), false);
+check('a dismissed one does not', await hasOpenGuestReport(reportsOf([filed('guest', 'dismissed')]), 'ride1'), false);
+check('a complaint about another ride does not', await hasOpenGuestReport(reportsOf([filed('guest', 'open', 'other')]), 'ride1'), false);
+// The driver reporting an abusive customer must never delay the driver's own pay.
+check('a report the DRIVER filed never holds the driver\'s pay', await hasOpenGuestReport(reportsOf([filed('driver', 'open')]), 'ride1'), false);
+check('no reports at all', await hasOpenGuestReport(reportsOf([]), 'ride1'), false);
 
 const settleDueEarning = make('settleDueEarning',
   liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),
-  liftSrc(SWEEP, 'hasOpenReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
+  liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId'), liftSrc(SWEEP, 'settleDueEarning', 'sr, earningId, nowMs'));
 const DUE = at('2026-08-10T12:00:00.000Z');
 const dueEarning = { id: 'e1', ride_booking_id: 'ride1', driver_id: 'drvA', amount_ngn: 15000, status: 'held', on_hold: false, release_at: '2026-08-10T12:00:00.000Z' };
 const drivenRide = { id: 'ride1', driver_id: 'drvA', status: 'completed', payment_status: 'paid' };
@@ -1363,27 +1367,32 @@ const worldWith = (reports, rideOverride = {}) => ({
   DriverEarning: fakeEntity([dueEarning]), RideBooking: fakeEntity([{ ...drivenRide, ...rideOverride }]), RideReport: fakeEntity(reports),
 });
 {
-  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }]);
-  check('due pay is not released while a report is open', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  const sr = worldWith([filed('guest', 'open')]);
+  check('due pay is not released while the guest\'s complaint is open', await settleDueEarning(sr, 'e1', DUE), 'skipped');
   check('…it stays held', sr.DriverEarning.rows[0].status, 'held');
   // Admin closes the report; the very next tick pays.
   sr.RideReport.rows[0].status = 'resolved';
   check('once the report is resolved the next sweep releases it', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
 }
 {
-  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'reviewing' }]);
-  check('a report being reviewed holds the pay too', await settleDueEarning(sr, 'e1', DUE), 'skipped');
+  const sr = worldWith([filed('guest', 'reviewing')]);
+  check('a complaint being reviewed holds the pay too', await settleDueEarning(sr, 'e1', DUE), 'skipped');
   sr.RideReport.rows[0].status = 'dismissed';
-  check('a dismissed report lets it go', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
+  check('a dismissed complaint lets it go', await settleDueEarning(sr, 'e1', DUE + 300000), 'released');
+}
+{
+  // The driver reported a rude customer. Their pay arrives on time.
+  const sr = worldWith([filed('driver', 'open')]);
+  check('the driver\'s own report does not delay the driver\'s pay', await settleDueEarning(sr, 'e1', DUE), 'released');
 }
 {
   // A cancelled ride is reversed whether or not anyone complained about it.
-  const sr = worldWith([{ id: 'r1', ride_booking_id: 'ride1', status: 'open' }], { status: 'cancelled' });
-  check('a cancelled ride is still reversed with a report open', await settleDueEarning(sr, 'e1', DUE), 'reversed');
+  const sr = worldWith([filed('guest', 'open')], { status: 'cancelled' });
+  check('a cancelled ride is still reversed with a complaint open', await settleDueEarning(sr, 'e1', DUE), 'reversed');
 }
 {
-  const sr = worldWith([{ id: 'r1', ride_booking_id: 'someone-elses-ride', status: 'open' }]);
-  check('a report on a different ride holds nothing here', await settleDueEarning(sr, 'e1', DUE), 'released');
+  const sr = worldWith([filed('guest', 'open', 'someone-elses-ride')]);
+  check('a complaint about a different ride holds nothing here', await settleDueEarning(sr, 'e1', DUE), 'released');
 }
 
 console.log('\n— what the ride lists say about reports —');
@@ -1426,7 +1435,7 @@ replace with:
 ```js
 const settleDueEarning = make('settleDueEarning',
   sweepSrc('isReleasable', 'earning, nowMs'), sweepSrc('releaseDecision', 'earning, ride'),
-  sweepSrc('hasOpenReport', 'sr, rideBookingId'), sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
+  sweepSrc('hasOpenGuestReport', 'sr, rideBookingId'), sweepSrc('settleDueEarning', 'sr, earningId, nowMs'));
 // No reports on any ride here; scripts/check-ride-reports.mjs covers the cases with one.
 const world = (earning, ride) => ({
   DriverEarning: fakeEntity([earning]), RideBooking: fakeEntity(ride ? [ride] : []), RideReport: fakeEntity([]),
@@ -1497,15 +1506,15 @@ replace with:
 
 Run: `node scripts/check-ride-reports.mjs`
 
-Expected: `Error: could not find hasOpenReport in base44/functions/autoCancelExpiredBookings/entry.ts`.
+Expected: `Error: could not find hasOpenGuestReport in base44/functions/autoCancelExpiredBookings/entry.ts`.
 
 Run: `node scripts/check-driver-wallet.mjs`
 
 Expected: the same error, from the wallet script's own settle section.
 
-- [ ] **Step 3: The sweep skips pay on a ride under review**
+- [ ] **Step 3: The sweep skips pay on a ride the guest has complained about**
 
-The check sits after the reverse and hold branches on purpose: a cancelled or reassigned ride is still reversed while a report is open. Only the release waits.
+Only a complaint from the guest holds the pay: it is a dispute about the service the driver is being paid for. A report the driver files about the guest must not, or reporting an abusive customer would cost the driver their own money on time. The check sits after the reverse and hold branches on purpose: a cancelled or reassigned ride is still reversed while a complaint is open. Only the release waits.
 
 **Edit `base44/functions/autoCancelExpiredBookings/entry.ts`** — find:
 
@@ -1516,11 +1525,15 @@ The check sits after the reverse and hold branches on purpose: a cancelled or re
 replace with:
 
 ```ts
-// True while admin has not closed a report on this ride. Open and reviewing
-// both hold the driver's pay; resolved and dismissed let it go. Lockstep copy
-// in settleDriverEarning.
-async function hasOpenReport(sr: any, rideBookingId: string) {
-    const open = await sr.RideReport.filter({ ride_booking_id: rideBookingId, status: { $in: ['open', 'reviewing'] } });
+// True while admin has not closed a complaint the GUEST made about this ride.
+// That is a dispute about the service the driver is being paid for, so the
+// pay waits. A report the DRIVER filed about the guest never holds the
+// driver's own pay: that would punish them for speaking up. Lockstep copy in
+// settleDriverEarning.
+async function hasOpenGuestReport(sr: any, rideBookingId: string) {
+    const open = await sr.RideReport.filter({
+        ride_booking_id: rideBookingId, reporter_role: 'guest', status: { $in: ['open', 'reviewing'] },
+    });
     return Array.isArray(open) && open.length > 0;
 }
 
@@ -1542,9 +1555,9 @@ replace with:
 ```ts
         return 'held';
     }
-    // Someone has complained about this ride and admin has not closed it yet.
-    // The pay waits; the next tick after the report is closed releases it.
-    if (await hasOpenReport(sr, e.ride_booking_id)) return 'skipped';
+    // The guest has complained about this ride and admin has not closed it
+    // yet. The pay waits; the next tick after the report is closed releases it.
+    if (await hasOpenGuestReport(sr, e.ride_booking_id)) return 'skipped';
     await sr.DriverEarning.update(e.id, {
         status: 'released', released_at: nowIso, on_hold: false, hold_reason: '',
     });
@@ -1561,11 +1574,15 @@ async function tryPush(sdk: any, opts: Record<string, unknown>) {
 replace with:
 
 ```ts
-// True while admin has not closed a report on this ride. Open and reviewing
-// both hold the driver's pay; resolved and dismissed let it go. Lockstep copy,
+// True while admin has not closed a complaint the GUEST made about this ride.
+// That is a dispute about the service the driver is being paid for, so the
+// pay waits. A report the DRIVER filed about the guest never holds the
+// driver's own pay: that would punish them for speaking up. Lockstep copy,
 // see autoCancelExpiredBookings.
-async function hasOpenReport(sr: any, rideBookingId: string) {
-    const open = await sr.RideReport.filter({ ride_booking_id: rideBookingId, status: { $in: ['open', 'reviewing'] } });
+async function hasOpenGuestReport(sr: any, rideBookingId: string) {
+    const open = await sr.RideReport.filter({
+        ride_booking_id: rideBookingId, reporter_role: 'guest', status: { $in: ['open', 'reviewing'] },
+    });
     return Array.isArray(open) && open.length > 0;
 }
 
@@ -1588,10 +1605,10 @@ replace with:
             }
             // Releasing around an open complaint would make the report
             // pointless. Admin closes it first, in Rides → Reports.
-            if (await hasOpenReport(sr, earning.ride_booking_id)) {
+            if (await hasOpenGuestReport(sr, earning.ride_booking_id)) {
                 return json({
                     success: false,
-                    error: 'A report on this ride is still open. Resolve or dismiss it under Rides → Reports first.',
+                    error: 'The guest has an open report on this ride. Resolve or dismiss it under Rides → Reports first.',
                     code: 'OPEN_REPORT',
                 }, 409);
             }
@@ -1674,7 +1691,7 @@ replace with:
             on_hold: !!earning.on_hold,
             release_at: earning.release_at || null,
             released_at: earning.released_at || null,
-            // A report on this ride is open, so the held pay waits for admin.
+            // The guest has an open complaint about this ride, so the held pay waits.
             under_review: earning.status === 'held' && !!(flags && flags.under_review),
         } : null,
 ```
@@ -1695,7 +1712,7 @@ replace with:
             fetchAll(sr.RideBooking, { driver_id: driver.id }),
             fetchAll(sr.DriverEarning, { driver_id: driver.id }),
             fetchAll(sr.RideReport, { reporter_email: user.email }),
-            fetchAll(sr.RideReport, { status: { $in: ['open', 'reviewing'] } }),
+            fetchAll(sr.RideReport, { reporter_role: 'guest', status: { $in: ['open', 'reviewing'] } }),
         ]);
         const reportedRides = new Set(myReports.map((r: any) => r.ride_booking_id));
         const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
@@ -1743,7 +1760,7 @@ replace with:
 
 ```ts
         on_hold: !!earning.on_hold,
-        // A report on this ride is open, so the held pay waits for admin.
+        // The guest has an open complaint about this ride, so the held pay waits.
         under_review: earning.status === 'held' && !!underReview,
         release_at: earning.release_at || null,
         held_at: earning.held_at || earning.created_date || null,
@@ -1764,7 +1781,7 @@ replace with:
         const [earnings, withdrawalRows, openReports] = await Promise.all([
             fetchAll(sr.DriverEarning, { driver_id: driver.id }),
             fetchAll(sr.WithdrawalRequest, { driver_id: driver.id }),
-            fetchAll(sr.RideReport, { status: { $in: ['open', 'reviewing'] } }),
+            fetchAll(sr.RideReport, { reporter_role: 'guest', status: { $in: ['open', 'reviewing'] } }),
         ]);
         const ridesUnderReview = new Set(openReports.map((r: any) => r.ride_booking_id));
 ```
@@ -1870,14 +1887,15 @@ Expected: no `PARSE FAIL` line.
 
 - [ ] **Step 9: Sandbox checklist (after the next publish)**
 
-1. File a report on a ride whose pay is due (Task B02, step 6.1), then POST to `autoCancelExpiredBookings` as admin. Expected: `rides.released` does not count that ride; its earning is still `held`; the driver's wallet shows it as "Under review".
-2. As admin, press Release now on that row in Rides → Earnings. Expected: "A report on this ride is still open…".
+1. As the guest, file a report on a ride whose pay is due, then POST to `autoCancelExpiredBookings` as admin. Expected: `rides.released` does not count that ride; its earning is still `held`; the driver's wallet shows it as "Under review".
+2. As admin, press Release now on that row in Rides → Earnings. Expected: "The guest has an open report on this ride…".
 3. Dismiss the report, POST to the sweep again. Expected: the earning is `released`.
+4. As the driver, file a report on a different ride whose pay is due (Task B02, step 6.1), then POST to the sweep. Expected: that pay is released on time.
 
 - [ ] **Step 10: Commit**
 
 ```bash
 git add scripts/check-ride-reports.mjs scripts/check-driver-wallet.mjs base44/functions/autoCancelExpiredBookings/entry.ts base44/functions/settleDriverEarning/entry.ts base44/functions/getDriverRides/entry.ts base44/functions/getDriverWallet/entry.ts base44/functions/getRideBookings/entry.ts
-git commit -m "feat(rides): an open report holds the driver's pay; ride lists know what can be reported" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+git commit -m "feat(rides): a guest's open complaint holds the driver's pay; ride lists know what can be reported" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
