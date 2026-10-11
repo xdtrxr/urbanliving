@@ -59,7 +59,7 @@
     },
     "booking_options": {
       "type": "array",
-      "description": "The ways this property can be booked. Empty means one way: the whole place at price_per_night for up to max_guests. When set, price_per_night and max_guests are kept equal to the cheapest and the largest option so older screens still read sensibly.",
+      "description": "The ways this property can be booked, by bedroom count. Empty means one way: the whole place at price_per_night for up to max_guests. When set, price_per_night and max_guests on the row are kept as the LARGEST option's (the whole place), so anything that reads only those two quotes a real offer and never a small option's price for the whole house.",
       "items": {
         "type": "object",
         "properties": {

@@ -40,7 +40,7 @@
     },
     "bedrooms_booked": {
       "type": "number",
-      "description": "Which booking option the guest chose, as a bedroom count. Set by the server from Property.booking_options. Whichever option it is, the whole property is blocked for the dates."
+      "description": "Which booking option the guest chose, as a bedroom count. Set by the server from Property.booking_options, and only when the property offers several. Whichever option it is, the whole property is blocked for the dates."
     },
     "special_requests": {
       "type": "string"

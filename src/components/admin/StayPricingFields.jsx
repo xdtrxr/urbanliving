@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, Trash2, CalendarRange } from 'lucide-react';
-import { switchStayPricingMode } from '@/config/stays';
+import { newOptionRow, switchStayPricingMode } from '@/config/stays';
 
 // The booking options and seasonal rates part of the property form. It only
 // edits the form state; stayPricingToSave (config/stays.js) checks it on save.
@@ -18,8 +18,9 @@ export default function StayPricingFields({ form, setForm }) {
     booking_options: prev.booking_options.map((o, n) => (n === i ? { ...o, ...patch } : o)),
   }));
   const addOption = () => setForm((prev) => {
-    const used = (prev.booking_options || []).map((o) => Number(o.bedrooms) || 0);
-    return { ...prev, booking_options: [...(prev.booking_options || []), { bedrooms: String(Math.max(0, ...used) + 1), price_per_night: '', max_guests: '' }] };
+    const rows = prev.booking_options || [];
+    const used = rows.map((o) => Number(o.bedrooms) || 0);
+    return { ...prev, booking_options: [...rows, newOptionRow(rows, { bedrooms: String(Math.max(0, ...used) + 1) })] };
   });
   const removeOption = (i) => setForm((prev) => ({ ...prev, booking_options: prev.booking_options.filter((_, n) => n !== i) }));
 
@@ -33,11 +34,13 @@ export default function StayPricingFields({ form, setForm }) {
   }));
   const removeSeason = (i) => setForm((prev) => ({ ...prev, seasonal_rates: prev.seasonal_rates.filter((_, n) => n !== i) }));
 
-  // What a season can price: each option, or the whole place.
+  // What a season can price: each option, or the whole place. Prices are
+  // kept under the row's own id, so retyping its bedroom count keeps them.
+  const idOf = (o, i) => o.id || `row${i}`;
   const priced = multiple
-    ? options.filter((o) => Number(o.bedrooms) >= 1).map((o) => ({
-      key: String(Math.round(Number(o.bedrooms))),
-      label: `${Math.round(Number(o.bedrooms))} bedroom${Number(o.bedrooms) > 1 ? 's' : ''}`,
+    ? options.map((o, i) => ({
+      key: idOf(o, i),
+      label: Number(o.bedrooms) >= 1 ? `${Math.round(Number(o.bedrooms))} bedroom${Number(o.bedrooms) > 1 ? 's' : ''}` : `Option ${i + 1}`,
       normal: o.price_per_night,
     }))
     : [{ key: 'full', label: 'Full property', normal: form.price_per_night }];
@@ -64,7 +67,7 @@ export default function StayPricingFields({ form, setForm }) {
             One row per way of booking. A booking of any option blocks the whole property for those dates.
           </p>
           {options.map((o, i) => (
-            <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end pb-3 border-b border-slate-100 dark:border-slate-800 sm:pb-0 sm:border-0">
+            <div key={idOf(o, i)} className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end pb-3 border-b border-slate-100 dark:border-slate-800 sm:pb-0 sm:border-0">
               <div>
                 <Label htmlFor={`opt_bedrooms_${i}`}>Bedrooms</Label>
                 <Input id={`opt_bedrooms_${i}`} type="number" min="1" value={o.bedrooms} onChange={(e) => setOption(i, { bedrooms: e.target.value })} className="mt-1" />

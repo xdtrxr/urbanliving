@@ -6,6 +6,7 @@ import { Heart, Star, MapPin, Users, Bed, Bath, ExternalLink } from "lucide-reac
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { User } from "@/entities/User";
+import { cardPricing } from "@/config/stays";
 
 // App is NGN-only — every entry resolves to ₦ so guests never see $/€/£.
 const currencySymbols = {
@@ -23,6 +24,9 @@ export default function SearchResultCard({ property, user: initialUser }) {
 
   const mainImage = property.images?.[0] || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400';
   const currencySymbol = currencySymbols[property.currency] || '₦';
+  // The price, guests and bedrooms of the option the search landed on, or a
+  // "from" price when the property can be booked several ways.
+  const shown = cardPricing(property);
 
   // Update wishlist status when user prop changes
   useEffect(() => {
@@ -102,11 +106,11 @@ export default function SearchResultCard({ property, user: initialUser }) {
               <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300 text-xs">
                 <div className="flex items-center gap-1">
                   <Users className="w-3 h-3" />
-                  <span>{property.max_guests}</span>
+                  <span>{shown.guests}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Bed className="w-3 h-3" />
-                  <span>{property.bedrooms || 1}</span>
+                  <span>{shown.bedrooms}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Bath className="w-3 h-3" />
@@ -124,9 +128,9 @@ export default function SearchResultCard({ property, user: initialUser }) {
 
             <div className="flex justify-between items-center pt-1">
               <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold">
-                {currencySymbol}{property.price_per_night}/night
+                {shown.from ? 'From ' : ''}{currencySymbol}{shown.price.toLocaleString()}/night
               </Badge>
-              <Link to={createPageUrl(`Property?id=${property.id}`)}>
+              <Link to={createPageUrl(`Property?id=${property.id}${shown.openOn ? `&bedrooms=${shown.openOn}` : ''}`)}>
                 <Button variant="outline" size="sm" className="text-xs px-2 py-1 h-auto">
                   <ExternalLink className="w-3 h-3 mr-1" />
                   View

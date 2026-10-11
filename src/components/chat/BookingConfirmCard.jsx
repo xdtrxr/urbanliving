@@ -65,15 +65,25 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
     return () => { cancelled = true; };
   }, [booking?.property_id]);
 
-  // Which booking option, as a bedroom count. Until the guest picks: the one
-  // the chat named, else the smallest that fits the party.
+  // Which booking option, as a bedroom count. An option too small for the
+  // party cannot be picked. Until the guest picks, it is the one the chat
+  // named, else the only one that fits. When several fit and the chat named
+  // none, nothing is chosen for the guest: they have to say.
   const [bedrooms, setBedrooms] = useState(0);
   const options = useMemo(() => bookingOptionsOf(property), [property]);
-  const option = options.find((o) => o.bedrooms === bedrooms)
-    || options.find((o) => o.bedrooms === Number(booking?.bedrooms))
-    || options.find((o) => !(o.max_guests > 0 && o.max_guests < Number(booking?.guests)))
-    || options[0]
-    || null;
+  const party = Math.round(Number(booking?.guests)) || 0;
+  const tooSmall = (o) => o.max_guests > 0 && party > o.max_guests;
+  const fitting = options.filter((o) => !tooSmall(o));
+  const option = options.length <= 1
+    ? options[0] || null
+    : fitting.find((o) => o.bedrooms === bedrooms)
+      || fitting.find((o) => o.bedrooms === Math.round(Number(booking?.bedrooms)))
+      || (fitting.length === 1 ? fitting[0] : null);
+  const mustChoose = options.length > 1 && fitting.length > 0 && !option;
+  // Nothing here takes a party this size: say so instead of letting the
+  // request go and come back refused.
+  const partyTooBig = options.length > 0 && fitting.length === 0;
+  const largest = options.reduce((most, o) => Math.max(most, o.max_guests), 0);
   const breakdown = useMemo(() => computeBreakdown(booking, property, option), [booking, property, option]);
 
   const safeDate = (s) => {
@@ -202,12 +212,16 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
               {options.map((o) => (
                 <label
                   key={o.bedrooms}
-                  className={`flex items-center gap-3 p-3 rounded-xl border text-sm cursor-pointer ${option?.bedrooms === o.bedrooms ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-700'}`}
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-sm ${tooSmall(o) ? 'opacity-60' : 'cursor-pointer'} ${option?.bedrooms === o.bedrooms ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-700'}`}
                 >
-                  <input type="radio" name={`booking_option_${booking.property_id}`} checked={option?.bedrooms === o.bedrooms} onChange={() => setBedrooms(o.bedrooms)} />
+                  <input type="radio" name={`booking_option_${booking.property_id}`} disabled={tooSmall(o)} checked={option?.bedrooms === o.bedrooms} onChange={() => setBedrooms(o.bedrooms)} />
                   <span className="flex-1 text-slate-800 dark:text-slate-100">
                     {o.bedrooms} bedroom{o.bedrooms > 1 ? 's' : ''}
-                    {o.max_guests > 0 && <span className="block text-xs text-slate-500 dark:text-slate-400">Up to {o.max_guests} guests</span>}
+                    {o.max_guests > 0 && (
+                      <span className="block text-xs text-slate-500 dark:text-slate-400">
+                        Up to {o.max_guests} guests{tooSmall(o) ? `, too small for ${party}` : ''}
+                      </span>
+                    )}
                   </span>
                   <span className="font-semibold text-slate-900 dark:text-white">₦{o.price_per_night.toLocaleString()}/night</span>
                 </label>
@@ -216,6 +230,20 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
           </fieldset>
         )}
 
+        {partyTooBig && (
+          <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mb-4 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-800 dark:text-red-200">
+              This property takes up to {largest} guests, and this request is for {party}. Ask for a larger place or a smaller party.
+            </p>
+          </div>
+        )}
+
+        {mustChoose ? (
+          <p className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 mb-4 text-sm text-slate-600 dark:text-slate-300">
+            Choose how many bedrooms you want to see the price.
+          </p>
+        ) : (
         <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 mb-4 space-y-2 text-sm">
           {breakdown.lines ? breakdown.lines.map((line) => (
             <div key={line.from} className="flex justify-between gap-3 text-slate-700 dark:text-slate-200">
@@ -256,6 +284,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
             </p>
           )}
         </div>
+        )}
 
         {booking.special_requests && (
           <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3 mb-4">
@@ -273,7 +302,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
 
         <Button
           onClick={handleSubmit}
-          disabled={status === 'submitting'}
+          disabled={status === 'submitting' || mustChoose || partyTooBig}
           className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-6 text-base font-semibold dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
         >
           {status === 'submitting' ? (

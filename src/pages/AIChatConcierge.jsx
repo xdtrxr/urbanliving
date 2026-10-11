@@ -16,6 +16,7 @@ import SearchResultCard from '../components/chat/SearchResultCard';
 import BookingDetailsCard from '../components/chat/BookingDetailsCard'; // New import
 import BookingConfirmCard from '../components/chat/BookingConfirmCard';
 import { usePropertySearch } from "../components/hooks/usePropertySearch";
+import { pricingForAssistant } from '@/config/stays';
 import { useSpeechToText } from "../components/hooks/useSpeechToText";
 
 const welcomeLines = [
@@ -511,6 +512,16 @@ When the user has given you their requested check_in and check_out dates, BEFORE
 
 If the user hasn't given dates yet, ignore booked_ranges and recommend normally — they'll be filtered when dates are chosen.
 
+## 🛏️ BOOKING OPTIONS AND SEASONAL RATES
+Some properties in AVAILABLE PROPERTIES have a \`booking_options\` array of \`{bedrooms, price_per_night, max_guests}\`. That property is ONE house that can be booked several ways: the guest picks how many bedrooms they want, pays that option's price, and still has the whole property to themselves for the stay. For such a property:
+- Its top-level \`price_per_night\` and \`max_guests\` describe the WHOLE place (the largest option). Smaller options cost less and take fewer guests.
+- Quote the option that fits the party: the one whose bedrooms the guest asked for, otherwise the smallest whose max_guests covers the guest count. Say which option the price is for, e.g. "the 2-bedroom option at ₦160,000 a night, for up to 4 guests". NEVER pair one option's price with another option's guest count.
+- A property matches a request for N bedrooms if ONE OF ITS OPTIONS has N bedrooms, even when the house itself is bigger.
+- In \`provide_recommendations\`, set \`price_per_night\` to that option's price.
+- In \`confirm_booking\`, set \`bedrooms\` to the chosen option's bedrooms and \`price_per_night\` to its price. If the guest has not said which option they want and more than one fits their party, ASK before you emit confirm_booking.
+
+A property may also have \`seasonal_rates\`: named date ranges (start_date to end_date, both inclusive) with their own nightly price. A whole-place listing has one \`price_per_night\` per season; a property with booking_options has \`prices\` per option, and an option the season does not list keeps its normal price. If the guest's dates touch a season, tell them the season's name and its nightly price for their option. NEVER work out a total yourself: the booking card prices the stay night by night.
+
 ## 📭 NO-MATCH HANDLING (location with zero inventory)
 If the user asks for an area and NO property in AVAILABLE PROPERTIES is in that area (or close to it):
 
@@ -639,6 +650,7 @@ After emitting confirm_booking, the user will see a Submit button that sends the
     "check_in": "YYYY-MM-DD",
     "check_out": "YYYY-MM-DD",
     "guests": 2,
+    "bedrooms": 2,
     "nights": 3,
     "price_per_night": 50000,
     "caution_fee": 25000,
@@ -647,7 +659,7 @@ After emitting confirm_booking, the user will see a Submit button that sends the
   "response": "One-sentence confirmation prompt."
 }
 
-NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from the property's authoritative numbers — so you don't need to send total_price; just send the per-property values above. Use caution_fee from the property in AVAILABLE PROPERTIES (default 0 if absent).
+NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from the property's authoritative numbers — so you don't need to send total_price; just send the per-property values above. Use caution_fee from the property in AVAILABLE PROPERTIES (default 0 if absent). Send \`bedrooms\` ONLY for a property that has booking_options; leave it out otherwise.
 
 **show_bookings** — when user asks about their existing bookings:
 { "action": "show_bookings", "response": "Here are your bookings:" }
@@ -917,6 +929,10 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
           currency: p.currency || 'NGN',
           max_guests: p.max_guests,
           bedrooms: p.bedrooms,
+          // How it can be booked when there are several ways, and seasonal
+          // prices still to come. price_per_night and max_guests above are
+          // the whole place.
+          ...pricingForAssistant(p, new Date().toISOString().slice(0, 10)),
           property_type: p.property_type,
           amenities: (p.amenities || []).slice(0, 5),
           rating: p.rating,
@@ -943,6 +959,10 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
           currency: p.currency || 'NGN',
           max_guests: p.max_guests,
           bedrooms: p.bedrooms,
+          // How it can be booked when there are several ways, and seasonal
+          // prices still to come. price_per_night and max_guests above are
+          // the whole place.
+          ...pricingForAssistant(p, new Date().toISOString().slice(0, 10)),
           property_type: p.property_type,
           amenities: (p.amenities || []).slice(0, 5),
           rating: p.rating,

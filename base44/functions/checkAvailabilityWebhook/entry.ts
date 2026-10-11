@@ -41,6 +41,9 @@ function detectConflict(existing: any[], requestedIn: Date, requestedOut: Date):
 // confirmed booking. The body's total_price is now ignored entirely.
 const SERVICE_FEE_RATE = 0.025;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// The longest stay one request can ask for. Pricing walks the stay a night at
+// a time, so the walk needs an end that a request cannot move.
+const MAX_STAY_NIGHTS = 365;
 
 function nightsBetween(checkIn: string, checkOut: string): number {
     const a = Date.parse(`${checkIn}T00:00:00Z`);
@@ -206,6 +209,12 @@ async function sendAdminTelegram(opts: {
 // house), each with its own nightly price and guest limit, and any of those
 // prices can be different for a named stretch of dates. A property with no
 // options listed has exactly one: the whole place at price_per_night.
+//
+// On a row WITH options, price_per_night and max_guests are still the whole
+// place: the largest option's. So anything that knows nothing of options (an
+// old browser tab, an old copy of this function, a list that prints one
+// price) quotes and charges a real offer, and never a small option's price
+// for the whole house. Naming no option means the same thing: the largest.
 
 // The ways a property can be booked, smallest first. Bad rows are dropped,
 // and a bedroom count listed twice counts once.
@@ -226,6 +235,7 @@ function bookingOptionsOf(property: any) {
                 bedrooms: Math.round(Number(property.bedrooms) || 0),
                 price_per_night: price,
                 max_guests: Math.round(Number(property.max_guests) || 0),
+                whole: true,
             });
         }
     }
@@ -234,11 +244,16 @@ function bookingOptionsOf(property: any) {
 
 // What one night costs for one option. `night` is YYYY-MM-DD. A season covers
 // its start and end dates inclusive, and only changes an option it prices.
+// A place with no options listed (`whole`) has one seasonal price: the one
+// saved under its bedroom count, or, if that count has since changed, the
+// highest the season lists.
 function nightlyRate(property: any, option: any, night: string) {
     const seasons = property && Array.isArray(property.seasonal_rates) ? property.seasonal_rates : [];
     for (const s of seasons) {
         if (!s || !(String(s.start_date) <= night && night <= String(s.end_date))) continue;
-        const row = (Array.isArray(s.prices) ? s.prices : []).find((p) => !!p && Math.round(Number(p.bedrooms)) === option.bedrooms);
+        const listed = (Array.isArray(s.prices) ? s.prices : []).filter((p) => !!p && Math.round(Number(p.price_per_night)) > 0);
+        const row = listed.find((p) => Math.round(Number(p.bedrooms)) === option.bedrooms)
+            || (option.whole ? listed.reduce((a, b) => (Number(b.price_per_night) > Number(a.price_per_night) ? b : a), listed[0]) : undefined);
         const price = Math.round(Number(row && row.price_per_night));
         if (price > 0) return { rate: price, season: String(s.name || 'Seasonal rate') };
     }
@@ -246,14 +261,14 @@ function nightlyRate(property: any, option: any, night: string) {
 }
 
 // The price of a stay, night by night, or null when it cannot be priced.
-// `bedrooms` picks the option; it may be left out when there is only one.
+// `bedrooms` picks the option. Left out, it is the whole place: the largest.
 // lines groups consecutive nights at the same rate, for the guest to read.
 function priceStay(property: any, checkIn: string, checkOut: string, bedrooms: unknown) {
     const options = bookingOptionsOf(property);
     const wanted = Math.round(Number(bedrooms));
-    const option = options.length === 1 && !(wanted >= 1) ? options[0] : options.find((o) => o.bedrooms === wanted);
+    const option = wanted >= 1 ? options.find((o) => o.bedrooms === wanted) : options[options.length - 1];
     const nights = nightsBetween(checkIn, checkOut);
-    if (!option || nights < 1) return null;
+    if (!option || nights < 1 || nights > MAX_STAY_NIGHTS) return null;
     const first = Date.parse(`${checkIn}T00:00:00Z`);
     const lines = [];
     let subtotal = 0;
@@ -340,22 +355,26 @@ Deno.serve(async (req) => {
         if (nights < 1) {
             return new Response(JSON.stringify({ success: false, error: 'A stay must be at least one night' }), { status: 400, headers });
         }
+        if (nights > MAX_STAY_NIGHTS) {
+            return new Response(JSON.stringify({
+                success: false,
+                error: `A stay can be at most ${MAX_STAY_NIGHTS} nights. Please contact support for a longer stay.`,
+                code: 'STAY_TOO_LONG',
+            }), { status: 400, headers });
+        }
         // Priced night by night for the option the guest chose: each option
         // has its own rate and guest limit, and a seasonal rate applies only
         // to the nights that fall inside it.
         const options = bookingOptionsOf(property);
         const pricing = priceStay(property, check_in, check_out, bedrooms);
         if (!pricing && options.length > 0) {
-            // The row has a price, so what failed is the choice of option:
-            // none was named where there are several, or the one named is
-            // not (or is no longer) one this property offers.
-            const named = Math.round(Number(bedrooms)) >= 1;
+            // The row has a price, so what failed is the option that was
+            // named: it is not (or is no longer) one this property offers.
+            // A request that names none is priced as the whole place.
             return new Response(JSON.stringify({
                 success: false,
-                error: named
-                    ? 'That booking option is not available for this property. Please reload the page and choose again.'
-                    : 'Choose how many bedrooms you want to book.',
-                code: named ? 'OPTION_UNAVAILABLE' : 'OPTION_REQUIRED',
+                error: 'That booking option is not available for this property. Please reload the page and choose again.',
+                code: 'OPTION_UNAVAILABLE',
             }), { status: 400, headers });
         }
         const limit = pricing ? pricing.option.max_guests : 0;
@@ -406,10 +425,12 @@ Deno.serve(async (req) => {
         }
 
         // Conflict detection: any existing pending/confirmed booking on the same property whose dates overlap
+        // Latest-ending first and well past the default page of 50, so a busy
+        // property's upcoming bookings are all in the list that is compared.
         const existing = await base44.asServiceRole.entities.Booking.filter({
             property_id,
             status: { $in: ['confirmed', 'pending'] },
-        });
+        }, '-check_out', 500);
         const { hasConflict, conflicting } = detectConflict(existing, checkInDate, checkOutDate);
         const conflictDetails: ConflictDetails | null = hasConflict && conflicting ? {
             booking_id: conflicting.id,
@@ -418,8 +439,12 @@ Deno.serve(async (req) => {
             guest_email: conflicting.guest_email,
         } : null;
 
-        // Create the AvailabilityRequest (under user context — RLS lets the user own it)
-        const availabilityRequest = await base44.entities.AvailabilityRequest.create({
+        // Both rows are written with the service role, never as the guest:
+        // the guest reads them by their email, and a row a guest could write
+        // by hand could carry any price or status. The option and the total
+        // go on the request too, so the admin approving it in the app sees
+        // what Telegram shows.
+        const availabilityRequest = await base44.asServiceRole.entities.AvailabilityRequest.create({
             property_id,
             property_title: resolvedTitle,
             user_email: user.email,
@@ -427,13 +452,15 @@ Deno.serve(async (req) => {
             check_in,
             check_out,
             guests,
+            bedrooms_booked: options.length > 1 ? pricing.option.bedrooms : undefined,
+            total_price,
             status: 'pending',
             has_conflict: hasConflict,
             conflict_details: conflictDetails,
         });
 
         // Create the pending Booking (holds the slot + the timer attaches once admin approves)
-        const pendingBooking = await base44.entities.Booking.create({
+        const pendingBooking = await base44.asServiceRole.entities.Booking.create({
             property_id,
             guest_name: user.full_name || 'Guest User',
             guest_email: user.email,

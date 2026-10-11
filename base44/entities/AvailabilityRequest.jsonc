@@ -32,6 +32,14 @@
       "type": "number",
       "description": "Number of guests"
     },
+    "bedrooms_booked": {
+      "type": "number",
+      "description": "Which booking option was asked for, as a bedroom count. Set only when the property offers several options."
+    },
+    "total_price": {
+      "type": "number",
+      "description": "The total in NGN the server worked out for this request, as shown to the admin. The Booking row holds the figure that is charged."
+    },
     "status": {
       "type": "string",
       "enum": [

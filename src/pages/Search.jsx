@@ -7,7 +7,7 @@ import { createPageUrl } from "@/utils";
 
 import SearchHeader from "../components/search/SearchHeader";
 import PropertyCard from "../components/search/PropertyCard";
-import PropertyFiltersBar from "../components/search/PropertyFiltersBar";
+import PropertyFiltersBar, { PRICE_MAX } from "../components/search/PropertyFiltersBar";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +55,8 @@ export default function SearchPage() {
     bedrooms,
     propertyType: filters.propertyType,
     minPrice: filters.minPrice,
-    maxPrice: filters.maxPrice,
+    // The slider's top value is "and above", not a ceiling.
+    maxPrice: filters.maxPrice >= PRICE_MAX ? 0 : filters.maxPrice,
     amenities: filters.amenities,
     limit: 50,
   }), [searchQuery, guests, bedrooms, filters]);
@@ -98,7 +99,7 @@ export default function SearchPage() {
       const label = bedrooms === 'studio' ? 'a studio' : bedrooms === 'loft' ? 'a loft' : `${bedrooms} bedroom${bedrooms === '1' ? '' : 's'}`;
       bits.push(`with ${label}`);
     }
-    if (filters?.maxPrice) bits.push(`under ₦${Number(filters.maxPrice).toLocaleString()}/night`);
+    if (filters?.maxPrice && filters.maxPrice < PRICE_MAX) bits.push(`under ₦${Number(filters.maxPrice).toLocaleString()}/night`);
 
     const seed = bits.length > 0
       ? `Give me personalized property recommendations ${bits.join(' ')}.`

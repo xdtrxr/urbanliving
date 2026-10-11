@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar, MapPin, Users, ArrowLeft, CheckCircle, Loader2, Clock, AlertCircle, Shield, Phone } from 'lucide-react';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInCalendarDays, parseISO, addDays } from 'date-fns';
 import { bookingOptionsOf, priceStay } from '@/config/stays';
 import { invokeFn } from '@/lib/invokeFn';
 import { createPageUrl } from '@/utils';
@@ -25,10 +25,24 @@ import {
   AlertTitle,
 } from "@/components/ui/alert";
 
-// The option a bedroom count names, or the smallest when it names none.
-function chosenOption(property, bedrooms) {
+// A YYYY-MM-DD string as that calendar day in the browser's own timezone.
+// new Date('2026-12-13') is midnight UTC, which is still the 12th anywhere
+// west of Greenwich: the date a guest picked slid back a day and the request
+// went out for the wrong nights.
+function dayOf(value) {
+  const day = parseISO(String(value || '').slice(0, 10));
+  return Number.isNaN(day.getTime()) ? null : day;
+}
+
+// The option a bedroom count names. When it names none: the smallest that
+// takes a party of `guests`, else the smallest.
+function chosenOption(property, bedrooms, guests) {
   const options = bookingOptionsOf(property);
-  return options.find((o) => o.bedrooms === bedrooms) || options[0] || null;
+  const party = Math.round(Number(guests)) || 0;
+  return options.find((o) => o.bedrooms === bedrooms)
+    || options.find((o) => !(party > 0 && o.max_guests > 0 && o.max_guests < party))
+    || options[0]
+    || null;
 }
 
 export default function CheckoutPage() {
@@ -156,7 +170,7 @@ export default function CheckoutPage() {
         // A refusal (4xx) carries a sentence written for the guest. If it is
         // about the option or the guest limit, the listing has changed since
         // this page loaded: fetch it again so the choices on screen are real.
-        if (['OPTION_UNAVAILABLE', 'OPTION_REQUIRED', 'TOO_MANY_GUESTS'].includes(result.code)) {
+        if (['OPTION_UNAVAILABLE', 'TOO_MANY_GUESTS'].includes(result.code)) {
           base44.entities.Property.get(property.id).then(setProperty).catch(() => {});
         }
         const refusal = new Error(result.error || 'Failed to submit availability check');
@@ -227,12 +241,15 @@ export default function CheckoutPage() {
         setProperty(propertyData);
 
         setBookingDetails({
-          checkIn: new Date(booking.check_in),
-          checkOut: new Date(booking.check_out),
+          checkIn: dayOf(booking.check_in),
+          checkOut: dayOf(booking.check_out),
           guests: booking.guests,
           specialRequests: booking.special_requests || ''
         });
-        setBedrooms(Number(booking.bedrooms_booked) || 0);
+        // A booking made before the listing had options named none; the
+        // server priced it as the whole place, which is the largest option.
+        const offered = bookingOptionsOf(propertyData);
+        setBedrooms(Number(booking.bedrooms_booked) || (offered.length > 1 ? offered[offered.length - 1].bedrooms : 0));
 
         setAvailabilityStatus('available');
         setAdminResponse('Your booking has been approved by admin. Complete payment to confirm.');
@@ -245,12 +262,15 @@ export default function CheckoutPage() {
         const propertyData = await base44.entities.Property.get(propertyId);
         setProperty(propertyData);
 
-        const checkIn = checkInStr ? new Date(checkInStr) : null;
-        const checkOut = checkOutStr ? new Date(checkOutStr) : null;
-        const wanted = chosenOption(propertyData, Number(params.get('bedrooms')) || 0);
+        const checkIn = dayOf(checkInStr);
+        const checkOut = dayOf(checkOutStr);
+        // A party size in the link picks the smallest option that takes it.
+        // The guest's own number is never changed for them: if it is too many
+        // for the option on screen, the page says so and waits.
+        const asked = guestsStr ? parseInt(guestsStr) || 0 : 0;
+        const wanted = chosenOption(propertyData, Number(params.get('bedrooms')) || 0, asked);
         setBedrooms(wanted ? wanted.bedrooms : 0);
-        const asked = guestsStr ? parseInt(guestsStr) : 2;
-        const guests = wanted && wanted.max_guests > 0 ? Math.min(asked, wanted.max_guests) : asked;
+        const guests = asked || (wanted && wanted.max_guests > 0 ? Math.min(2, wanted.max_guests) : 2);
 
         setBookingDetails({
           checkIn,
@@ -309,7 +329,8 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (bookingDetails.checkIn && bookingDetails.checkOut) {
-      const nightCount = differenceInDays(bookingDetails.checkOut, bookingDetails.checkIn);
+      // Calendar days, so a clock change inside the stay does not lose a night.
+      const nightCount = differenceInCalendarDays(bookingDetails.checkOut, bookingDetails.checkIn);
       setNights(nightCount);
       
       const option = chosenOption(property, bedrooms);
@@ -358,7 +379,13 @@ export default function CheckoutPage() {
   const options = bookingOptionsOf(property);
   const option = chosenOption(property, bedrooms);
   const guestLimit = option ? option.max_guests : 0;
-  const formLocked = isCheckingAvailability || availabilityStatus === 'pending' || !!existingBooking;
+  // Once a request is with the admin, or approved, what was asked for is
+  // fixed: changing a field here would only throw the answer away.
+  const formLocked = isCheckingAvailability || availabilityStatus === 'pending' || availabilityStatus === 'available' || !!existingBooking;
+  // The total on screen is the server's once there is one. If the listing's
+  // prices have changed since, today's night-by-night lines no longer add up
+  // to it, so they are left out rather than shown beside a different total.
+  const linesAddUp = !breakdown || breakdown.total === totalPrice;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
@@ -587,11 +614,11 @@ export default function CheckoutPage() {
                       type="date"
                       value={bookingDetails.checkIn ? format(bookingDetails.checkIn, 'yyyy-MM-dd') : ''}
                       onChange={(e) => {
-                        setBookingDetails(prev => ({ ...prev, checkIn: e.target.value ? new Date(e.target.value) : null }));
+                        setBookingDetails(prev => ({ ...prev, checkIn: dayOf(e.target.value) }));
                       }}
                       min={format(new Date(), 'yyyy-MM-dd')}
                       className="mt-1"
-                      disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
+                      disabled={formLocked}
                     />
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Check-in from 2:00 PM</p>
                   </div>
@@ -601,11 +628,11 @@ export default function CheckoutPage() {
                       type="date"
                       value={bookingDetails.checkOut ? format(bookingDetails.checkOut, 'yyyy-MM-dd') : ''}
                       onChange={(e) => {
-                        setBookingDetails(prev => ({ ...prev, checkOut: e.target.value ? new Date(e.target.value) : null }));
+                        setBookingDetails(prev => ({ ...prev, checkOut: dayOf(e.target.value) }));
                       }}
-                      min={bookingDetails.checkIn ? format(new Date(new Date(bookingDetails.checkIn).getTime() + 24 * 60 * 60 * 1000), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')}
+                      min={format(bookingDetails.checkIn ? addDays(bookingDetails.checkIn, 1) : new Date(), 'yyyy-MM-dd')}
                       className="mt-1"
-                      disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
+                      disabled={formLocked}
                     />
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Check-out by 12:00 PM</p>
                   </div>
@@ -624,12 +651,7 @@ export default function CheckoutPage() {
                             type="radio"
                             name="booking_option"
                             checked={option?.bedrooms === o.bedrooms}
-                            onChange={() => {
-                              setBedrooms(o.bedrooms);
-                              if (o.max_guests > 0 && Number(bookingDetails.guests) > o.max_guests) {
-                                setBookingDetails(prev => ({ ...prev, guests: o.max_guests }));
-                              }
-                            }}
+                            onChange={() => setBedrooms(o.bedrooms)}
                           />
                           <span className="flex-1 text-sm text-slate-800 dark:text-slate-100">
                             {o.bedrooms} bedroom{o.bedrooms > 1 ? 's' : ''}
@@ -668,7 +690,7 @@ export default function CheckoutPage() {
                     value={bookingDetails.specialRequests}
                     onChange={(e) => setBookingDetails(prev => ({ ...prev, specialRequests: e.target.value }))}
                     className="mt-1"
-                    disabled={isCheckingAvailability || availabilityStatus === 'pending' || existingBooking}
+                    disabled={formLocked}
                   />
                 </div>
 
@@ -740,19 +762,27 @@ export default function CheckoutPage() {
                     {options.length > 1 && option && (
                       <p className="text-sm font-medium text-slate-900 dark:text-white">{option.bedrooms}-bedroom option</p>
                     )}
-                    {(breakdown?.lines || []).map((line) => (
-                      <div key={line.from} className="flex justify-between gap-3">
-                        <span>
-                          ₦{line.rate.toLocaleString()} × {line.nights} night{line.nights > 1 ? 's' : ''}
-                          {line.season && <span className="block text-xs text-amber-700 dark:text-amber-300">{line.season}</span>}
-                        </span>
-                        <span>₦{(line.rate * line.nights).toLocaleString()}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between">
-                      <span>Service Fee (2.5%)</span>
-                      <span>₦{(breakdown?.serviceFee ?? 0).toLocaleString()}</span>
-                    </div>
+                    {linesAddUp ? (
+                      <>
+                        {(breakdown?.lines || []).map((line) => (
+                          <div key={line.from} className="flex justify-between gap-3">
+                            <span>
+                              ₦{line.rate.toLocaleString()} × {line.nights} night{line.nights > 1 ? 's' : ''}
+                              {line.season && <span className="block text-xs text-amber-700 dark:text-amber-300">{line.season}</span>}
+                            </span>
+                            <span>₦{(line.rate * line.nights).toLocaleString()}</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between">
+                          <span>Service Fee (2.5%)</span>
+                          <span>₦{(breakdown?.serviceFee ?? 0).toLocaleString()}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        {nights} night{nights > 1 ? 's' : ''}, at the price confirmed for this booking. The listing's prices have changed since.
+                      </p>
+                    )}
                     {property.caution_fee > 0 && (
                       <div className="flex justify-between items-center py-2 px-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">
                         <div className="flex items-center gap-2">

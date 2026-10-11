@@ -381,7 +381,16 @@ export default function AdminPage() {
   };
 
   // NEW: Handle Edit Property (updated to use new state names and structure)
-  const handleEditProperty = (property) => {
+  const handleEditProperty = async (listed) => {
+    // The list on screen can be minutes old. Edit what is saved NOW: a save
+    // from a stale copy would put back the options and seasonal rates it
+    // remembered and drop any added since.
+    let property = listed;
+    try {
+      property = await base44.entities.Property.get(listed.id);
+    } catch (error) {
+      console.warn('Could not re-read the property; editing the listed copy:', error);
+    }
     setEditingPropertyId(property.id); // Set the ID of the property being edited
     setPropertyFormData({
       title: property.title || '',
@@ -921,6 +930,8 @@ export default function AdminPage() {
                         </p>
                         <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">
                           {req.check_in} → {req.check_out} · {req.guests} guest{req.guests === 1 ? '' : 's'}
+                          {req.bedrooms_booked > 0 && <>{' · '}<span className="font-medium">{req.bedrooms_booked}-bedroom option</span></>}
+                          {req.total_price > 0 && <>{' · '}₦{Number(req.total_price).toLocaleString()}</>}
                         </p>
                         {req.has_conflict && req.conflict_details && (
                           <p className="text-xs text-red-700 dark:text-red-300 mt-2">

@@ -30,7 +30,8 @@ const amenityOptions = [
   { id: "workspace", label: "Workspace" },
 ];
 
-const PRICE_MAX = 500000;
+// The top of the slider means "and above": Search sends no upper limit for it.
+export const PRICE_MAX = 500000;
 const PRICE_MIN = 0;
 
 const DEFAULT_FILTERS = Object.freeze({
@@ -75,7 +76,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
   const anyActive = priceActive || typeActive || amenitiesActive;
 
   const priceLabel = priceActive
-    ? `₦${filters.minPrice.toLocaleString()} – ₦${filters.maxPrice.toLocaleString()}`
+    ? `₦${filters.minPrice.toLocaleString()} – ₦${filters.maxPrice.toLocaleString()}${filters.maxPrice >= PRICE_MAX ? '+' : ''}`
     : 'Price';
 
   const typeLabel = typeActive
@@ -126,7 +127,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
           />
           <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mt-3 font-medium">
             <span>₦{filters.minPrice.toLocaleString()}</span>
-            <span>₦{filters.maxPrice.toLocaleString()}</span>
+            <span>₦{filters.maxPrice.toLocaleString()}{filters.maxPrice >= PRICE_MAX ? '+' : ''}</span>
           </div>
           {priceActive && (
             <button
@@ -233,7 +234,7 @@ export default function PropertyFiltersBar({ filters, onFiltersChange }) {
               />
               <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mt-3 font-medium">
                 <span>₦{filters.minPrice.toLocaleString()}</span>
-                <span>₦{filters.maxPrice.toLocaleString()}</span>
+                <span>₦{filters.maxPrice.toLocaleString()}{filters.maxPrice >= PRICE_MAX ? '+' : ''}</span>
               </div>
             </div>
 
