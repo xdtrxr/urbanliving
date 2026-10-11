@@ -146,6 +146,41 @@ export function stayPricingFromProperty(property) {
   };
 }
 
+// Changing the answer to "can guests book part of this property?" keeps what
+// was typed. The whole place is taken to be the largest option, so its price,
+// guest limit and seasonal prices follow the admin across, in both directions.
+// Only the answer on screen can be edited, so what is on screen wins.
+export function switchStayPricingMode(form, mode) {
+  if (mode === form.option_mode) return form;
+  const rows = form.booking_options || [];
+  const largestOf = (list) => list.reduce((a, b) => (Number(b.bedrooms) > Number(a.bedrooms) ? b : a), list[0]);
+  const keyOf = (row) => String(Math.round(Number(row.bedrooms)));
+  const carry = (from, to) => (form.seasonal_rates || []).map((s) => {
+    const prices = s.prices || {};
+    return prices[from] ? { ...s, prices: { ...prices, [to]: prices[from] } } : s;
+  });
+  if (mode === 'multiple') {
+    let booking_options = rows;
+    if (booking_options.length === 0) {
+      const whole = Math.round(Number(form.bedrooms));
+      const blank = (bedrooms) => ({ bedrooms: String(bedrooms), price_per_night: '', max_guests: '' });
+      booking_options = whole >= 2
+        ? [blank(1), { bedrooms: String(whole), price_per_night: String(form.price_per_night || ''), max_guests: String(form.max_guests || '') }]
+        : [blank(1), blank(2)];
+    }
+    return { ...form, option_mode: 'multiple', booking_options, seasonal_rates: carry('full', keyOf(largestOf(booking_options))) };
+  }
+  if (rows.length === 0) return { ...form, option_mode: 'full' };
+  const largest = largestOf(rows);
+  return {
+    ...form,
+    option_mode: 'full',
+    price_per_night: largest.price_per_night || form.price_per_night,
+    max_guests: largest.max_guests || form.max_guests,
+    seasonal_rates: carry(keyOf(largest), 'full'),
+  };
+}
+
 // Turns the form into the fields to save, or { error } naming what to fix.
 // price_per_night and max_guests stay on the row as the cheapest price and
 // the largest guest count, so lists and filters that read them keep working.

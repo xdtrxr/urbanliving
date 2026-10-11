@@ -155,6 +155,8 @@ export default function PropertyPage() {
             .map((s) => ({ ...s, rate: nightlyRate({ seasonal_rates: [s] }, option, s.start_date) }))
             .filter((s) => s.rate.season)
         : [];
+    // Carried on every link out of here, so the choice survives the trip.
+    const optionQuery = options.length > 1 && option ? `&bedrooms=${option.bedrooms}` : '';
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
@@ -402,7 +404,7 @@ export default function PropertyPage() {
                                     )}
 
                                     {!isAuthenticated ? (
-                                        <Link to={`/login?from_url=${encodeURIComponent(window.location.href)}`}>
+                                        <Link to={`/login?from_url=${encodeURIComponent(window.location.origin + createPageUrl(`Property?id=${property.id}${optionQuery}`))}`}>
                                             <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                                                 Sign in to Book
                                             </Button>
@@ -425,7 +427,7 @@ export default function PropertyPage() {
                                             </Button>
                                         </Link>
                                     ) : (
-                                        <Link to={createPageUrl(`Checkout?property=${property.id}${options.length > 1 && option ? `&bedrooms=${option.bedrooms}` : ''}`)}>
+                                        <Link to={createPageUrl(`Checkout?property=${property.id}${optionQuery}`)}>
                                             <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                                                 Book Now
                                             </Button>

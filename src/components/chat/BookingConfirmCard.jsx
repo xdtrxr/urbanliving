@@ -8,6 +8,7 @@ import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import LeadOtpGate from './LeadOtpGate';
 import { bookingOptionsOf, priceStay } from '@/config/stays';
+import { invokeFn } from '@/lib/invokeFn';
 
 const SERVICE_FEE_RATE = 0.025;
 
@@ -84,7 +85,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
     setStatus('submitting');
     setError(null);
     try {
-      const result = await base44.functions.invoke('checkAvailabilityWebhook', {
+      const result = await invokeFn('checkAvailabilityWebhook', {
         property_id: booking.property_id,
         property_title: booking.property_title,
         property_location: booking.property_location,
@@ -94,11 +95,10 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
         bedrooms: options.length > 1 && option ? option.bedrooms : undefined,
         special_requests: booking.special_requests || '',
       });
-      const data = result?.data;
-      if (!data?.success) throw new Error(data?.error || 'Failed to submit booking');
-      setBookingId(data.data.booking_id);
+      if (!result.ok) throw new Error(result.error || 'Failed to submit booking');
+      setBookingId(result.data.booking_id);
       setStatus('submitted');
-      onSubmitted?.(data.data);
+      onSubmitted?.(result.data);
     } catch (err) {
       console.error('Booking submission failed:', err);
       setError(err.message || 'Something went wrong');

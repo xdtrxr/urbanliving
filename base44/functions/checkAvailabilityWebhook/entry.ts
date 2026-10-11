@@ -270,6 +270,17 @@ function priceStay(property: any, checkIn: string, checkOut: string, bedrooms: u
     return { nights, option, lines, subtotal, serviceFee, cautionFee, total: subtotal + serviceFee + cautionFee };
 }
 
+// entity.get() REJECTS for an id that is not there; it does not return null.
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -321,7 +332,7 @@ Deno.serve(async (req) => {
         }
 
         // ── Price from the Property row ─────────────────────────────────
-        const property = await base44.asServiceRole.entities.Property.get(property_id);
+        const property = await getOrNull(base44.asServiceRole.entities.Property, property_id);
         if (!property) {
             return new Response(JSON.stringify({ success: false, error: 'Property not found' }), { status: 404, headers });
         }
@@ -334,11 +345,17 @@ Deno.serve(async (req) => {
         // to the nights that fall inside it.
         const options = bookingOptionsOf(property);
         const pricing = priceStay(property, check_in, check_out, bedrooms);
-        if (!pricing && options.length > 1) {
+        if (!pricing && options.length > 0) {
+            // The row has a price, so what failed is the choice of option:
+            // none was named where there are several, or the one named is
+            // not (or is no longer) one this property offers.
+            const named = Math.round(Number(bedrooms)) >= 1;
             return new Response(JSON.stringify({
                 success: false,
-                error: 'Choose how many bedrooms you want to book.',
-                code: 'OPTION_REQUIRED',
+                error: named
+                    ? 'That booking option is not available for this property. Please reload the page and choose again.'
+                    : 'Choose how many bedrooms you want to book.',
+                code: named ? 'OPTION_UNAVAILABLE' : 'OPTION_REQUIRED',
             }), { status: 400, headers });
         }
         const limit = pricing ? pricing.option.max_guests : 0;
@@ -426,9 +443,9 @@ Deno.serve(async (req) => {
             // Server-computed. The only figure the payment verifiers ever
             // compare Paystack's amount against.
             total_price,
-            // Which option was booked. The whole property is still blocked
-            // for these dates whichever option it is.
-            bedrooms_booked: pricing.option.bedrooms || undefined,
+            // Which option was booked, when the property has several. The
+            // whole property is still blocked for these dates whichever it is.
+            bedrooms_booked: options.length > 1 ? pricing.option.bedrooms : undefined,
             special_requests: special_requests || '',
             status: 'pending',
             payment_status: 'unpaid',

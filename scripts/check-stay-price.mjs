@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { estimateStayPrice, nightsBetween, SERVICE_FEE_RATE, bookingOptionsOf, priceStay, optionForSearch, stayPricingFromProperty, stayPricingToSave } from '../src/config/stays.js';
+import { estimateStayPrice, nightsBetween, SERVICE_FEE_RATE, bookingOptionsOf, priceStay, optionForSearch, stayPricingFromProperty, stayPricingToSave, switchStayPricingMode } from '../src/config/stays.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = path.join(ROOT, 'base44/functions/checkAvailabilityWebhook/entry.ts');
@@ -45,9 +45,9 @@ console.log('\n— source guards —');
 check('server never destructures total_price from the body',
   /total_price,?\s*\n\s*special_requests,?\s*\n\s*\} = body/.test(SRC), false);
 check('server stores the computed total on the Booking',
-  /const total_price = pricing\.total;/.test(SRC) && /\n\s*total_price,\n[\s\S]{0,300}bedrooms_booked: pricing\.option\.bedrooms/.test(SRC), true);
+  /const total_price = pricing\.total;/.test(SRC) && /\n\s*total_price,\n[\s\S]{0,300}bedrooms_booked: options\.length > 1 \? pricing\.option\.bedrooms/.test(SRC), true);
 check('the price comes from priceStay, night by night', /const pricing = priceStay\(property, check_in, check_out, bedrooms\);/.test(SRC), true);
-check('server prices from the Property row', /entities\.Property\.get\(property_id\)/.test(SRC), true);
+check('server prices from the Property row', /const property = await getOrNull\(base44\.asServiceRole\.entities\.Property, property_id\);/.test(SRC), true);
 check('server-side fee rate matches the client constant',
   new RegExp(`SERVICE_FEE_RATE = ${SERVICE_FEE_RATE};`).test(SRC), true);
 
@@ -147,6 +147,18 @@ check('back-to-back seasons are fine', stayPricingToSave({ ...whole, seasonal_ra
 check('a season that ends before it starts is refused', /ends before/.test(stayPricingToSave({ ...whole, seasonal_rates: [season('A', '2027-03-29', '2027-03-26')] }).error), true);
 check('a season with no price is refused', /at least one price/.test(stayPricingToSave({ ...whole, seasonal_rates: [{ ...season('A', '2027-03-26', '2027-03-29'), prices: {} }] }).error), true);
 check('one option is not "multiple"', /at least two/.test(stayPricingToSave({ ...whole, option_mode: 'multiple', booking_options: [{ bedrooms: '1', price_per_night: '1', max_guests: '2' }] }).error), true);
+// Changing between "full property only" and "multiple options" in the form.
+const toFull = switchStayPricingMode({ ...form, price_per_night: '100000', max_guests: '8', bedrooms: '4' }, 'full');
+check('multiple to full: the whole place takes the LARGEST option\'s price, not the cheapest', [toFull.price_per_night, toFull.max_guests], ['210000', '8']);
+check('multiple to full: the season price of the largest option carries across', toFull.seasonal_rates.map((s) => s.prices.full), ['350000']);
+check('multiple to full keeps the option rows for a change of mind', toFull.booking_options.length, 4);
+const toMany = switchStayPricingMode({ ...whole, bedrooms: '3', seasonal_rates: [season('Easter', '2027-03-26', '2027-03-29')] }, 'multiple');
+check('full to multiple: the whole place becomes the largest option', toMany.booking_options, [{ bedrooms: '1', price_per_night: '', max_guests: '' }, { bedrooms: '3', price_per_night: '60000', max_guests: '4' }]);
+check('full to multiple: its season price follows it', toMany.seasonal_rates[0].prices['3'], '90000');
+check('full to multiple with no bedroom count yet starts from two blank rows', switchStayPricingMode({ ...whole, bedrooms: '' }, 'multiple').booking_options.map((o) => o.bedrooms), ['1', '2']);
+check('choosing the mode already chosen changes nothing', switchStayPricingMode(whole, 'full'), whole);
+check('there and back again saves what was there', stayPricingToSave(switchStayPricingMode(switchStayPricingMode({ ...form, bedrooms: '4' }, 'full'), 'multiple')).fields, saved.fields);
+
 check('the same bedroom count twice is refused', /listed twice/.test(stayPricingToSave({ ...whole, option_mode: 'multiple', booking_options: [{ bedrooms: '1', price_per_night: '1', max_guests: '2' }, { bedrooms: '1', price_per_night: '2', max_guests: '2' }] }).error), true);
 
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, Trash2, CalendarRange } from 'lucide-react';
+import { switchStayPricingMode } from '@/config/stays';
 
 // The booking options and seasonal rates part of the property form. It only
 // edits the form state; stayPricingToSave (config/stays.js) checks it on save.
@@ -11,13 +12,7 @@ export default function StayPricingFields({ form, setForm }) {
   const options = form.booking_options || [];
   const seasons = form.seasonal_rates || [];
 
-  const setMode = (mode) => setForm((prev) => ({
-    ...prev,
-    option_mode: mode,
-    booking_options: mode === 'multiple' && (prev.booking_options || []).length === 0
-      ? [{ bedrooms: '1', price_per_night: '', max_guests: '' }, { bedrooms: '2', price_per_night: '', max_guests: '' }]
-      : prev.booking_options || [],
-  }));
+  const setMode = (mode) => setForm((prev) => switchStayPricingMode(prev, mode));
   const setOption = (i, patch) => setForm((prev) => ({
     ...prev,
     booking_options: prev.booking_options.map((o, n) => (n === i ? { ...o, ...patch } : o)),
@@ -69,20 +64,20 @@ export default function StayPricingFields({ form, setForm }) {
             One row per way of booking. A booking of any option blocks the whole property for those dates.
           </p>
           {options.map((o, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end">
+            <div key={i} className="grid grid-cols-2 sm:grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end pb-3 border-b border-slate-100 dark:border-slate-800 sm:pb-0 sm:border-0">
               <div>
                 <Label htmlFor={`opt_bedrooms_${i}`}>Bedrooms</Label>
                 <Input id={`opt_bedrooms_${i}`} type="number" min="1" value={o.bedrooms} onChange={(e) => setOption(i, { bedrooms: e.target.value })} className="mt-1" />
               </div>
               <div>
-                <Label htmlFor={`opt_price_${i}`}>Price per night (NGN)</Label>
+                <Label htmlFor={`opt_price_${i}`}>Price per night (₦)</Label>
                 <Input id={`opt_price_${i}`} type="number" min="0" value={o.price_per_night} onChange={(e) => setOption(i, { price_per_night: e.target.value })} placeholder="e.g., 160000" className="mt-1" />
               </div>
               <div>
                 <Label htmlFor={`opt_guests_${i}`}>Max guests</Label>
                 <Input id={`opt_guests_${i}`} type="number" min="1" value={o.max_guests} onChange={(e) => setOption(i, { max_guests: e.target.value })} placeholder="e.g., 4" className="mt-1" />
               </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => removeOption(i)} aria-label="Remove this option">
+              <Button type="button" variant="ghost" size="icon" className="justify-self-end" onClick={() => removeOption(i)} aria-label="Remove this option">
                 <Trash2 className="w-4 h-4 text-red-600" />
               </Button>
             </div>

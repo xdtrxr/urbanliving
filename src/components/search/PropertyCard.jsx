@@ -177,7 +177,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
                 </Button>
               </Link>
             ) : (
-              <Link to={`/login?from_url=${encodeURIComponent(window.location.origin + createPageUrl(`Property?id=${property.id}`))}`}>
+              <Link to={`/login?from_url=${encodeURIComponent(window.location.origin + createPageUrl(`Property?id=${property.id}${optionQuery}`))}`}>
                 <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg dark:from-white dark:to-slate-200 dark:text-slate-900">
                   Sign in to Book
                 </Button>

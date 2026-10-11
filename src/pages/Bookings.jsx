@@ -165,7 +165,10 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                   <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
                     <p className="text-slate-500 dark:text-slate-400">Guests</p>
-                    <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}{booking.bedrooms_booked > 0 ? `, ${booking.bedrooms_booked} bedroom${booking.bedrooms_booked > 1 ? 's' : ''}` : ''}</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
+                    {booking.bedrooms_booked > 0 && (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">{booking.bedrooms_booked}-bedroom option</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -341,7 +344,10 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                   <Users className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                   <div>
                     <p className="text-slate-500 dark:text-slate-400">Guests</p>
-                    <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}{booking.bedrooms_booked > 0 ? `, ${booking.bedrooms_booked} bedroom${booking.bedrooms_booked > 1 ? 's' : ''}` : ''}</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{booking.guests}</p>
+                    {booking.bedrooms_booked > 0 && (
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">{booking.bedrooms_booked}-bedroom option</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

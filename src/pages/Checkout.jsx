@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Calendar, MapPin, Users, ArrowLeft, CheckCircle, Loader2, Clock, AlertCircle, Shield, Phone } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { bookingOptionsOf, priceStay } from '@/config/stays';
+import { invokeFn } from '@/lib/invokeFn';
 import { createPageUrl } from '@/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -140,7 +141,7 @@ export default function CheckoutPage() {
     try {
       // One backend call handles: conflict detection, AvailabilityRequest creation,
       // pending Booking creation, and admin Telegram notification.
-      const result = await base44.functions.invoke('checkAvailabilityWebhook', {
+      const result = await invokeFn('checkAvailabilityWebhook', {
         property_id: property.id,
         property_title: property.title,
         property_location: property.location,
@@ -151,14 +152,21 @@ export default function CheckoutPage() {
         special_requests: bookingDetails.specialRequests || '',
       });
 
-      const data = result?.data;
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to submit availability check');
+      if (!result.ok) {
+        // A refusal (4xx) carries a sentence written for the guest. If it is
+        // about the option or the guest limit, the listing has changed since
+        // this page loaded: fetch it again so the choices on screen are real.
+        if (['OPTION_UNAVAILABLE', 'OPTION_REQUIRED', 'TOO_MANY_GUESTS'].includes(result.code)) {
+          base44.entities.Property.get(property.id).then(setProperty).catch(() => {});
+        }
+        const refusal = new Error(result.error || 'Failed to submit availability check');
+        refusal.refused = result.status >= 400 && result.status < 500;
+        throw refusal;
       }
 
-      const { request_id, booking_id, has_conflict } = data.data;
+      const { request_id, booking_id, has_conflict } = result.data;
       // Show the figure the server actually stored, not this page's estimate.
-      if (Number(data.data.total_price) > 0) setTotalPrice(Number(data.data.total_price));
+      if (Number(result.data.total_price) > 0) setTotalPrice(Number(result.data.total_price));
       console.log('✅ Availability check submitted', { request_id, booking_id, has_conflict });
 
       setCreatedBookingId(booking_id);
@@ -185,7 +193,7 @@ export default function CheckoutPage() {
       setIsCheckingAvailability(false);
       setShowSuccessMessage(false);
       
-      alert(`Error: ${error.message}\n\nPlease try again or contact support if the problem persists.`);
+      alert(error.refused ? error.message : `Error: ${error.message}\n\nPlease try again or contact support if the problem persists.`);
     }
   };
 
