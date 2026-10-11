@@ -121,7 +121,7 @@ Payment confirmed — your booking at "${property.title}" is locked in. 🎉
 📍 Address: ${fullAddress || 'See app for details'}${mapsBlock}
 🗓 Check-in: ${booking.check_in}
 🗓 Check-out: ${booking.check_out}
-👥 Guests: ${Number(booking.guests) || 1}
+👥 Guests: ${Number(booking.guests) || 1}${Number(booking.bedrooms_booked) > 0 ? `\n🛏 Booked: the ${Number(booking.bedrooms_booked)}-bedroom option` : ''}
 
 📞 Call your host on arrival: ${hostName || 'Host'} — ${hostPhone}
 
@@ -172,6 +172,7 @@ async function notifyAdmin(opts: {
     propertyId: string;
     amountNGN: number;
     reference: string;
+    optionLabel?: string;
 }) {
     const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
     const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
@@ -181,6 +182,7 @@ async function notifyAdmin(opts: {
         `• Guest: ${opts.guestName} (${opts.guestEmail})\n` +
         `• Mobile: ${opts.guestPhone || 'Not provided'}\n` +
         `• Property: \`${opts.propertyId}\`\n` +
+        (opts.optionLabel ? `• Booked: ${opts.optionLabel}\n` : '') +
         `• Amount: ₦${opts.amountNGN.toLocaleString()}\n` +
         `• Paystack ref: \`${opts.reference}\``;
     try {
@@ -305,6 +307,7 @@ Deno.serve(async (req) => {
             propertyId: booking.property_id,
             amountNGN: Number(booking.total_price) || 0,
             reference,
+            optionLabel: Number(booking.bedrooms_booked) > 0 ? `${Number(booking.bedrooms_booked)}-bedroom option` : '',
         });
 
         // Push the guest — booking is locked in. Same tag as the verify

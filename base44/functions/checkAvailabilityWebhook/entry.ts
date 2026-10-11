@@ -250,7 +250,10 @@ function bookingOptionsOf(property: any) {
 function nightlyRate(property: any, option: any, night: string) {
     const seasons = property && Array.isArray(property.seasonal_rates) ? property.seasonal_rates : [];
     for (const s of seasons) {
-        if (!s || !(String(s.start_date) <= night && night <= String(s.end_date))) continue;
+        // Both days, or the season does not count; a date-time is read as its day.
+        const from = String((s && s.start_date) || '').slice(0, 10);
+        const to = String((s && s.end_date) || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || !(from <= night && night <= to)) continue;
         const listed = (Array.isArray(s.prices) ? s.prices : []).filter((p) => !!p && Math.round(Number(p.price_per_night)) > 0);
         const row = listed.find((p) => Math.round(Number(p.bedrooms)) === option.bedrooms)
             || (option.whole ? listed.reduce((a, b) => (Number(b.price_per_night) > Number(a.price_per_night) ? b : a), listed[0]) : undefined);
@@ -283,6 +286,15 @@ function priceStay(property: any, checkIn: string, checkOut: string, bedrooms: u
     const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
     const cautionFee = Number(property && property.caution_fee) || 0;
     return { nights, option, lines, subtotal, serviceFee, cautionFee, total: subtotal + serviceFee + cautionFee };
+}
+
+// A real calendar day written YYYY-MM-DD. The engine's own date parsing also
+// takes '2026-12', a year of six digits, and 29 February in a year that has
+// none (it rolls that into March); none of those is a day a guest picked.
+function isCalendarDay(value: unknown): boolean {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const day = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === value;
 }
 
 // entity.get() REJECTS for an id that is not there; it does not return null.
@@ -337,6 +349,9 @@ Deno.serve(async (req) => {
             }), { status: 400, headers });
         }
 
+        if (!isCalendarDay(check_in) || !isCalendarDay(check_out)) {
+            return new Response(JSON.stringify({ success: false, error: 'Invalid date format' }), { status: 400, headers });
+        }
         const checkInDate = new Date(check_in);
         const checkOutDate = new Date(check_out);
         if (Number.isNaN(checkInDate.getTime()) || Number.isNaN(checkOutDate.getTime())) {

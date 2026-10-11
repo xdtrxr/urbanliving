@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, Trash2, CalendarRange } from 'lucide-react';
-import { newOptionRow, switchStayPricingMode } from '@/config/stays';
+import { newOptionRow, removeOptionRow, switchStayPricingMode } from '@/config/stays';
 
 // The booking options and seasonal rates part of the property form. It only
 // edits the form state; stayPricingToSave (config/stays.js) checks it on save.
@@ -20,9 +20,9 @@ export default function StayPricingFields({ form, setForm }) {
   const addOption = () => setForm((prev) => {
     const rows = prev.booking_options || [];
     const used = rows.map((o) => Number(o.bedrooms) || 0);
-    return { ...prev, booking_options: [...rows, newOptionRow(rows, { bedrooms: String(Math.max(0, ...used) + 1) })] };
+    return { ...prev, booking_options: [...rows, newOptionRow(rows, { bedrooms: String(Math.max(0, ...used) + 1) }, prev.seasonal_rates)] };
   });
-  const removeOption = (i) => setForm((prev) => ({ ...prev, booking_options: prev.booking_options.filter((_, n) => n !== i) }));
+  const removeOption = (i) => setForm((prev) => removeOptionRow(prev, i));
 
   const setSeason = (i, patch) => setForm((prev) => ({
     ...prev,

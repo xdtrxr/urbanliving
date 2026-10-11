@@ -1033,25 +1033,26 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
     await saveMessageToHistory(searchMessage.content, 'user', 'booking_search', details);
 
     try {
-      await searchProperties({
+      // The list THIS search returned. `found` read here is the
+      // state of the render that created this handler: the search before.
+      const found = (await searchProperties({
         location,
         guests,
         bedrooms: bedrooms === 'any' ? null : bedrooms,
         propertyType: propertyType === 'any' ? null : propertyType,
         limit: 20
-      });
+      })) || [];
 
-      // Another setTimeout workaround to ensure `searchedProperties` is updated before using it
-      setTimeout(() => {
-        if (searchedProperties.length > 0) {
+      {
+        if (found.length > 0) {
           const resultsMessage = {
             id: Date.now() + 1,
             role: 'assistant',
             type: 'search_results',
             content: {
-              results: searchedProperties,
+              results: found,
               searchCriteria: details,
-              message: `I found ${searchedProperties.length} properties matching your criteria in ${location}. Here are some great options for you:`
+              message: `I found ${found.length} properties matching your criteria in ${location}. Here are some great options for you:`
             }
           };
           setMessages(prev => [...prev, resultsMessage]);
@@ -1066,7 +1067,7 @@ NOTE: The frontend recomputes nights, subtotal, 2.5% service fee, and total from
           saveMessageToHistory(noResultsMessage.content, 'assistant', 'no_results', details);
         }
         setIsLoading(false);
-      }, 100);
+      }
 
     } catch (error) {
       console.error('Error searching properties:', error);

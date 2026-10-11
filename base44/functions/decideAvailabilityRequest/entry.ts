@@ -16,6 +16,7 @@ async function emailGuestDecision(opts: {
     bookingId?: string | null;
     checkIn: string;
     checkOut: string;
+    optionLabel?: string;
     action: 'approve' | 'reject';
 }) {
     if (!opts.guestEmail) return;
@@ -28,7 +29,7 @@ async function emailGuestDecision(opts: {
 
     const body = opts.action === 'approve'
         ? `Hi ${opts.guestName || 'there'},\n\n` +
-          `Great news — your availability request for "${opts.propertyTitle}" (${opts.checkIn} → ${opts.checkOut}) has been approved.\n\n` +
+          `Great news — your availability request for "${opts.propertyTitle}" (${opts.checkIn} → ${opts.checkOut}${opts.optionLabel ? `, ${opts.optionLabel}` : ''}) has been approved.\n\n` +
           `🔖 Status: APPROVED — AWAITING PAYMENT\n` +
           `👉 View & pay: ${bookingHref}\n` +
           (propertyHref ? `🏠 Property page: ${propertyHref}\n` : '') +
@@ -181,6 +182,7 @@ Deno.serve(async (req) => {
             bookingId: matchedBookingId,
             checkIn: request.check_in,
             checkOut: request.check_out,
+            optionLabel: Number(request.bedrooms_booked) > 0 ? `the ${Number(request.bedrooms_booked)}-bedroom option` : '',
             action,
         });
 

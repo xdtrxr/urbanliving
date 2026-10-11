@@ -25,7 +25,7 @@ const currencySymbols = {
   CAD: '₦'
 };
 
-export default function PropertyCard({ property, onToggleWishlist, isWishlisted = false }) {
+export default function PropertyCard({ property, onToggleWishlist, isWishlisted = false, stay }) {
   const { isAuthenticated } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -33,8 +33,14 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
   const currencySymbol = currencySymbols[property.currency] || '₦';
   // A search attaches the option(s) it matched (propertyService); the card
   // then shows that option's price and guests, and links straight to it.
-  const shown = cardPricing(property);
-  const optionQuery = shown.openOn ? `&bedrooms=${shown.openOn}` : '';
+  // `stay` is what the guest picked on the search page (dates as YYYY-MM-DD
+  // and a party size). It travels with every link out of the card, so nobody
+  // types it again at checkout, and it decides whether a seasonal rate is
+  // worth mentioning here.
+  const DAY = /^\d{4}-\d{2}-\d{2}$/;
+  const dated = !!stay && DAY.test(stay.checkIn || '') && DAY.test(stay.checkOut || '') && stay.checkIn < stay.checkOut;
+  const shown = cardPricing(property, dated ? stay : null, new Date().toISOString().slice(0, 10));
+  const optionQuery = `${shown.openOn ? `&bedrooms=${shown.openOn}` : ''}${dated ? `&checkIn=${stay.checkIn}&checkOut=${stay.checkOut}` : ''}${stay && Number(stay.guests) > 0 ? `&guests=${Number(stay.guests)}` : ''}`;
 
   // The parent owns the wishlist write — this card just emits the click.
   // (Previously both this card AND the parent wrote to user.wishlist on every
@@ -113,6 +119,12 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
                 {shown.note}
               </p>
             )}
+            {shown.season && (
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                {shown.season.name}: {currencySymbol}{shown.season.rate.toLocaleString()}/night
+                {shown.season.of > 0 ? ` for ${shown.season.nights} of your ${shown.season.of} night${shown.season.of === 1 ? '' : 's'}` : ' at the moment'}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-between">
@@ -157,20 +169,20 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
           </div>
 
           <div className="space-y-2">
-            <Link to={createPageUrl(`Property?id=${property.id}${optionQuery}`)}>
+            <Link to={`${createPageUrl('Property')}?id=${property.id}${optionQuery}`}>
               <Button variant="outline" className="w-full rounded-xl transition-all duration-300 hover:shadow-lg">
                 View Details
               </Button>
             </Link>
             
             {isAuthenticated ? (
-              <Link to={createPageUrl(`Checkout?property=${property.id}${optionQuery}`)}>
+              <Link to={`${createPageUrl('Checkout')}?property=${property.id}${optionQuery}`}>
                 <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg dark:from-white dark:to-slate-200 dark:text-slate-900">
                   Book Now
                 </Button>
               </Link>
             ) : (
-              <Link to={`/login?from_url=${encodeURIComponent(window.location.origin + createPageUrl(`Property?id=${property.id}${optionQuery}`))}`}>
+              <Link to={`/login?from_url=${encodeURIComponent(`${window.location.origin}${createPageUrl('Property')}?id=${property.id}${optionQuery}`)}`}>
                 <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg dark:from-white dark:to-slate-200 dark:text-slate-900">
                   Sign in to Book
                 </Button>

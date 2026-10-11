@@ -36,15 +36,19 @@ export function usePropertySearch() {
           mcpMessage: result.mcpMessage,
           errors: result.errors
         });
-      } else {
-        setError('Failed to fetch properties');
-        setProperties([]);
+        // Also handed back: a caller that needs THIS search's list cannot
+        // read it from `properties`, which is still the last render's.
+        return result.properties || [];
       }
+      setError('Failed to fetch properties');
+      setProperties([]);
+      return [];
 
     } catch (err) {
       console.error('[usePropertySearch] Error:', err);
       setError(err.message || 'An unexpected error occurred');
       setProperties([]);
+      return [];
     } finally {
       setIsLoading(false);
     }

@@ -2,44 +2,25 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Calendar, MapPin, Users, CheckCircle2, Loader2, AlertCircle, Shield } from 'lucide-react';
-import { differenceInCalendarDays, format, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import LeadOtpGate from './LeadOtpGate';
-import { bookingOptionsOf, priceStay } from '@/config/stays';
+import { bookingOptionsOf, nightsBetween, priceStay } from '@/config/stays';
 import { invokeFn } from '@/lib/invokeFn';
 
-const SERVICE_FEE_RATE = 0.025;
+// The assistant is told to write YYYY-MM-DD and usually does. A date-time is
+// read as its day, so the request and the price are for the day on the card.
+const dayText = (value) => String(value || '').slice(0, 10);
 
-// Computes canonical pricing from the property + dates so we don't trust LLM
-// math. Falls back to whatever booking values Nova sent if property isn't
-// available yet. Mirrors the breakdown shown on the Checkout page.
+// The price of the stay: the same night-by-night sum the server charges,
+// worked out from the listing itself. The assistant's own figures are never
+// shown as a price, so there is none until the listing has loaded.
 function computeBreakdown(booking, property, option) {
-  // The same night-by-night sum the server charges, once the property is in.
-  const priced = property && option ? priceStay(property, booking?.check_in, booking?.check_out, option.bedrooms) : null;
-  if (priced) {
-    return { nightly: option.price_per_night, nights: priced.nights, subtotal: priced.subtotal, serviceFee: priced.serviceFee, caution: priced.cautionFee, total: priced.total, lines: priced.lines };
-  }
-  const nightlyFromProp = Number(property?.price_per_night);
-  const nightly = Number.isFinite(nightlyFromProp) && nightlyFromProp > 0
-    ? nightlyFromProp
-    : Number(booking?.price_per_night) || 0;
-  const cautionFromProp = Number(property?.caution_fee);
-  const caution = Number.isFinite(cautionFromProp)
-    ? cautionFromProp
-    : Number(booking?.caution_fee) || 0;
-  let nights = 0;
-  try {
-    const ci = parseISO(booking.check_in);
-    const co = parseISO(booking.check_out);
-    nights = Math.max(differenceInCalendarDays(co, ci), 0);
-  } catch { /* noop */ }
-  if (!nights && booking?.nights) nights = Number(booking.nights) || 0;
-  const subtotal = nightly * nights;
-  const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
-  const total = subtotal + serviceFee + caution;
-  return { nightly, nights, subtotal, serviceFee, caution, total };
+  const priced = property && option ? priceStay(property, dayText(booking?.check_in), dayText(booking?.check_out), option.bedrooms) : null;
+  if (!priced) return null;
+  return { serviceFee: priced.serviceFee, caution: priced.cautionFee, total: priced.total, lines: priced.lines };
 }
 
 export default function BookingConfirmCard({ booking, lead, isAuthenticated, onAuthenticated, onSubmitted }) {
@@ -48,22 +29,29 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
   const [bookingId, setBookingId] = useState(null);
   const [property, setProperty] = useState(null);
 
-  // Pull canonical price_per_night + caution_fee from the property record so
-  // the breakdown reflects what the user will actually pay — never the LLM's
-  // arithmetic.
+  // The listing itself: its options, prices and guest limits. Until it has
+  // loaded there is nothing to price from and nothing to choose between, so
+  // the request cannot be sent. A request sent blind names no option, and the
+  // server would price it as the whole place whatever the card said.
+  const [loadState, setLoadState] = useState('loading'); // loading | ready | failed
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    setLoadState('loading');
     (async () => {
-      if (!booking?.property_id) return;
       try {
+        if (!booking?.property_id) throw new Error('the assistant named no property');
         const p = await base44.entities.Property.get(booking.property_id);
-        if (!cancelled) setProperty(p);
+        if (cancelled) return;
+        setProperty(p);
+        setLoadState('ready');
       } catch (err) {
-        console.warn('BookingConfirmCard: property fetch failed (fail-open):', err);
+        console.warn('BookingConfirmCard: could not load the listing:', err);
+        if (!cancelled) setLoadState('failed');
       }
     })();
     return () => { cancelled = true; };
-  }, [booking?.property_id]);
+  }, [booking?.property_id, attempt]);
 
   // Which booking option, as a bedroom count. An option too small for the
   // party cannot be picked. Until the guest picks, it is the one the chat
@@ -85,6 +73,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
   const partyTooBig = options.length > 0 && fitting.length === 0;
   const largest = options.reduce((most, o) => Math.max(most, o.max_guests), 0);
   const breakdown = useMemo(() => computeBreakdown(booking, property, option), [booking, property, option]);
+  const nights = nightsBetween(dayText(booking?.check_in), dayText(booking?.check_out));
 
   const safeDate = (s) => {
     try { return format(parseISO(s), 'EEE, MMM d, yyyy'); }
@@ -99,8 +88,8 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
         property_id: booking.property_id,
         property_title: booking.property_title,
         property_location: booking.property_location,
-        check_in: booking.check_in,
-        check_out: booking.check_out,
+        check_in: dayText(booking.check_in),
+        check_out: dayText(booking.check_out),
         guests: booking.guests,
         bedrooms: options.length > 1 && option ? option.bedrooms : undefined,
         special_requests: booking.special_requests || '',
@@ -201,7 +190,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
           </div>
           <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
             <p className="text-slate-500 dark:text-slate-400 text-xs mb-1">Nights</p>
-            <p className="font-semibold text-slate-900 dark:text-white">{breakdown.nights || ''}</p>
+            <p className="font-semibold text-slate-900 dark:text-white">{nights || ''}</p>
           </div>
         </div>
 
@@ -239,13 +228,30 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
           </div>
         )}
 
-        {mustChoose ? (
+        {loadState === 'loading' ? (
+          <p className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 mb-4 text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> Working out the price...
+          </p>
+        ) : loadState === 'failed' ? (
+          <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mb-4">
+            <p className="text-sm text-red-800 dark:text-red-200 mb-2">
+              This listing could not be loaded, so there is no price to show and the request cannot be sent yet.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>
+          </div>
+        ) : mustChoose ? (
           <p className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 mb-4 text-sm text-slate-600 dark:text-slate-300">
             Choose how many bedrooms you want to see the price.
           </p>
+        ) : !breakdown ? (
+          !partyTooBig && (
+            <p className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 mb-4 text-sm text-slate-600 dark:text-slate-300">
+              This stay cannot be priced here. Open the listing to check its dates and price.
+            </p>
+          )
         ) : (
         <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 mb-4 space-y-2 text-sm">
-          {breakdown.lines ? breakdown.lines.map((line) => (
+          {breakdown.lines.map((line) => (
             <div key={line.from} className="flex justify-between gap-3 text-slate-700 dark:text-slate-200">
               <span>
                 ₦{line.rate.toLocaleString()} × {line.nights} {line.nights === 1 ? 'night' : 'nights'}
@@ -253,12 +259,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
               </span>
               <span className="font-medium">₦{(line.rate * line.nights).toLocaleString()}</span>
             </div>
-          )) : (
-          <div className="flex justify-between text-slate-700 dark:text-slate-200">
-            <span>₦{breakdown.nightly.toLocaleString()} × {breakdown.nights} {breakdown.nights === 1 ? 'night' : 'nights'}</span>
-            <span className="font-medium">₦{breakdown.subtotal.toLocaleString()}</span>
-          </div>
-          )}
+          ))}
           <div className="flex justify-between text-slate-700 dark:text-slate-200">
             <span>Service fee (2.5%)</span>
             <span className="font-medium">₦{breakdown.serviceFee.toLocaleString()}</span>
@@ -302,7 +303,7 @@ export default function BookingConfirmCard({ booking, lead, isAuthenticated, onA
 
         <Button
           onClick={handleSubmit}
-          disabled={status === 'submitting' || mustChoose || partyTooBig}
+          disabled={status === 'submitting' || loadState !== 'ready' || mustChoose || partyTooBig || !breakdown}
           className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-6 text-base font-semibold dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
         >
           {status === 'submitting' ? (

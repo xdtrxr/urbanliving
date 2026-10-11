@@ -234,6 +234,7 @@ Deno.serve(async (req) => {
                 bookingId: matchedBookingId,
                 checkIn: request.check_in,
                 checkOut: request.check_out,
+                optionLabel: Number(request.bedrooms_booked) > 0 ? `the ${Number(request.bedrooms_booked)}-bedroom option` : '',
                 action,
             });
         } catch (emailErr) {
@@ -285,6 +286,7 @@ interface GuestDecisionParams {
     bookingId?: string | null;
     checkIn: string;
     checkOut: string;
+    optionLabel?: string;
     action: 'approve' | 'reject';
 }
 
@@ -303,7 +305,7 @@ async function emailGuestDecision(p: GuestDecisionParams) {
 
     const body = p.action === 'approve'
         ? `Hi ${p.guestName || 'there'},\n\n` +
-          `Great news — your availability request for "${p.propertyTitle}" (${p.checkIn} → ${p.checkOut}) has been approved.\n\n` +
+          `Great news — your availability request for "${p.propertyTitle}" (${p.checkIn} → ${p.checkOut}${p.optionLabel ? `, ${p.optionLabel}` : ''}) has been approved.\n\n` +
           `🔖 Status: APPROVED — AWAITING PAYMENT\n` +
           `👉 View & pay: ${bookingHref}\n` +
           (propertyHref ? `🏠 Property page: ${propertyHref}\n` : '') +
@@ -670,7 +672,7 @@ Payment confirmed — your booking at "${property.title}" is locked in. 🎉
 📍 Address: ${fullAddress || 'See app for details'}${mapsBlock}
 🗓 Check-in: ${booking.check_in}
 🗓 Check-out: ${booking.check_out}
-👥 Guests: ${Number(booking.guests) || 1}
+👥 Guests: ${Number(booking.guests) || 1}${Number(booking.bedrooms_booked) > 0 ? `\n🛏 Booked: the ${Number(booking.bedrooms_booked)}-bedroom option` : ''}
 
 📞 Call your host on arrival: ${hostName || 'Host'} — ${hostPhone}
 

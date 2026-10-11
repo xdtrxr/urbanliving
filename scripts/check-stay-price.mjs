@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { estimateStayPrice, nightsBetween, SERVICE_FEE_RATE, MAX_STAY_NIGHTS, bookingOptionsOf, priceStay, optionsForSearch, cardPricing, pricingForAssistant, stayPricingFromProperty, stayPricingToSave, switchStayPricingMode } from '../src/config/stays.js';
+import { estimateStayPrice, nightsBetween, SERVICE_FEE_RATE, MAX_STAY_NIGHTS, bookingOptionsOf, priceStay, optionsForSearch, cardPricing, pricingForAssistant, stayPricingFromProperty, stayPricingToSave, switchStayPricingMode, newOptionRow, removeOptionRow } from '../src/config/stays.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = path.join(ROOT, 'base44/functions/checkAvailabilityWebhook/entry.ts');
@@ -140,6 +140,27 @@ both('and still applies after the row is given a different bedroom count', [{ ..
 both('a season priced for another option does not leak onto an option it does not list', [duplex, '2026-12-20', '2026-12-21', 3], (p) => p.subtotal === 190000);
 both('one option needs no choosing', [{ bedrooms: 3, price_per_night: 90000 }, '2026-12-01', '2026-12-02', undefined], (p) => p.subtotal === 90000);
 both('no nights, no price', [duplex, '2026-12-03', '2026-12-03', 4], (p) => p === null);
+both('the fee on an odd subtotal is rounded to the naira, the same way in both copies', [{ bedrooms: 1, price_per_night: 33333, max_guests: 2 }, '2026-10-01', '2026-10-03', undefined], (p) => p.subtotal === 66666 && p.serviceFee === 1667);
+const loose = (seasonal_rates) => ({ bedrooms: 4, price_per_night: 210000, max_guests: 8, seasonal_rates });
+both('a season saved as date-times is read by its days', [loose([{ name: 'P', start_date: '2026-12-15T00:00:00.000Z', end_date: '2027-01-10T00:00:00.000Z', prices: [{ bedrooms: 4, price_per_night: 350000 }] }]), '2026-12-14', '2026-12-16', undefined], (p) => p.subtotal === 210000 + 350000);
+both('a season with no end date never applies, rather than applying for ever', [loose([{ name: 'P', start_date: '2026-12-15', prices: [{ bedrooms: 4, price_per_night: 350000 }] }]), '2027-06-01', '2027-06-03', undefined], (p) => p.subtotal === 420000);
+both('nor does one with no start date', [loose([{ name: 'P', start_date: '', end_date: '2027-01-10', prices: [{ bedrooms: 4, price_per_night: 350000 }] }]), '2026-06-01', '2026-06-03', undefined], (p) => p.subtotal === 420000);
+
+// The four pricing functions are COPIES. Same text in both files once the
+// TypeScript annotations, the export keyword and the indentation are gone, so
+// a change to one that is not made to the other fails here by name.
+const CLIENT_SRC = fs.readFileSync(path.join(ROOT, 'src/config/stays.js'), 'utf8');
+const textOf = (src, name) => {
+  const m = src.match(new RegExp(`function ${name}\\([^)]*\\)[^{]*\\{[\\s\\S]*?\\n\\}`));
+  if (!m) return `no ${name}`;
+  return m[0]
+    .replace(/\(([^)]*)\)[^{]*\{/, (all, args) => `(${args.replace(/:\s*\w+/g, '')}) {`)
+    .split('\n').map((line) => line.trim()).filter(Boolean).join('\n');
+};
+for (const name of ['nightsBetween', 'bookingOptionsOf', 'nightlyRate', 'priceStay']) {
+  check(`${name}: the server copy is the client copy, word for word`, textOf(SRC, name) === textOf(CLIENT_SRC, name), true);
+}
+check('the server counts a day as the client does', /const DAY_MS = 24 \* 60 \* 60 \* 1000;/.test(SRC) && /const DAY_MS = 24 \* 60 \* 60 \* 1000;/.test(CLIENT_SRC), true);
 both('a year is the longest stay that can be priced', [duplex, '2026-01-01', '2027-01-01', 3], (p) => p.nights === 365 && p.subtotal === 365 * 190000);
 both('a stay longer than that cannot be priced, however long', [duplex, '2026-01-01', '2027-01-02', 3], (p) => p === null);
 both('absurd dates do not walk the calendar', [duplex, '0001-01-01', '9999-12-31', 3], (p) => p === null);
@@ -172,6 +193,12 @@ const card = (p) => { const c = cardPricing(p); return [c.price, c.from, c.note,
 check('card, whole-place listing: its price, no note', card({ bedrooms: 2, price_per_night: 80000, max_guests: 4 }), [80000, false, '', 4, 2, 0]);
 check('card, several options and no search: a "from" price and the list', card(duplex), [100000, true, 'Book 1, 2, 3 or 4 bedrooms', 8, 4, 0]);
 check('card, a bedroom search: the matched option', card({ ...duplex, matched_option: { bedrooms: 2, price_per_night: 160000, max_guests: 4 } }), [160000, false, '2 bedroom option available, up to 4 guests', 4, 2, 2]);
+const seasonOn = (p, stay, today) => { const c = cardPricing(p, stay, today); return c.season && [c.season.name, c.season.rate, c.season.nights, c.season.of]; };
+check('card, searched dates inside a season: the seasonal rate for the option on the card', seasonOn({ ...duplex, matched_option: { bedrooms: 4, price_per_night: 210000, max_guests: 8 } }, { checkIn: '2026-12-20', checkOut: '2026-12-27' }), ['December Peak', 350000, 7, 7]);
+check('card, dates that only touch the season: how many of the nights', seasonOn({ ...duplex, matched_option: { bedrooms: 4, price_per_night: 210000, max_guests: 8 } }, { checkIn: '2026-12-13', checkOut: '2026-12-17' }), ['December Peak', 350000, 2, 4]);
+check('card, an option the season does not price: nothing to say', seasonOn({ ...duplex, matched_option: { bedrooms: 3, price_per_night: 190000, max_guests: 6 } }, { checkIn: '2026-12-20', checkOut: '2026-12-27' }), null);
+check('card, no dates but a season is running today', seasonOn(wholeHouse, null, '2026-12-25'), ['Peak', 350000, 0, 0]);
+check('card, no dates and no season today', seasonOn(wholeHouse, null, '2026-10-11'), null);
 check('card, a party of 6: priced from the smallest option that fits them, and opens on it', card({ ...duplex, fitting_options: optionsForSearch(duplex, { guests: 6 }) }), [190000, true, 'Book 3 or 4 bedrooms', 8, 4, 3]);
 
 const form = stayPricingFromProperty(duplex);
@@ -204,6 +231,13 @@ check('there and back again saves what was there', stayPricingToSave(switchStayP
 // Retyping an option's bedroom count: the seasonal price typed for that row stays with it.
 const retyped = { ...form, bedrooms: '5', booking_options: form.booking_options.map((o) => (o.bedrooms === '2' ? { ...o, bedrooms: '5' } : o)) };
 check('an option retyped from 2 to 5 bedrooms keeps its seasonal price', stayPricingToSave(retyped).fields.seasonal_rates[0].prices, [{ bedrooms: 4, price_per_night: 350000 }, { bedrooms: 5, price_per_night: 220000 }]);
+// Remove the 4-bedroom row, then add a 5-bedroom one: it must not come up
+// holding the December price typed for the 4-bedroom.
+const without4 = removeOptionRow(form, 3);
+check('removing an option takes its seasonal prices with it', without4.seasonal_rates.map((s) => Object.keys(s.prices).sort()), [['o2']]);
+const readded = { ...without4, bedrooms: '5', booking_options: [...without4.booking_options, newOptionRow(without4.booking_options, { bedrooms: '5', price_per_night: '300000', max_guests: '10' }, without4.seasonal_rates)] };
+check('a row added afterwards starts with no seasonal price of its own', stayPricingToSave(readded).fields.seasonal_rates[0].prices, [{ bedrooms: 2, price_per_night: 220000 }]);
+check('an id still held by a season is not handed to a new row', newOptionRow([{ id: 'o1' }], {}, [{ prices: { o2: '1', o3: '1' } }]).id, 'o4');
 check('each option row has an id of its own', new Set(form.booking_options.map((o) => o.id)).size, 4);
 check('a season with a mistyped year is refused', /Check the year/.test(stayPricingToSave({ ...whole, seasonal_rates: [season('A', '0026-03-26', '0026-03-29')] }).error), true);
 

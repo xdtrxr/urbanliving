@@ -83,6 +83,11 @@ driver told when no pay is on record (hardening)|Confirm it with the team before
 ride payment refusals shown (hardening)|This ride has already been paid for.
 report photos from the file store only (hardening)|[a-f0-9]{24}\/files\/
 id upload via function|submitBookingId
+stay booking options|How many bedrooms do you want?
+seasonal rates in the admin form|Add seasonal rate
+search lands on an option|bedroom option available
+stay refusals shown to the guest|OPTION_UNAVAILABLE
+assistant told about options|BOOKING OPTIONS AND SEASONAL RATES
 points via function|awardPoints
 MARKERS
 
@@ -108,7 +113,7 @@ done
 echo; echo "── functions reachable (500=exists+needs auth, 404=NOT DEPLOYED) ──"
 for f in checkRideAvailability decideRideBooking assignRideDriver getRideDriverContact \
          startRidePayment verifyRidePayment cancelRideBooking getRideBookings \
-         cancelBooking startStayPayment submitBookingId awardPoints \
+         cancelBooking startStayPayment submitBookingId awardPoints checkAvailabilityWebhook \
          getDriverProfile getDriverRides getDriverWallet getDriverEarningsAdmin \
          settleDriverEarning completeRide createRideReport resolveRideReport \
          createWithdrawalRequest processWithdrawal; do

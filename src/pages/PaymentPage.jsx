@@ -216,6 +216,9 @@ export default function PaymentPage() {
         guest_email: stay.guest_email || guestEmail || user.email,
         approved_at: stay.approved_at || null,
         payment_started_at: stay.payment_started_at || null,
+        check_in: stay.check_in || '',
+        check_out: stay.check_out || '',
+        bedrooms_booked: Number(stay.bedrooms_booked) || 0,
       };
 
       dlog('✅ Booking data set:', bookingInfo);
@@ -604,6 +607,14 @@ export default function PaymentPage() {
                   <span className="text-slate-600 dark:text-slate-300 text-sm">Property:</span>
                   <span className="font-semibold text-slate-900 dark:text-white sm:text-right break-words min-w-0">{bookingData.property_title}</span>
                 </div>
+                {bookingData.check_in && bookingData.check_out && (
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                    <span className="text-slate-600 dark:text-slate-300 text-sm">Stay:</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-200 sm:text-right min-w-0">
+                      {bookingData.check_in} to {bookingData.check_out}{bookingData.bedrooms_booked > 0 ? `, ${bookingData.bedrooms_booked}-bedroom option` : ''}
+                    </span>
+                  </div>
+                )}
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
                   <span className="text-slate-600 dark:text-slate-300 text-sm">Guest Email:</span>
                   <span className="font-medium text-slate-700 dark:text-slate-200 sm:text-right break-all min-w-0">{bookingData.guest_email}</span>

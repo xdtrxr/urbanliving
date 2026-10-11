@@ -92,6 +92,10 @@ Deno.serve(async (req) => {
             data: {
                 booking_id,
                 total_price: Number(booking.total_price) || 0,
+                // What is being paid for, restated on the payment page.
+                check_in: booking.check_in,
+                check_out: booking.check_out,
+                bedrooms_booked: Number(booking.bedrooms_booked) || 0,
                 property_title: propertyTitle,
                 guest_email: booking.guest_email,
                 approved_at: booking.approved_at,

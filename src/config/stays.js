@@ -87,7 +87,10 @@ export function bookingOptionsOf(property) {
 export function nightlyRate(property, option, night) {
   const seasons = property && Array.isArray(property.seasonal_rates) ? property.seasonal_rates : [];
   for (const s of seasons) {
-    if (!s || !(String(s.start_date) <= night && night <= String(s.end_date))) continue;
+    // Both days, or the season does not count; a date-time is read as its day.
+    const from = String((s && s.start_date) || '').slice(0, 10);
+    const to = String((s && s.end_date) || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || !(from <= night && night <= to)) continue;
     const listed = (Array.isArray(s.prices) ? s.prices : []).filter((p) => !!p && Math.round(Number(p.price_per_night)) > 0);
     const row = listed.find((p) => Math.round(Number(p.bedrooms)) === option.bedrooms)
       || (option.whole ? listed.reduce((a, b) => (Number(b.price_per_night) > Number(a.price_per_night) ? b : a), listed[0]) : undefined);
@@ -144,26 +147,46 @@ export function optionsForSearch(property, wanted) {
 // attaches `matched_option` when it landed on one option and
 // `fitting_options` when several fit; without either the card describes
 // every option. `openOn` is the bedroom count to open the property page on.
-export function cardPricing(property) {
+// `stay` is the dates picked on the search page, if any ({ checkIn, checkOut }
+// as YYYY-MM-DD) and `today` the current day: when a seasonal rate touches
+// those nights, or is running today, `season` says so, because the nightly
+// price on the card is the normal one.
+export function cardPricing(property, stay, today) {
+  const shown = cardOption(property);
+  const o = shown.option;
+  let season = null;
+  if (o && stay && nightsBetween(stay.checkIn, stay.checkOut) >= 1) {
+    const priced = priceStay(property, stay.checkIn, stay.checkOut, o.bedrooms >= 1 ? o.bedrooms : undefined);
+    const line = priced && priced.lines.find((l) => l.season);
+    if (line) season = { name: line.season, rate: line.rate, nights: line.nights, of: priced.nights };
+  } else if (o && today) {
+    const now = nightlyRate(property, o, today);
+    if (now.season) season = { name: now.season, rate: now.rate, nights: 0, of: 0 };
+  }
+  return { ...shown, season };
+}
+
+function cardOption(property) {
   const options = bookingOptionsOf(property);
   if (options.length <= 1) {
     return {
-      price: options[0] ? options[0].price_per_night : 0, from: false, matched: false, note: '', openOn: 0,
+      price: options[0] ? options[0].price_per_night : 0, from: false, matched: false, note: '', openOn: 0, option: options[0] || null,
       guests: property && property.max_guests, bedrooms: (property && property.bedrooms) || 1,
     };
   }
   const matched = property.matched_option || null;
   if (matched) {
     return {
-      price: matched.price_per_night, from: false, matched: true, openOn: matched.bedrooms,
+      price: matched.price_per_night, from: false, matched: true, openOn: matched.bedrooms, option: options.find((x) => x.bedrooms === matched.bedrooms) || matched,
       note: `${matched.bedrooms} bedroom option available${matched.max_guests > 0 ? `, up to ${matched.max_guests} guests` : ''}`,
       guests: matched.max_guests > 0 ? matched.max_guests : property.max_guests, bedrooms: matched.bedrooms,
     };
   }
   const fits = Array.isArray(property.fitting_options) && property.fitting_options.length > 0 ? property.fitting_options : options;
   const list = fits.map((o) => o.bedrooms).join(', ').replace(/, (\d+)$/, ' or $1');
+  const cheapest = fits.reduce((a, b) => (b.price_per_night < a.price_per_night ? b : a), fits[0]);
   return {
-    price: Math.min(...fits.map((o) => o.price_per_night)), from: true, matched: false,
+    price: cheapest.price_per_night, from: true, matched: false, option: cheapest,
     note: `Book ${list} bedrooms`, openOn: fits.length < options.length ? fits[0].bedrooms : 0,
     guests: Math.max(...fits.map((o) => o.max_guests)) || property.max_guests, bedrooms: property.bedrooms || fits[fits.length - 1].bedrooms,
   };
@@ -182,10 +205,10 @@ export function pricingForAssistant(property, today) {
   }
   const seasons = [];
   for (const s of property && Array.isArray(property.seasonal_rates) ? property.seasonal_rates : []) {
-    if (!s || !(String(s.end_date) >= String(today || ''))) continue;
+    if (!s || !(String(s.end_date || '').slice(0, 10) >= String(today || ''))) continue;
     const season = { name: String(s.name || 'Seasonal rate'), start_date: s.start_date, end_date: s.end_date };
     const priced = options
-      .map((o) => ({ bedrooms: o.bedrooms, price_per_night: nightlyRate({ seasonal_rates: [s] }, o, String(s.start_date)) }))
+      .map((o) => ({ bedrooms: o.bedrooms, price_per_night: nightlyRate({ seasonal_rates: [s] }, o, String(s.start_date || '').slice(0, 10)) }))
       .filter((p) => p.price_per_night.season)
       .map((p) => ({ bedrooms: p.bedrooms, price_per_night: p.price_per_night.rate }));
     if (priced.length === 0) continue;
@@ -208,12 +231,34 @@ export const EMPTY_STAY_PRICING = { option_mode: 'full', booking_options: [], se
 
 const rowId = (row, index) => (row && row.id) || `row${index}`;
 
-// A new option row for the form, with an id no other row has.
-export function newOptionRow(rows, fields) {
-  const used = (rows || []).map((r, i) => rowId(r, i));
-  let n = used.length + 1;
-  while (used.includes(`o${n}`)) n += 1;
+// A new option row for the form, with an id that no row has and that no
+// season still holds a price under.
+export function newOptionRow(rows, fields, seasons) {
+  const used = new Set((rows || []).map((r, i) => rowId(r, i)));
+  for (const s of seasons || []) {
+    for (const key of Object.keys((s && s.prices) || {})) used.add(key);
+  }
+  let n = 1;
+  while (used.has(`o${n}`)) n += 1;
   return { id: `o${n}`, bedrooms: '', price_per_night: '', max_guests: '', ...(fields || {}) };
+}
+
+// Takes an option row out of the form, and its seasonal prices with it, so a
+// row added later cannot come up holding a price typed for another option.
+export function removeOptionRow(form, index) {
+  const rows = form.booking_options || [];
+  if (!rows[index]) return form;
+  const gone = rowId(rows[index], index);
+  return {
+    ...form,
+    booking_options: rows.filter((_, n) => n !== index),
+    seasonal_rates: (form.seasonal_rates || []).map((s) => {
+      if (!s || !s.prices || !(gone in s.prices)) return s;
+      const prices = { ...s.prices };
+      delete prices[gone];
+      return { ...s, prices };
+    }),
+  };
 }
 
 export function stayPricingFromProperty(property) {
@@ -262,10 +307,10 @@ export function switchStayPricingMode(form, mode) {
     let booking_options = rows;
     if (booking_options.length === 0) {
       const whole = Math.round(Number(form.bedrooms));
-      const first = newOptionRow([], { bedrooms: '1' });
+      const first = newOptionRow([], { bedrooms: '1' }, form.seasonal_rates);
       booking_options = whole >= 2
-        ? [first, newOptionRow([first], { bedrooms: String(whole), price_per_night: String(form.price_per_night || ''), max_guests: String(form.max_guests || '') })]
-        : [first, newOptionRow([first], { bedrooms: '2' })];
+        ? [first, newOptionRow([first], { bedrooms: String(whole), price_per_night: String(form.price_per_night || ''), max_guests: String(form.max_guests || '') }, form.seasonal_rates)]
+        : [first, newOptionRow([first], { bedrooms: '2' }, form.seasonal_rates)];
     }
     return { ...form, option_mode: 'multiple', booking_options, seasonal_rates: carry('full', keyOf(booking_options, largestOf(booking_options))) };
   }

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { usePropertySearch } from "../components/hooks/usePropertySearch";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
+import { format } from "date-fns";
 
 import SearchHeader from "../components/search/SearchHeader";
 import PropertyCard from "../components/search/PropertyCard";
@@ -250,6 +251,7 @@ export default function SearchPage() {
                   >
                     <PropertyCard
                       property={property}
+                      stay={{ checkIn: checkIn ? format(checkIn, 'yyyy-MM-dd') : '', checkOut: checkOut ? format(checkOut, 'yyyy-MM-dd') : '', guests }}
                       onToggleWishlist={toggleWishlist}
                       isWishlisted={wishlist.includes(property.id)}
                     />

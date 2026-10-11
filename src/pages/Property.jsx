@@ -151,12 +151,16 @@ export default function PropertyPage() {
     // Seasonal rates still to come that change the chosen option's price.
     const seasons = option
         ? (property.seasonal_rates || [])
-            .filter((s) => s && s.end_date >= today)
-            .map((s) => ({ ...s, rate: nightlyRate({ seasonal_rates: [s] }, option, s.start_date) }))
+            .filter((s) => s && String(s.end_date || '').slice(0, 10) >= today)
+            .map((s) => ({ ...s, rate: nightlyRate({ seasonal_rates: [s] }, option, String(s.start_date || '').slice(0, 10)) }))
             .filter((s) => s.rate.season)
         : [];
-    // Carried on every link out of here, so the choice survives the trip.
-    const optionQuery = options.length > 1 && option ? `&bedrooms=${option.bedrooms}` : '';
+    // Carried on every link out of here, so the choice survives the trip, and
+    // so do the dates and party size picked on the search page.
+    const arrived = new URLSearchParams(location.search);
+    const DAY = /^\d{4}-\d{2}-\d{2}$/;
+    const stayQuery = `${DAY.test(arrived.get('checkIn') || '') && DAY.test(arrived.get('checkOut') || '') ? `&checkIn=${arrived.get('checkIn')}&checkOut=${arrived.get('checkOut')}` : ''}${Number(arrived.get('guests')) > 0 ? `&guests=${Math.round(Number(arrived.get('guests')))}` : ''}`;
+    const optionQuery = `${options.length > 1 && option ? `&bedrooms=${option.bedrooms}` : ''}${stayQuery}`;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
@@ -365,7 +369,7 @@ export default function PropertyPage() {
                                                         </label>
                                                     ))}
                                                 </div>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Whichever you choose, the property is yours alone for the stay.</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Whichever you choose, no one else can book this property for your dates.</p>
                                             </fieldset>
                                         )}
 
@@ -404,7 +408,7 @@ export default function PropertyPage() {
                                     )}
 
                                     {!isAuthenticated ? (
-                                        <Link to={`/login?from_url=${encodeURIComponent(window.location.origin + createPageUrl(`Property?id=${property.id}${optionQuery}`))}`}>
+                                        <Link to={`/login?from_url=${encodeURIComponent(`${window.location.origin}${createPageUrl('Property')}?id=${property.id}${optionQuery}`)}`}>
                                             <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                                                 Sign in to Book
                                             </Button>
@@ -427,7 +431,7 @@ export default function PropertyPage() {
                                             </Button>
                                         </Link>
                                     ) : (
-                                        <Link to={createPageUrl(`Checkout?property=${property.id}${optionQuery}`)}>
+                                        <Link to={`${createPageUrl('Checkout')}?property=${property.id}${optionQuery}`}>
                                             <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                                                 Book Now
                                             </Button>
