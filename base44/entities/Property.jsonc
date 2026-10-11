@@ -63,9 +63,16 @@
       "items": {
         "type": "object",
         "properties": {
-          "bedrooms": { "type": "number" },
-          "price_per_night": { "type": "number", "description": "NGN" },
-          "max_guests": { "type": "number" }
+          "bedrooms": {
+            "type": "number"
+          },
+          "price_per_night": {
+            "type": "number",
+            "description": "NGN"
+          },
+          "max_guests": {
+            "type": "number"
+          }
         }
       }
     },
@@ -75,16 +82,29 @@
       "items": {
         "type": "object",
         "properties": {
-          "name": { "type": "string" },
-          "start_date": { "type": "string", "format": "date" },
-          "end_date": { "type": "string", "format": "date" },
+          "name": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
           "prices": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "bedrooms": { "type": "number" },
-                "price_per_night": { "type": "number", "description": "NGN" }
+                "bedrooms": {
+                  "type": "number"
+                },
+                "price_per_night": {
+                  "type": "number",
+                  "description": "NGN"
+                }
               }
             }
           }
