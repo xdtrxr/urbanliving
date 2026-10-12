@@ -6,15 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Car, Snowflake, MapPin, ChevronRight, Zap } from 'lucide-react';
 import { categoryLabel, effectiveCategory, isElectric } from '@/config/rides';
 
-// Small chip used inside the card body — keeps amenity / feature pills tight.
-// `tone` sets the colours; the default is the quiet slate of an amenity.
-const CHIP_TONES = {
-  plain: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200',
-  electric: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200',
-};
-function Chip({ icon: Icon, tone = 'plain', children }) {
+// Small chip used inside the card body — keeps amenity / feature pills tight
+function Chip({ icon: Icon, children }) {
   return (
-    <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium ${CHIP_TONES[tone]}`}>
+    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-medium">
       {Icon && <Icon className="w-3 h-3" />}
       {children}
     </div>
@@ -60,6 +55,15 @@ export default function VehicleCard({ vehicle, propertyBookingId }) {
               {vehicle.city}
             </Badge>
           )}
+          {/* An electric car can be in any category, so this is where a
+              guest learns it. On the photo, not among the chips: a fourth
+              chip wraps and leaves the card taller than its neighbours. */}
+          {isElectric(vehicle) && (
+            <Badge className="absolute bottom-3 left-3 bg-emerald-600 text-white border-0 text-[11px] font-semibold shadow-sm">
+              <Zap className="w-3 h-3 mr-1" />
+              Electric
+            </Badge>
+          )}
         </div>
 
         <CardContent className="p-4">
@@ -73,9 +77,6 @@ export default function VehicleCard({ vehicle, propertyBookingId }) {
           </div>
 
           <div className="flex flex-wrap gap-1.5 mb-4">
-            {/* First in the row and the only coloured chip: an electric car
-                can be in any category, so this is where a guest learns it. */}
-            {isElectric(vehicle) && <Chip icon={Zap} tone="electric">Electric</Chip>}
             {vehicle.max_passengers > 0 && (
               <Chip icon={Users}>{vehicle.max_passengers} seats</Chip>
             )}

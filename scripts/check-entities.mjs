@@ -282,12 +282,22 @@ check('a petrol car\'s fuel policy reads as before',
 check('an electric car\'s reads as charging',
   same(['fuel_included', 'guest_pays_fuel', 'fuel_capped'].map((fuel_policy) => policy({ fuel_policy, powertrain: 'electric' }).label),
     ['Charging included', 'Guest pays for charging', 'Charging capped daily']));
+const cap = (15000).toLocaleString(); // "15,000" here; whatever this machine writes
 check('a daily cap is spelled out, in fuel or in charging',
   same([policy({ fuel_policy: 'fuel_capped', fuel_cap_daily_ngn: 15000 }).detail, policy({ fuel_policy: 'fuel_capped', fuel_cap_daily_ngn: 15000, powertrain: 'electric' }).detail],
-    ['Fuel covered up to ₦15,000/day. Anything over is on you.', 'Charging covered up to ₦15,000/day. Anything over is on you.']));
+    [`Fuel covered up to ₦${cap}/day. Anything over is on you.`, `Charging covered up to ₦${cap}/day. Anything over is on you.`]));
 check('no cap figure, no cap sentence; no policy, nothing at all',
   same([policy({ fuel_policy: 'fuel_capped' }).detail, policy({ fuel_policy: 'fuel_included', fuel_cap_daily_ngn: 15000 }).detail, policy({}), policy(null)], ['', '', null, null]));
 check('a hybrid still burns fuel', policy({ fuel_policy: 'fuel_included', powertrain: 'hybrid' }).label === 'Fuel included');
+// The helpers above are only worth pinning if the screens use them.
+const source = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
+check('the vehicle card shows the badge from isElectric', /\{isElectric\(vehicle\) && \(/.test(source('src/components/ride/VehicleCard.jsx')));
+check('the vehicle page shows the badge from isElectric and the fuel line from energyPolicy',
+  /\{isElectric\(vehicle\) && \(/.test(source('src/pages/Vehicle.jsx')) && /const energy = energyPolicy\(vehicle\);/.test(source('src/pages/Vehicle.jsx')) && /\{energy\.label\}/.test(source('src/pages/Vehicle.jsx')));
+check('the admin form sends a powertrain only once one is chosen, never an empty one',
+  /\.\.\.\(form\.powertrain \? \{ powertrain: form\.powertrain \} : \{\}\)/.test(source('src/components/admin/VehiclesAdmin.jsx'))
+  && !/^\s*powertrain: form\.powertrain,/m.test(source('src/components/admin/VehiclesAdmin.jsx')));
+check('Vehicle.powertrain is a string', powertrain?.type === 'string');
 
 // ── Result ─────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
