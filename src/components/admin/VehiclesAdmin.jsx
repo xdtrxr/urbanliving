@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import {
   CITIES, CATEGORIES, categoryLabel, effectiveCategory, needsCategoryMigration,
-  extraHourRate, markupFor,
+  extraHourRate, markupFor, POWERTRAINS, powertrainLabel, energyPolicy,
 } from '@/config/rides';
 
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
@@ -51,6 +51,7 @@ const EMPTY_FORM = {
   name: '',
   brand: '',
   category: 'comfort',
+  powertrain: '',        // '' = not set yet; the admin picks one of POWERTRAINS
   model_year: new Date().getFullYear(),
   description: '',
   images: [],          // array of base44 file_urls, populated by UploadFile
@@ -199,6 +200,7 @@ export default function VehiclesAdmin() {
       name: vehicle.name || '',
       brand: vehicle.brand || '',
       category: vehicle.category || 'comfort',
+      powertrain: vehicle.powertrain || '',
       model_year: vehicle.model_year || new Date().getFullYear(),
       description: vehicle.description || '',
       images: Array.isArray(vehicle.images) ? vehicle.images : [],
@@ -244,6 +246,9 @@ export default function VehiclesAdmin() {
         name: form.name.trim(),
         brand: form.brand.trim(),
         category: form.category,
+        // Sent only once the admin has picked one, so a car nobody has
+        // classified stays unset rather than being guessed as petrol.
+        ...(form.powertrain ? { powertrain: form.powertrain } : {}),
         model_year: Number(form.model_year) || null,
         description: form.description.trim() || undefined,
         images,
@@ -503,6 +508,23 @@ export default function VehiclesAdmin() {
                       </Select>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         Guests browse by this after picking a city.
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="v-powertrain">Powertrain</Label>
+                      <Select
+                        value={form.powertrain}
+                        onValueChange={(value) => setForm({ ...form, powertrain: value })}
+                      >
+                        <SelectTrigger id="v-powertrain"><SelectValue placeholder="Not set" /></SelectTrigger>
+                        <SelectContent>
+                          {POWERTRAINS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        What drives the car, whatever its category. Electric cars get an Electric badge.
                       </p>
                     </div>
                     <div>
@@ -936,7 +958,7 @@ export default function VehiclesAdmin() {
                 {/* FUEL */}
                 <section>
                   <h3 className="font-semibold text-slate-900 dark:text-white mb-3 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Fuel policy
+                    {form.powertrain === 'electric' ? 'Charging policy' : 'Fuel policy'}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -944,13 +966,18 @@ export default function VehiclesAdmin() {
                       <Select value={form.fuel_policy} onValueChange={(v) => setForm({ ...form, fuel_policy: v })}>
                         <SelectTrigger id="v-fuel"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {FUEL_POLICIES.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+                          {FUEL_POLICIES.map((f) => (
+                            <SelectItem key={f.value} value={f.value}>
+                              {/* What the guest will read: charging, on an electric car. */}
+                              {form.powertrain === 'electric' ? energyPolicy({ fuel_policy: f.value, powertrain: 'electric' }).label : f.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                     {form.fuel_policy === 'fuel_capped' && (
                       <div>
-                        <Label htmlFor="v-fuelcap">Daily fuel cap (₦)</Label>
+                        <Label htmlFor="v-fuelcap">{form.powertrain === 'electric' ? 'Daily charging cap (₦)' : 'Daily fuel cap (₦)'}</Label>
                         <Input
                           id="v-fuelcap"
                           type="number"
@@ -1103,7 +1130,7 @@ export default function VehiclesAdmin() {
                             )}
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                            {v.brand} · {categoryLabel(effectiveCategory(v))} · {v.city} · {v.max_passengers || 0} seats
+                            {v.brand} · {categoryLabel(effectiveCategory(v))}{powertrainLabel(v.powertrain) ? ` · ${powertrainLabel(v.powertrain)}` : ''} · {v.city} · {v.max_passengers || 0} seats
                           </p>
                           <div className="flex flex-wrap gap-3 text-xs text-slate-700 dark:text-slate-200">
                             {v.price_per_hour_ngn ? (

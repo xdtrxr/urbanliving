@@ -22,6 +22,16 @@
       ],
       "description": "Price tier \u2014 step 2 of the browse flow (city \u2192 category \u2192 car). Replaced the old body-style vehicle_type enum: guests shop by budget, not by shape. Group size is expressed through max_passengers instead. Keep in lockstep with CATEGORIES in src/config/rides.js."
     },
+    "powertrain": {
+      "type": "string",
+      "enum": [
+        "petrol",
+        "diesel",
+        "hybrid",
+        "electric"
+      ],
+      "description": "What drives the vehicle. Kept apart from category on purpose: an electric car can sit in any price tier. Optional, no default: unset means nobody has said. Guests see an Electric badge when it is 'electric'. Keep in lockstep with POWERTRAINS in src/config/rides.js."
+    },
     "model_year": {
       "type": "number",
       "description": "Year of manufacture (e.g. 2022)"

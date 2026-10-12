@@ -25,6 +25,42 @@ export const CATEGORIES = [
 export const categoryLabel = (value) =>
   CATEGORIES.find((c) => c.value === value)?.label || value || '';
 
+// ── Powertrain ──────────────────────────────────────────────────────────────
+// What drives the car, kept apart from its category on purpose: an electric
+// car can be an Economy saloon or a Luxury SUV, so "Electric" is an attribute
+// of a car and never a category of cars. Guests see one thing from this for
+// now, the Electric badge. It becomes a browse filter once there are enough
+// electric cars for a filter to be worth its space. Keep in lockstep with the
+// powertrain enum in base44/entities/Vehicle.jsonc (check-entities.mjs does).
+export const POWERTRAINS = [
+  { value: 'petrol', label: 'Petrol' },
+  { value: 'diesel', label: 'Diesel' },
+  { value: 'hybrid', label: 'Hybrid' },
+  { value: 'electric', label: 'Electric' },
+];
+
+export const powertrainLabel = (value) =>
+  POWERTRAINS.find((p) => p.value === value)?.label || '';
+
+export const isElectric = (vehicle) => vehicle?.powertrain === 'electric';
+
+// The fuel policy as a guest reads it: { label, detail }, or null when the
+// vehicle has none. An electric car has no fuel, so the same three policies
+// are worded as charging. A hybrid still burns fuel.
+export function energyPolicy(vehicle) {
+  const policy = vehicle?.fuel_policy;
+  if (!policy) return null;
+  const electric = isElectric(vehicle);
+  const labels = electric
+    ? { fuel_included: 'Charging included', guest_pays_fuel: 'Guest pays for charging', fuel_capped: 'Charging capped daily' }
+    : { fuel_included: 'Fuel included', guest_pays_fuel: 'Guest pays for fuel', fuel_capped: 'Fuel capped daily' };
+  const cap = Number(vehicle.fuel_cap_daily_ngn) || 0;
+  const detail = policy === 'fuel_capped' && cap > 0
+    ? `${electric ? 'Charging' : 'Fuel'} covered up to ₦${cap.toLocaleString()}/day. Anything over is on you.`
+    : '';
+  return { label: labels[policy] || policy, detail };
+}
+
 // The hourly choices the client asked for by name. Deliberately not every
 // integer 1-8: offering 5 and 7 implies a precision the pricing doesn't have.
 export const HOURLY_CHOICES = [1, 2, 3, 4, 6, 8];

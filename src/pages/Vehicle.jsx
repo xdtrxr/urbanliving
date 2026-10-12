@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   ArrowLeft, MapPin, Users, Car, Snowflake, Wifi, Music,
-  Fuel, PlayCircle, Calendar, Shield, Sparkles, CheckCircle,
+  Fuel, PlayCircle, Calendar, Shield, Sparkles, CheckCircle, Zap,
 } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 import {
   HOURLY_CHOICES, estimateRidePrice, supportsHourly, minHours, categoryLabel,
-  effectiveCategory, extraHourRate,
+  effectiveCategory, extraHourRate, isElectric, energyPolicy,
 } from '@/config/rides';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/lib/AuthContext';
@@ -26,12 +26,6 @@ const AMENITY_LABELS = {
   sound_system: { label: 'Premium sound', icon: Music },
   tinted_windows: { label: 'Tinted windows', icon: Car },
   executive_partition: { label: 'Executive partition', icon: Car },
-};
-
-const FUEL_POLICY_LABELS = {
-  fuel_included: 'Fuel included',
-  guest_pays_fuel: 'Guest pays for fuel',
-  fuel_capped: 'Fuel capped daily',
 };
 
 const DURATION_TIERS = [
@@ -118,6 +112,10 @@ export default function VehiclePage() {
     hours: selectedHours,
     days: multiDayCount,
   }) || 0;
+
+  // The fuel policy in the guest's words; an electric car is charged, not fuelled.
+  const energy = energyPolicy(vehicle);
+  const EnergyIcon = isElectric(vehicle) ? Zap : Fuel;
 
   const checkoutHref = `${createPageUrl('RideCheckout')}?${new URLSearchParams({
     vehicle: vehicle.id,
@@ -262,6 +260,12 @@ export default function VehiclePage() {
                       {vehicle.max_passengers} seats
                     </Badge>
                   )}
+                  {isElectric(vehicle) && (
+                    <Badge variant="outline" className="border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">
+                      <Zap className="w-3 h-3 mr-1" />
+                      Electric
+                    </Badge>
+                  )}
                   {vehicle.driver_included !== false && (
                     <Badge variant="outline" className="border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200">
                       <CheckCircle className="w-3 h-3 mr-1" />
@@ -306,19 +310,18 @@ export default function VehiclePage() {
                 )}
 
                 {/* Fuel + service area */}
-                {(vehicle.fuel_policy || vehicle.service_area) && (
+                {(energy || vehicle.service_area) && (
                   <div>
                     <h3 className="font-bold text-xl text-slate-800 dark:text-slate-100 mb-4">Good to know</h3>
                     <div className="space-y-3 text-sm text-slate-700 dark:text-slate-200">
-                      {vehicle.fuel_policy && (
+                      {/* Worded as charging on an electric car: see energyPolicy. */}
+                      {energy && (
                         <div className="flex items-start gap-3">
-                          <Fuel className="w-5 h-5 text-slate-500 dark:text-slate-400 flex-shrink-0 mt-0.5" />
+                          <EnergyIcon className="w-5 h-5 text-slate-500 dark:text-slate-400 flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="font-semibold text-slate-900 dark:text-white">{FUEL_POLICY_LABELS[vehicle.fuel_policy] || vehicle.fuel_policy}</p>
-                            {vehicle.fuel_policy === 'fuel_capped' && vehicle.fuel_cap_daily_ngn ? (
-                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                Fuel covered up to ₦{vehicle.fuel_cap_daily_ngn.toLocaleString()}/day. Anything over is on you.
-                              </p>
+                            <p className="font-semibold text-slate-900 dark:text-white">{energy.label}</p>
+                            {energy.detail ? (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{energy.detail}</p>
                             ) : null}
                           </div>
                         </div>

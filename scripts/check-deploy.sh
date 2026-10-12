@@ -88,6 +88,7 @@ seasonal rates in the admin form|Add seasonal rate
 search lands on an option|bedroom option available
 stay refusals shown to the guest|OPTION_UNAVAILABLE
 assistant told about options|BOOKING OPTIONS AND SEASONAL RATES
+vehicle powertrain in the admin form|Electric cars get an Electric badge
 points via function|awardPoints
 MARKERS
 

@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as rides from '../src/config/rides.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, 'base44/entities');
@@ -251,6 +252,42 @@ for (const stem of ['WithdrawalRequest', 'RideBooking', 'LoyaltyTransaction', 'B
   ].map(rel);
   check(`nothing creates a ${stem} as the signed-in user`, offenders.length === 0, offenders.join(', '));
 }
+
+// ── Vehicles: powertrain ───────────────────────────────────────────────────
+// What drives a car is an attribute of the car, kept apart from its category:
+// an electric car can be an Economy saloon or a Luxury SUV. Guests see one
+// thing from it for now, the Electric badge.
+console.log('\n— vehicle powertrain —');
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const powertrain = prop('Vehicle', 'powertrain');
+check('Vehicle.powertrain offers exactly what the admin form offers',
+  sameList(powertrain?.enum, (rides.POWERTRAINS || []).map((p) => p.value)), JSON.stringify(powertrain?.enum));
+check('there are four: petrol, diesel, hybrid, electric', sameList(powertrain?.enum, ['petrol', 'diesel', 'hybrid', 'electric']));
+check('it is optional and has no default: unset means nobody has said',
+  !!powertrain && !(entities.Vehicle?.required || []).includes('powertrain') && powertrain.default === undefined);
+check('electric is a powertrain, never a category',
+  !(prop('Vehicle', 'category')?.enum || []).some((c) => /electric|hybrid|petrol|diesel/.test(c))
+  && !rides.CATEGORIES.some((c) => /electric|\bev\b/i.test(`${c.value} ${c.label}`)));
+const badge = (v) => (typeof rides.isElectric === 'function' ? rides.isElectric(v) : 'no isElectric');
+check('only an electric car gets the badge',
+  same([{ powertrain: 'electric' }, { powertrain: 'hybrid' }, { powertrain: 'petrol' }, { powertrain: 'diesel' }, {}, null].map(badge), [true, false, false, false, false, false]));
+const label = (v) => (typeof rides.powertrainLabel === 'function' ? rides.powertrainLabel(v) : 'no powertrainLabel');
+check('a powertrain reads as a word, and an unknown one as nothing',
+  same(['electric', 'hybrid', 'petrol', 'diesel', '', undefined, 'steam'].map(label), ['Electric', 'Hybrid', 'Petrol', 'Diesel', '', '', '']));
+// An electric car has no fuel: the same three policies are about charging.
+const policy = (v) => (typeof rides.energyPolicy === 'function' ? rides.energyPolicy(v) : 'no energyPolicy');
+check('a petrol car\'s fuel policy reads as before',
+  same(['fuel_included', 'guest_pays_fuel', 'fuel_capped'].map((fuel_policy) => policy({ fuel_policy }).label),
+    ['Fuel included', 'Guest pays for fuel', 'Fuel capped daily']));
+check('an electric car\'s reads as charging',
+  same(['fuel_included', 'guest_pays_fuel', 'fuel_capped'].map((fuel_policy) => policy({ fuel_policy, powertrain: 'electric' }).label),
+    ['Charging included', 'Guest pays for charging', 'Charging capped daily']));
+check('a daily cap is spelled out, in fuel or in charging',
+  same([policy({ fuel_policy: 'fuel_capped', fuel_cap_daily_ngn: 15000 }).detail, policy({ fuel_policy: 'fuel_capped', fuel_cap_daily_ngn: 15000, powertrain: 'electric' }).detail],
+    ['Fuel covered up to ₦15,000/day. Anything over is on you.', 'Charging covered up to ₦15,000/day. Anything over is on you.']));
+check('no cap figure, no cap sentence; no policy, nothing at all',
+  same([policy({ fuel_policy: 'fuel_capped' }).detail, policy({ fuel_policy: 'fuel_included', fuel_cap_daily_ngn: 15000 }).detail, policy({}), policy(null)], ['', '', null, null]));
+check('a hybrid still burns fuel', policy({ fuel_policy: 'fuel_included', powertrain: 'hybrid' }).label === 'Fuel included');
 
 // ── Result ─────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
