@@ -17,9 +17,11 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const refuse = (status, message) => Object.assign(new Error(message), { status, response: { status, data: { message } } });
-const matches = (row, query) => Object.entries(query || {}).every(([k, v]) => (
-  v && typeof v === 'object' && Array.isArray(v.$in) ? v.$in.includes(row[k]) : row[k] === v
-));
+const matches = (row, query) => Object.entries(query || {}).every(([k, v]) => {
+  if (v && typeof v === 'object' && Array.isArray(v.$in)) return v.$in.includes(row[k]);
+  if (v && typeof v === 'object' && typeof v.$regex === 'string') return new RegExp(v.$regex, v.$options || '').test(String(row[k] ?? ''));
+  return row[k] === v;
+});
 
 // Tables in memory, with the two behaviours of the real platform a handler
 // has to get right: get() REJECTS (404) for a row that is not there, and a
@@ -50,8 +52,9 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
         if (!row) throw refuse(404, `Entity ${name} with ID ${id} not found`);
         return clone(row);
       },
-      async filter(query, sort, limit) {
-        return clone(rows().filter((r) => matches(r, query) && visible(name, as)(r)).slice(0, limit || 50));
+      async filter(query, sort, limit, skip) {
+        const from = skip || 0;
+        return clone(rows().filter((r) => matches(r, query) && visible(name, as)(r)).slice(from, from + (limit || 50)));
       },
       async create(data) {
         maybeFail(name, 'create');

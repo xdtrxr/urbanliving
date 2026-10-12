@@ -231,6 +231,19 @@ check('Booking: only admin may update a row', adminOnly(entities.Booking?.rls?.u
 for (const f of ['loyalty_points', 'loyalty_tier', 'referral_balance_ngn', 'ride_blocked']) {
   check(`User.${f} is admin-write`, adminOnly(prop('User', f)?.rls?.write));
 }
+// Locked on the live database on 2026-10-12. Every admin-only rule in the app
+// rests on `role`, and nobody had tested whether the platform itself refuses
+// a user changing their own. `referred_by_code` named who a referral reward
+// was paid to; the reward no longer reads it, and this is the second lock.
+for (const f of ['role', 'referred_by_code']) {
+  check(`User.${f} is admin-write`, adminOnly(prop('User', f)?.rls?.write));
+}
+// The browser writes these with auth.updateMe. A write rule on one of them
+// would fail the whole call it travels in (Dashboard saves referral_code and
+// nft_tokens together), so they must stay open until that code has moved.
+for (const f of ['referral_code', 'nft_tokens', 'referral_prompt_seen', 'wishlist', 'phone_number', 'profile_picture']) {
+  check(`User.${f} is still written by the browser, so it carries no write rule`, prop('User', f)?.rls?.write === undefined);
+}
 
 // An "only the server may create" rule only works if nothing
 // creates that row as the signed-in user: no function (it must go through

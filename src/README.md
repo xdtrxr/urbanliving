@@ -81,7 +81,7 @@ src/
 | `getBookings` | Returns the caller's bookings (or all, for admin) with computed `bucket` and `payment_deadline`; auto-cancels pending bookings past their deadline |
 | `getDashboardStats` | Aggregated bookings/revenue/referral stats for user or admin scope |
 | `attributeReferral` | Attaches a referral code to the current user and creates the Referral record |
-| `processReferralReward` | Idempotently awards 5% of a paid booking to the referrer (used by Checkout instant-confirm; Paystack flows inline the same logic) |
+| `processReferralReward` | Admin-only tool to pay a referral reward a payment path missed. Nothing in the app calls it: `verifyPaystackPayment`, `verifyRidePayment` and `paystackWebhook` pay the reward themselves, all through the same `payReferralReward` block |
 | `verifyPaystackPayment` | Server-verifies a Paystack reference, marks booking paid, notifies admin, triggers referral reward |
 | `paystackWebhook` | Receives Paystack webhooks (HMAC-SHA512 verified), processes `charge.success` idempotently as authoritative source of truth |
 | `logBookingToGoogleSheet` | Logs confirmed bookings to Google Sheets |
@@ -92,7 +92,7 @@ src/
 | `resolveBankAccount` | Verifies bank account details via Paystack |
 | `createWithdrawalRequest` | Creates a Paystack transfer for referral withdrawals |
 | `processWithdrawal` | Processes pending withdrawal requests |
-| `getReferralStatistics` | Calculates referral earnings and statistics |
+| `getReferralStatistics` | What a referrer sees about their own referrals: people referred, how many have paid, what those bookings were worth, what was earned |
 
 ---
 
