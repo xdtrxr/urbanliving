@@ -25,34 +25,65 @@ const matches = (row, query) => Object.entries(query || {}).every(([k, v]) => (
 // has to get right: get() REJECTS (404) for a row that is not there, and a
 // row written as the caller is subject to the create rule while a row written
 // with the service role is not. `serverOnlyCreate` names the entities whose
-// create rule is "an admin, or the server".
-export function createRig({ serverOnlyCreate = [] } = {}) {
-  const rig = { db: {}, env: {}, user: null, seq: 0, sent: [], handlers: {} };
+// create rule is "an admin, or the server". `userReads` maps an entity to its
+// read rule, (row, user) => boolean, for reads made as the caller.
+export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
+  // rig.failOn(entity, op, id) may return true to make that one write fail
+  // before it lands, and rig.failAfter(...) to make it fail after it has
+  // landed (a timeout on the way back): the two "second write" cases a
+  // handler without transactions has to survive.
+  const rig = { db: {}, env: {}, user: null, seq: 0, sent: [], handlers: {}, failOn: null, failAfter: null };
+  const maybeFail = (name, op, id) => {
+    if (rig.failOn && rig.failOn(name, op, id)) throw refuse(500, `${name}.${op} failed (injected)`);
+  };
+  const maybeFailAfter = (name, op, id) => {
+    if (rig.failAfter && rig.failAfter(name, op, id)) throw refuse(500, `${name}.${op} landed, then failed (injected)`);
+  };
+  // A read made as the caller sees only the rows the entity's read rule
+  // lets that caller see. Service-role reads see everything.
+  const visible = (name, as) => (row) => as === 'service' || !userReads[name] || !!(rig.user && userReads[name](row, rig.user));
   const table = (name, as) => {
     const rows = () => (rig.db[name] = rig.db[name] || []);
     return {
       async get(id) {
-        const row = rows().find((r) => r.id === id);
+        const row = rows().find((r) => r.id === id && visible(name, as)(r));
         if (!row) throw refuse(404, `Entity ${name} with ID ${id} not found`);
         return clone(row);
       },
       async filter(query, sort, limit) {
-        return clone(rows().filter((r) => matches(r, query)).slice(0, limit || 50));
+        return clone(rows().filter((r) => matches(r, query) && visible(name, as)(r)).slice(0, limit || 50));
       },
       async create(data) {
+        maybeFail(name, 'create');
         if (as !== 'service' && serverOnlyCreate.includes(name) && !(rig.user && rig.user.role === 'admin')) {
           throw refuse(403, `Permission denied: only the server may create ${name}`);
         }
         rig.seq += 1;
-        const row = { ...clone(data), id: `${name.toLowerCase()}-${rig.seq}`, created_by: as === 'service' ? 'service' : rig.user && rig.user.email };
+        // The platform stamps created_date; handlers that settle a race by
+        // "the oldest claim wins" sort on it. One millisecond apart, in order.
+        const row = {
+          ...clone(data),
+          id: `${name.toLowerCase()}-${rig.seq}`,
+          created_date: new Date(Date.UTC(2026, 9, 12, 12, 0, 0, rig.seq)).toISOString(),
+          created_by: as === 'service' ? 'service' : rig.user && rig.user.email,
+        };
         rows().push(row);
         return clone(row);
       },
       async update(id, patch) {
+        maybeFail(name, 'update', id);
         const row = rows().find((r) => r.id === id);
         if (!row) throw refuse(404, `Entity ${name} with ID ${id} not found`);
         Object.assign(row, clone(patch));
+        maybeFailAfter(name, 'update', id);
         return clone(row);
+      },
+      async delete(id) {
+        maybeFail(name, 'delete', id);
+        const at = rows().findIndex((r) => r.id === id);
+        if (at < 0) throw refuse(404, `Entity ${name} with ID ${id} not found`);
+        rows().splice(at, 1);
+        return { success: true };
       },
     };
   };
@@ -106,10 +137,17 @@ export async function loadFunction(rig, name) {
 
 // One request to a handler as `user` (null = signed out). The handler logs as
 // it goes; its console output is muted so a check prints only its own lines.
+// Calls may overlap (two writers racing), so the mute is counted: the real
+// console comes back when the last call in flight has finished.
+let muted = 0;
+let realConsole = null;
 export async function call(rig, handler, body, user, method = 'POST') {
   rig.user = user;
-  const saved = { log: console.log, warn: console.warn, error: console.error };
-  console.log = console.warn = console.error = () => {};
+  if (muted === 0) {
+    realConsole = { log: console.log, warn: console.warn, error: console.error };
+    console.log = console.warn = console.error = () => {};
+  }
+  muted += 1;
   let res;
   try {
     res = await handler(new Request('http://check.local/function', {
@@ -118,7 +156,8 @@ export async function call(rig, handler, body, user, method = 'POST') {
       body: method === 'POST' ? JSON.stringify(body) : undefined,
     }));
   } finally {
-    Object.assign(console, saved);
+    muted -= 1;
+    if (muted === 0) Object.assign(console, realConsole);
   }
   let json = null;
   try { json = await res.json(); } catch { /* no body */ }
