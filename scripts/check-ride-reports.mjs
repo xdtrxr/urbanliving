@@ -9,11 +9,13 @@
 // The harness below is the same one scripts/check-driver-wallet.mjs uses. On
 // the new Function(): its only input is this repo's own source, read from
 // paths this file computes itself; nothing here is reachable from a request.
+// The last section runs whole handlers through scripts/lib/function-rig.mjs.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as rides from '../src/config/rides.js';
+import { createRig, loadFunction, call } from './lib/function-rig.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = (name) => path.join(ROOT, 'base44/functions', name, 'entry.ts');
@@ -191,7 +193,8 @@ for (const bad of [
 }
 check('photos that are not a list are refused', validateReportInput({ ...good, evidence_urls: uploaded('a.jpg') }).code, 'BAD_URL');
 
-// Filing: once per reporter per ride, always under the ride's own id.
+// Filing: once per reporter per ride (a guest, once per driver they had on
+// it), always under the ride's own id.
 console.log('\n— filing once —');
 const isId = make('isId', src('isId', 'value'));
 // Each of these fetched the same ride as "ride1" and, before this fix, each
@@ -219,6 +222,22 @@ const said = { category: 'rude', description: 'He shouted at me the whole trip.'
   const other = await fileRideReport(sr, reportedRide, asDriver, said);
   check('the other side of the ride still can', `${other.ok}/${sr.RideReport.rows.length}`, 'true/2');
   check('…a driver\'s report names the guest, not a driver', `${other.row.reported_email}/${other.row.reported_driver_id}`, 'ada@example.com/');
+  // Admin hands the ride to another driver, which is the natural answer to
+  // the guest's complaint. A guest's report is about one driver, so the
+  // driver who took over can be reported too, once.
+  const handedOver = { ...reportedRide, driver_id: 'drvB' };
+  const about = await fileRideReport(sr, handedOver, asGuest, { ...said, description: 'The second driver was no better.' });
+  check('after a handover the guest can report the driver who took over',
+    `${about.ok}/${about.row && about.row.reported_driver_id}/${sr.RideReport.rows.length}`, 'true/drvB/3');
+  const repeat = await fileRideReport(sr, handedOver, asGuest, said);
+  check('…once', `${repeat.ok}/${repeat.code}/${sr.RideReport.rows.length}`, 'false/ALREADY_REPORTED/3');
+  const back = await fileRideReport(sr, reportedRide, asGuest, said);
+  check('…and if the ride goes back to the first driver, they are not reported a second time',
+    `${back.ok}/${back.code}/${sr.RideReport.rows.length}`, 'false/ALREADY_REPORTED/3');
+  // A driver's report is about the guest, whoever else has driven the ride.
+  const driverAgain = await fileRideReport(sr, handedOver, asDriver, said);
+  check('a driver still reports a ride once, whoever is driving it now',
+    `${driverAgain.ok}/${driverAgain.code}/${sr.RideReport.rows.length}`, 'false/ALREADY_REPORTED/3');
 }
 {
   // Two taps on Submit both pass the "already" check. The second to write
@@ -458,6 +477,65 @@ for (const bad of [
   'https://example.com/a.jpg" onerror="x', '', null, undefined, 42, {},
 ]) {
   check(`${JSON.stringify(bad) ?? String(bad)} is not used as an image source`, rides.safePhotoUrl(bad), null);
+}
+
+// ── A ride handed to another driver, start to finish ───────────────────────
+// Everything above lifts one function at a time. Here the shipped
+// createRideReport, getRideBookings and assignRideDriver run whole, bundled
+// as they are by scripts/lib/function-rig.mjs against tables in memory.
+//
+// A guest on a three-day ride reports the driver. Admin hands the ride to
+// another driver, which is the natural answer to that complaint, and the
+// guest then has a problem with the second driver too.
+console.log('\n— a ride handed to another driver —');
+const rig = createRig();
+const reportHandler = await loadFunction(rig, HOME);
+const listHandler = await loadFunction(rig, 'getRideBookings');
+const assignHandler = await loadFunction(rig, 'assignRideDriver');
+const BOSS = { id: 'u-admin', email: 'admin@urbanstays.io', role: 'admin' };
+const ADA = { id: 'u-ada', email: 'ada@example.com', role: 'user', full_name: 'Ada Obi' };
+const hoursFromNow = (h) => new Date(Date.now() + h * 3600000).toISOString();
+const onRoster = (id, full_name) => ({ id, full_name, phone: '08010000000', city: 'Abuja', active: true, admin_approved: true, user_email: `${id}@drivers.ng` });
+// Paid, and an hour into its three days.
+rig.db = {
+  RideBooking: [{
+    id: 'ride1', booking_reference: 'UD-AAA111', vehicle_id: 'car1', vehicle_name: 'Prado',
+    duration_tier: 'multi_day', duration_days: 3, start_at: hoursFromNow(-1), end_at: hoursFromNow(71),
+    guest_email: ADA.email, guest_name: 'Ada Obi', status: 'confirmed', payment_status: 'paid',
+  }],
+  Vehicle: [{ id: 'car1', city: 'Abuja' }],
+  Driver: [onRoster('ade', 'Ade Bello'), onRoster('bola', 'Bola Musa')],
+};
+const assign = (driver_id, expected_driver_id, driver_payout_ngn) => call(rig, assignHandler, {
+  ride_booking_id: 'ride1', driver_id, expected_driver_id, driver_payout_ngn,
+}, BOSS);
+const complain = (description) => call(rig, reportHandler, { ride_booking_id: 'ride1', category: 'rude', description }, ADA);
+// What the guest's Bookings page is told: [report offered, already reported].
+const offered = async () => {
+  const row = (await call(rig, listHandler, {}, ADA)).data[0];
+  return [row.can_report, row.already_reported];
+};
+const onFile = () => (rig.db.RideReport || []).map((r) => `${r.reporter_role} about ${r.reported_driver_id} (${r.reported_name}): ${r.status}`);
+const payRows = () => (rig.db.DriverEarning || []).map((e) => `${e.driver_id}:${e.status}:${e.amount_ngn}`).join(',');
+{
+  let r = await assign('ade', '', 15000);
+  same('a driver is assigned to the ride in progress', [r.status, payRows()], [200, 'ade:held:15000']);
+  same('the guest is offered the report', await offered(), [true, false]);
+  r = await complain('He shouted at me the whole trip.');
+  same('…files it, and it names that driver', [r.status, onFile()], [200, ['guest about ade (Ade Bello): open']]);
+  same('…and is told it is with the team, not offered it again', await offered(), [false, true]);
+  r = await complain('And another thing entirely.');
+  same('…nor accepted if sent anyway', [r.status, r.code, onFile().length], [409, 'ALREADY_REPORTED', 1]);
+
+  r = await assign('bola', 'ade', 18000);
+  same('admin hands the ride to another driver', [r.status, r.data?.reassigned, payRows()], [200, true, 'ade:reversed:15000,bola:held:18000']);
+  same('the guest is offered the report again: it would be about the driver who took over', await offered(), [true, false]);
+  r = await complain('The second driver was late and rude about it.');
+  same('…files it, and it names the second driver', [r.status, onFile()],
+    [200, ['guest about ade (Ade Bello): open', 'guest about bola (Bola Musa): open']]);
+  same('…and is not offered a third', await offered(), [false, true]);
+  r = await complain('Once more, with feeling.');
+  same('…nor accepted if sent anyway', [r.status, r.code, onFile().length], [409, 'ALREADY_REPORTED', 2]);
 }
 
 // ---- result ----

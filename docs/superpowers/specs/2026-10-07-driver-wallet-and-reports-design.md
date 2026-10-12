@@ -148,7 +148,7 @@ driver: Withdraw (wallet = driver)          -> existing WithdrawalRequest flow
 
 ## 5. Reports
 
-**Who, when.** A driver can report the guest on any paid ride assigned to them from `start_at` until 7 days after `end_at`. A guest can report the driver on any paid ride with a driver assigned, over the same window. One report per reporter per ride (`createRideReport` returns 409 `ALREADY_REPORTED`). The check uses the ride row's own id, never the string that arrived in the request.
+**Who, when.** A driver can report the guest on any paid ride assigned to them from `start_at` until 7 days after `end_at`. A guest can report the driver on any paid ride with a driver assigned, over the same window. One report per reporter per ride, and for a guest one per driver they had on it (`createRideReport` returns 409 `ALREADY_REPORTED`). The check uses the ride row's own id, never the string that arrived in the request.
 
 **Form** (`src/components/rides/RideReportDialog.jsx`, shared): category chips, description, up to 3 photos via `UploadFile` (10 MB each, images only), submit. Copy for drivers: "Report this customer". Copy for guests: "Report a problem with this driver". A photo that is not a link to the platform's file store is refused, at upload and again by the server.
 

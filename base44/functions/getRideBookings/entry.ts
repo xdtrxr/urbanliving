@@ -128,14 +128,17 @@ Deno.serve(async (req) => {
             rides = await fetchAll(base44.entities.RideBooking, { guest_email: user.email });
         }
 
-        // Which of their own rides this guest has already reported. Read under
+        // Which drivers this guest has already reported, on which of their own
+        // rides: "<ride id>:<driver id>". A report is about the driver on the
+        // ride when it was filed, so a ride that has since been handed to
+        // someone else can be reported again, for that driver. Read under
         // the service role because RideReport is admin-only at the API, and on
         // its own so that a problem here can never cost them their ride list.
-        const reportedRides = new Set<string>();
+        const reportedDrivers = new Set<string>();
         if (scope === 'mine') {
             try {
                 const mine = await fetchAll(base44.asServiceRole.entities.RideReport, { reporter_email: user.email });
-                for (const rep of mine) reportedRides.add(rep.ride_booking_id);
+                for (const rep of mine) reportedDrivers.add(`${rep.ride_booking_id}:${rep.reported_driver_id || ''}`);
             } catch (err) {
                 console.warn('Could not read ride reports (the ride list is unaffected):', err);
             }
@@ -180,6 +183,8 @@ Deno.serve(async (req) => {
             const bucket = computeBucket(r, nowMs);
             counts[bucket] = (counts[bucket] || 0) + 1;
             const w = windowOf(r);
+            // Whether this guest has reported the driver who is on it now.
+            const reported = reportedDrivers.has(`${r.id}:${r.driver_id || ''}`);
             return {
                 ...r,
                 bucket,
@@ -202,9 +207,9 @@ Deno.serve(async (req) => {
                 pay_answered_for: scope === 'all' ? r.pay_answered_for : undefined,
                 // Guests only: whether "Report a problem with this driver" is
                 // offered. createRideReport checks every part of it again.
-                already_reported: scope === 'mine' ? reportedRides.has(r.id) : undefined,
+                already_reported: scope === 'mine' ? reported : undefined,
                 can_report: scope === 'mine'
-                    ? r.payment_status === 'paid' && !!r.driver_id && reportWindowOpen(r, nowMs) && !reportedRides.has(r.id)
+                    ? r.payment_status === 'paid' && !!r.driver_id && reportWindowOpen(r, nowMs) && !reported
                     : undefined,
             };
         });
