@@ -228,6 +228,9 @@ for (const op of ['update', 'delete']) {
   check(`AvailabilityRequest ${op} is admin-only`, adminOnly(entities.AvailabilityRequest?.rls?.[op]));
 }
 check('Booking: only admin may update a row', adminOnly(entities.Booking?.rls?.update));
+// decideAvailabilityRequest and telegramWebhook find a request's booking by
+// this id. Without the field in the schema the write may be dropped.
+check('AvailabilityRequest.booking_id is a string', prop('AvailabilityRequest', 'booking_id')?.type === 'string');
 for (const f of ['loyalty_points', 'loyalty_tier', 'referral_balance_ngn', 'ride_blocked']) {
   check(`User.${f} is admin-write`, adminOnly(prop('User', f)?.rls?.write));
 }

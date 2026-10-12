@@ -25,6 +25,163 @@ async function tryPush(sdk: any, opts: {
     }
 }
 
+// ── Deciding a stay request ──────────────────────────────────────────────────
+// LOCKSTEP: from this line to "end of deciding a stay request" the text is the
+// same in decideAvailabilityRequest (the Admin screen's buttons) and
+// telegramWebhook (the buttons on the Telegram card). Functions cannot share
+// code; scripts/check-stay-payment.mjs fails if the two copies differ.
+
+// An id goes into the URL of the row it fetches, so only a plain id is ever
+// used.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there.
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
+// The booking a request is about. checkAvailabilityWebhook writes its id on
+// the request. Until 2026-10-12 it was found by looking for a pending booking
+// with the same property, dates and guest: two requests from a double tap
+// both landed on the first match, and a booking the guest had cancelled was
+// not found at all, so the request was "approved" and the guest emailed a
+// link to pay for a cancelled booking. Requests from before the id existed
+// are still matched the old way.
+async function bookingForRequest(db: any, request: any) {
+    let booking = isId(request.booking_id) ? await getOrNull(db.Booking, request.booking_id) : null;
+    if (booking && (booking.property_id !== request.property_id || booking.guest_email !== request.user_email)) booking = null;
+    if (!booking && !request.booking_id) {
+        const matches = await db.Booking.filter({
+            property_id: request.property_id,
+            check_in: request.check_in,
+            check_out: request.check_out,
+            guest_email: request.user_email,
+            status: 'pending',
+        }, '-created_date', 5);
+        booking = (Array.isArray(matches) && matches[0]) || null;
+    }
+    return booking;
+}
+
+// What approving or rejecting a request does. Answers
+//   { ok: true, status, bookingId, confirmedWithPayment, refundOwed, guestCancelled }
+//   { ok: false, code, error }   nothing was decided; the request is still open
+//
+// A booking may already hold a payment (the guest paid before the request was
+// decided; see stayPaymentVerdict in verifyPaystackPayment). Then approving
+// means confirming the booking with that payment, which only
+// verifyPaystackPayment does, and rejecting leaves a refund owed.
+async function decideRequest(sdk: any, request: any, action: 'approve' | 'reject') {
+    const db = sdk.asServiceRole.entities;
+    const booking = await bookingForRequest(db, request);
+    const held = !!booking && booking.payment_status === 'pending_confirmation' && !!booking.transaction_hash;
+
+    // The guest withdrew the request before it was decided, and no money is
+    // waiting. There is nothing to approve; it only needs to leave the list.
+    if (booking && booking.status === 'cancelled' && !held) {
+        await db.AvailabilityRequest.update(request.id, {
+            status: 'rejected',
+            admin_response: 'This request was cancelled before it was decided.',
+        });
+        if (action === 'approve') {
+            return {
+                ok: false,
+                code: 'BOOKING_CANCELLED',
+                error: 'The guest cancelled this request, so there was nothing to approve. It has been taken off the list.',
+            };
+        }
+        return { ok: true, status: 'rejected', bookingId: booking.id, guestCancelled: true };
+    }
+
+    if (action === 'approve' && held) {
+        try {
+            await sdk.functions.invoke('verifyPaystackPayment', {
+                booking_id: booking.id,
+                confirm_held: true,
+                internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '',
+            });
+        } catch (err) {
+            const said = err && err.response && err.response.data;
+            return {
+                ok: false,
+                code: (said && said.code) || 'HELD_NOT_CONFIRMED',
+                error: (said && said.error) || 'The payment on hold could not be confirmed. Nothing was changed.',
+            };
+        }
+        return { ok: true, status: 'approved', bookingId: booking.id, confirmedWithPayment: true };
+    }
+
+    // The booking first: if the second write fails the request is still open
+    // and the button can be pressed again.
+    if (booking && booking.status === 'pending') {
+        await db.Booking.update(booking.id, action === 'approve'
+            ? { approved_at: new Date().toISOString() }
+            : { status: 'cancelled', cancel_reason: 'admin_rejected' });
+    }
+    const status = action === 'approve' ? 'approved' : 'rejected';
+    await db.AvailabilityRequest.update(request.id, {
+        status,
+        admin_response: action === 'approve'
+            ? 'Property is available for your requested dates!'
+            : 'Sorry, the property is not available for these dates. Please try different dates or check other properties.',
+    });
+    return {
+        ok: true,
+        status,
+        bookingId: booking ? booking.id : null,
+        refundOwed: action === 'reject' && held
+            ? { amountNGN: Number(booking.total_price) || 0, reference: String(booking.transaction_hash) }
+            : null,
+    };
+}
+
+// A request was rejected while its booking held a payment. The admin has to
+// send the money back by hand; this is the reminder, with the button that
+// records it once done.
+async function tellAdminRefundOwed(bookingId: string, guestEmail: string, owed: { amountNGN: number; reference: string }) {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
+    if (!token || !chatId) {
+        console.error(`A refund is owed for booking ${bookingId} and Telegram is not configured: nobody was told.`);
+        return;
+    }
+    const text = [
+        'REFUND OWED',
+        '',
+        `You rejected a request that had a payment on hold.`,
+        `Booking: ${bookingId}`,
+        `Guest: ${guestEmail}`,
+        `Amount: ₦${owed.amountNGN.toLocaleString()}`,
+        `Paystack ref: ${owed.reference}`,
+        '',
+        'Refund it in Paystack, then press the button so the guest is told.',
+    ].join('\n');
+    try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text,
+                reply_markup: { inline_keyboard: [[{ text: 'Mark refunded', callback_data: `held_refund_${bookingId}` }]] },
+            }),
+        });
+        const answer = await res.json().catch(() => null);
+        if (!answer || !answer.ok) console.error(`Telegram did not take the refund-owed note for booking ${bookingId}:`, answer);
+    } catch (err) {
+        console.error(`Refund-owed note failed for booking ${bookingId}:`, err);
+    }
+}
+// ── end of deciding a stay request ───────────────────────────────────────────
+
 Deno.serve(async (req) => {
     console.log('=== TELEGRAM WEBHOOK CALLED ===');
 
@@ -139,6 +296,22 @@ Deno.serve(async (req) => {
             });
         }
 
+        // Branch 2d: the two buttons on a "payment on hold" alert.
+        // MUST sit before the generic split('_') below, like the ride branch:
+        // that split would read "held_confirm_<id>" as action="held".
+        const heldMatch = callbackData.match(/^held_(confirm|refund)_(.+)$/);
+        if (heldMatch) {
+            return await handleHeldPayment({
+                base44,
+                confirm: heldMatch[1] === 'confirm',
+                bookingId: heldMatch[2],
+                callbackQueryId: callbackQuery.id,
+                chatId,
+                messageId,
+                originalText: callbackQuery.message.text || '',
+            });
+        }
+
         // Branch 3: legacy availability approve/reject
         const [action, requestId] = callbackData.split('_');
 
@@ -147,7 +320,7 @@ Deno.serve(async (req) => {
         }
 
         // Fetch the request via SDK
-        const request = await base44.asServiceRole.entities.AvailabilityRequest.get(requestId);
+        const request = isId(requestId) ? await getOrNull(base44.asServiceRole.entities.AvailabilityRequest, requestId) : null;
         if (!request) {
             console.error('AvailabilityRequest not found:', requestId);
             await answerCallbackQuery(callbackQuery.id, 'Request not found.');
@@ -163,53 +336,28 @@ Deno.serve(async (req) => {
             });
         }
 
-        // Update the request status
-        const newStatus = action === 'approve' ? 'approved' : 'rejected';
-        const adminResponse = action === 'approve'
-            ? 'Property is available for your requested dates!'
-            : 'Sorry, the property is not available for these dates. Please try different dates or check other properties.';
-
-        await base44.asServiceRole.entities.AvailabilityRequest.update(requestId, {
-            status: newStatus,
-            admin_response: adminResponse,
-        });
-
-        console.log(`✅ Request ${requestId} ${newStatus}`);
-
-        // Find the matching pending Booking. On approve, stamp approved_at so
-        // the payment timer can start. On reject, cancel it so it doesn't
-        // linger in pending forever. Hoisted out of the try so we can pass the
-        // booking id into the guest email for a deep link back to the booking.
-        let matchedBookingId: string | null = null;
-        try {
-            const matches = await base44.asServiceRole.entities.Booking.filter({
-                property_id: request.property_id,
-                check_in: request.check_in,
-                check_out: request.check_out,
-                guest_email: request.user_email,
-                status: 'pending',
+        const outcome: any = await decideRequest(base44, request, action as 'approve' | 'reject');
+        if (!outcome.ok) {
+            // Nothing was decided. The pop-up is short, so the reason is also
+            // posted in the chat where it can be read in full.
+            await answerCallbackQuery(callbackQuery.id, 'Not done. See the message below.');
+            await telegramPlain('sendMessage', { chat_id: chatId, text: `Not done: ${outcome.error}` });
+            return new Response(JSON.stringify({ ok: true }), {
+                headers: { 'Content-Type': 'application/json' }
             });
-            const target = Array.isArray(matches) ? matches[0] : null;
-            if (target?.id) {
-                matchedBookingId = target.id;
-                const update = action === 'approve'
-                    ? { approved_at: new Date().toISOString() }
-                    : { status: 'cancelled' };
-                await base44.asServiceRole.entities.Booking.update(target.id, update);
-                console.log(`✅ Booking ${target.id} updated for ${action}: ${JSON.stringify(update)}`);
-            } else {
-                console.warn(`⚠️ No matching pending booking found for ${action}`);
-            }
-        } catch (stampError) {
-            console.error(`❌ Error updating booking on ${action}:`, stampError);
         }
+        const matchedBookingId: string | null = outcome.bookingId || null;
+        console.log(`✅ Request ${requestId} ${outcome.status}`);
 
         // Update Telegram message in place
         const telegramBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
         const statusEmoji = action === 'approve' ? '✅' : '❌';
         const statusText = action === 'approve' ? 'APPROVED' : 'REJECTED';
 
-        const updatedMessage = `${statusEmoji} ${statusText}\n\n${callbackQuery.message.text || ''}\n\nStatus: ${statusText} by admin`;
+        const statusNote = outcome.confirmedWithPayment
+            ? 'APPROVED by admin and CONFIRMED with the payment that was on hold'
+            : `${statusText} by admin`;
+        const updatedMessage = `${statusEmoji} ${statusText}\n\n${callbackQuery.message.text || ''}\n\nStatus: ${statusNote}`;
 
         await fetch(`https://api.telegram.org/bot${telegramBotToken}/editMessageText`, {
             method: 'POST',
@@ -223,6 +371,20 @@ Deno.serve(async (req) => {
 
         await answerCallbackQuery(callbackQuery.id, `Request ${statusText.toLowerCase()} successfully!`);
 
+        if (outcome.refundOwed) {
+            await tellAdminRefundOwed(outcome.bookingId, request.user_email, outcome.refundOwed);
+        }
+
+        // Nothing more for the guest when the booking was confirmed with a
+        // payment on hold (verifyPaystackPayment has sent the arrival details;
+        // "you have an hour to pay" would be wrong), or when they had
+        // cancelled the request themselves.
+        if (outcome.confirmedWithPayment || outcome.guestCancelled) {
+            return new Response(JSON.stringify({ ok: true }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
         // Email the guest about the decision
         try {
             await emailGuestDecision({
@@ -235,7 +397,8 @@ Deno.serve(async (req) => {
                 checkIn: request.check_in,
                 checkOut: request.check_out,
                 optionLabel: Number(request.bedrooms_booked) > 0 ? `the ${Number(request.bedrooms_booked)}-bedroom option` : '',
-                action,
+                action: action as 'approve' | 'reject',
+                refund: outcome.refundOwed,
             });
         } catch (emailErr) {
             console.error('Failed to email guest about decision:', emailErr);
@@ -288,6 +451,8 @@ interface GuestDecisionParams {
     checkOut: string;
     optionLabel?: string;
     action: 'approve' | 'reject';
+    // Set when the request is rejected while its booking holds a payment.
+    refund?: { amountNGN: number; reference: string } | null;
 }
 
 async function emailGuestDecision(p: GuestDecisionParams) {
@@ -313,6 +478,7 @@ async function emailGuestDecision(p: GuestDecisionParams) {
           `— Urban Stays`
         : `Hi ${p.guestName || 'there'},\n\n` +
           `Unfortunately, "${p.propertyTitle}" is not available for ${p.checkIn} → ${p.checkOut}.\n\n` +
+          (p.refund ? `We received your payment of ₦${p.refund.amountNGN.toLocaleString()} (reference ${p.refund.reference}). It will be refunded in full.\n\n` : '') +
           `🔖 Status: CANCELLED\n` +
           `👉 View this booking: ${bookingHref}\n` +
           `🔎 Find another property: ${searchLink()}\n\n` +
@@ -337,6 +503,73 @@ async function answerCallbackQuery(callbackQueryId: string, text: string) {
             text: text,
         }),
     });
+}
+
+// === Payment on hold ===
+// verifyPaystackPayment and paystackWebhook post a "payment on hold" alert
+// with two buttons when money arrives for a booking it may not confirm. This
+// is where the buttons land. Both hand the work to the function that owns it,
+// carrying the internal secret, because there is no admin session here:
+// Confirm goes to verifyPaystackPayment (confirm_held), Mark refunded to
+// markHeldPaymentRefunded. If the secret is not configured both refuse, and
+// the admin is pointed at the Admin screen, which works from their login.
+
+// Plain text on purpose. These messages carry Paystack references, ids and
+// the server's own sentences; one stray underscore and Telegram refuses a
+// Markdown message outright, and here that message is the admin's only word
+// on what happened to a payment.
+async function telegramPlain(method: 'sendMessage' | 'editMessageText', payload: Record<string, unknown>) {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    if (!token) return;
+    try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const answer = await res.json().catch(() => null);
+        if (!answer || !answer.ok) console.error(`Telegram ${method} was not taken:`, answer);
+    } catch (e) {
+        console.error(`Telegram ${method} failed:`, e);
+    }
+}
+
+interface HeldPaymentParams {
+    base44: any;
+    confirm: boolean;
+    bookingId: string;
+    callbackQueryId: string;
+    chatId: number;
+    messageId: number;
+    originalText: string;
+}
+
+async function handleHeldPayment(p: HeldPaymentParams): Promise<Response> {
+    const done = () => new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
+    const internal_secret = Deno.env.get('INTERNAL_FUNCTION_SECRET') || '';
+    try {
+        if (p.confirm) {
+            await p.base44.functions.invoke('verifyPaystackPayment', { booking_id: p.bookingId, confirm_held: true, internal_secret });
+        } else {
+            await p.base44.functions.invoke('markHeldPaymentRefunded', { booking_id: p.bookingId, internal_secret });
+        }
+    } catch (err) {
+        const said = (err as any)?.response?.data;
+        const status = (err as any)?.response?.status || (err as any)?.status;
+        const reason = status === 403
+            ? 'This button could not be used from Telegram. Open Admin and use "Payments on hold" there.'
+            : (said?.error || 'It did not go through. Nothing was changed.');
+        await answerCallbackQuery(p.callbackQueryId, 'Not done. See the message below.');
+        await telegramPlain('sendMessage', { chat_id: p.chatId, text: `Not done: ${reason}` });
+        return done();
+    }
+    const note = p.confirm
+        ? 'CONFIRMED with this payment. The guest has been sent their arrival details.'
+        : 'MARKED REFUNDED. The guest has been told.';
+    // Editing the text also takes the two buttons off, so it cannot be pressed twice.
+    await telegramPlain('editMessageText', { chat_id: p.chatId, message_id: p.messageId, text: `${p.originalText}\n\n${note}` });
+    await answerCallbackQuery(p.callbackQueryId, p.confirm ? 'Booking confirmed.' : 'Marked refunded.');
+    return done();
 }
 
 // === Support draft handling ===

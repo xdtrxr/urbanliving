@@ -428,13 +428,18 @@ Deno.serve(async (req) => {
         if (userPending && userPending.length > 0) {
             const open = userPending[0];
             const awaitingPayment = !!open.approved_at;
-            const msg = awaitingPayment
-                ? 'You already have an approved booking for this property awaiting payment. Please complete payment (or let it expire) before booking it again.'
-                : 'You already have a pending request for this property awaiting admin approval. Please wait for the response before submitting another.';
+            // A payment already arrived for the earlier request and is on
+            // hold. "Complete payment" would send them to pay a second time.
+            const paymentHeld = open.payment_status === 'pending_confirmation';
+            const msg = paymentHeld
+                ? 'We are holding a payment for your earlier request for this property. Our team will confirm it or refund you. Please wait for that before booking it again.'
+                : awaitingPayment
+                    ? 'You already have an approved booking for this property awaiting payment. Please complete payment (or let it expire) before booking it again.'
+                    : 'You already have a pending request for this property awaiting admin approval. Please wait for the response before submitting another.';
             return new Response(JSON.stringify({
                 success: false,
                 error: msg,
-                code: awaitingPayment ? 'EXISTING_AWAITING_PAYMENT' : 'EXISTING_PENDING_APPROVAL',
+                code: paymentHeld ? 'EXISTING_PAYMENT_HELD' : awaitingPayment ? 'EXISTING_AWAITING_PAYMENT' : 'EXISTING_PENDING_APPROVAL',
                 existing_booking_id: open.id,
             }), { status: 409, headers });
         }
@@ -492,6 +497,19 @@ Deno.serve(async (req) => {
             status: 'pending',
             payment_status: 'unpaid',
         });
+
+        // The request names its booking, so that approving or rejecting it
+        // acts on this booking and no other. Before the card is sent: a
+        // button must not arrive before the link does. A failure here is not
+        // the guest's problem; the decision falls back to matching by
+        // property, dates and guest, as it did before the id existed.
+        try {
+            await base44.asServiceRole.entities.AvailabilityRequest.update(availabilityRequest.id, {
+                booking_id: pendingBooking.id,
+            });
+        } catch (linkErr) {
+            console.warn('Failed to write booking_id on the request (non-fatal):', linkErr);
+        }
 
         // Notify admin (with property photo if available)
         let telegramMessageId: string | null = null;

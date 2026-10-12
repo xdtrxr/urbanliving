@@ -69,6 +69,7 @@ check('the Booking row holds that total, the option, and starts pending and unpa
 check('the request row tells the admin the same option and total', [rig.db.AvailabilityRequest[0].bedrooms_booked, rig.db.AvailabilityRequest[0].total_price], [4, peak + fee(peak) + 50000]);
 check('both rows are written by the server, never as the guest', [lastBooking().created_by, rig.db.AvailabilityRequest[0].created_by], ['service', 'service']);
 check('the guest can still read them: they carry the guest\'s email', [lastBooking().guest_email, rig.db.AvailabilityRequest[0].user_email], ['guest1@example.com', 'guest1@example.com']);
+check('the request names its booking, so approving it acts on this booking and no other', rig.db.AvailabilityRequest[0].booking_id, lastBooking().id);
 check('the answer carries the night-by-night lines', r.data.pricing.lines.map((l) => [l.season, l.rate, l.nights]), [['', 210000, 2], ['December Peak', 350000, 2]]);
 check('Telegram names the option and the total', [/Booking: 4-bedroom option/.test(rig.sent[rig.sent.length - 1]), /1,198,000/.test(rig.sent[rig.sent.length - 1])], [true, true]);
 

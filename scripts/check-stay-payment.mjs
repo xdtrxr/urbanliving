@@ -29,6 +29,13 @@ stubNetwork(rig);
 rig.env.INTERNAL_FUNCTION_SECRET = 'internal-check-secret';
 const verify = await loadFunction(rig, 'verifyPaystackPayment');
 const webhook = await loadFunction(rig, 'paystackWebhook');
+const openPaymentPage = await loadFunction(rig, 'startStayPayment');
+const decide = await loadFunction(rig, 'decideAvailabilityRequest');
+const telegram = await loadFunction(rig, 'telegramWebhook');
+const markRefunded = await loadFunction(rig, 'markHeldPaymentRefunded');
+const cancel = await loadFunction(rig, 'cancelBooking');
+const sweep = await loadFunction(rig, 'autoCancelExpiredBookings');
+const listBookings = await loadFunction(rig, 'getBookings');
 
 const guest = { id: 'gina', email: 'gina@example.com', role: 'user', full_name: 'Gina Guest', phone_number: '08030000000', loyalty_points: 0 };
 const other = { id: 'otto', email: 'otto@example.com', role: 'user' };
@@ -172,7 +179,169 @@ check('the webhook answers Paystack calmly for a booking that does not exist', [
   check('an event that Paystack did not sign changes nothing', [r.json.skipped, state('mine')], ['invalid_signature', ['pending', 'unpaid', null]]);
 }
 
+// ── What the admin does about a payment on hold ─────────────────────────────
+// A request row beside each booking, as checkAvailabilityWebhook leaves them.
+rig.db.AvailabilityRequest = [];
+const request = (id, bookingId, fields = {}) => {
+  const b = row(bookingId);
+  rig.db.AvailabilityRequest.push({ id, booking_id: bookingId, property_id: b.property_id, property_title: 'Maitama Duplex', user_email: b.guest_email, user_name: b.guest_name, check_in: b.check_in, check_out: b.check_out, guests: 2, total_price: b.total_price, status: 'pending', ...fields });
+  return id;
+};
+const req = (id) => rig.db.AvailabilityRequest.find((x) => x.id === id);
+// A held booking with its request: the guest paid before anyone decided.
+const held = async (id, fields = {}, dates = {}) => {
+  add(id, { ...fields, ...dates });
+  request(`req-${id}`, id);
+  const answer = await report(id, pay(`ref-${id}`, id));
+  if (answer.code !== 'PAYMENT_HELD') throw new Error(`setup: ${id} was not held (${answer.status} ${answer.code})`);
+  return id;
+};
+// The admin pressing a button on a Telegram card.
+const press = (data, text = 'the card') => call(rig, telegram, { callback_query: { id: 'cq', data, message: { chat: { id: 1 }, message_id: 77, text } } }, null);
+const adminDecides = (request_id, action) => call(rig, decide, { request_id, action }, admin);
+const mailsTo = (email, from) => rig.emails.slice(from).filter((m) => m.to === email).map((m) => m.subject);
+
+console.log('\n— a payment on hold, and the admin approves the request in the Admin screen —');
+await held('h-approve', {}, { check_in: '2027-01-04', check_out: '2027-01-08' });
+let mailMark = rig.emails.length;
+r = await adminDecides('req-h-approve', 'approve');
+check('approving confirms the booking with the money that is already there', [r.status, r.data.confirmed_with_payment, state('h-approve'), req('req-h-approve').status], [200, true, ['confirmed', 'paid', 'ref-h-approve'], 'approved']);
+check('the booking is stamped approved and paid', [!!row('h-approve').approved_at, !!row('h-approve').paid_at], [true, true]);
+check('the guest gets arrival details, and is not told they have an hour to pay', [mailsTo(guest.email, mailMark).some((x) => x.includes('arrival details')), mailsTo(guest.email, mailMark).some((x) => x.startsWith('Approved'))], [true, false]);
+
+console.log('\n— the same, from the Telegram card of the request —');
+await held('h-tg-approve', {}, { check_in: '2027-01-11', check_out: '2027-01-15' });
+mailMark = rig.emails.length;
+r = await press('approve_req-h-tg-approve');
+check('approving there confirms it too', [state('h-tg-approve'), req('req-h-tg-approve').status], [['confirmed', 'paid', 'ref-h-tg-approve'], 'approved']);
+check('and the guest gets arrival details, not a request to pay', [mailsTo(guest.email, mailMark).some((x) => x.includes('arrival details')), mailsTo(guest.email, mailMark).some((x) => x.startsWith('Approved'))], [true, false]);
+
+console.log('\n— the buttons on the payment-on-hold alert —');
+await held('h-confirm', {}, { check_in: '2027-01-18', check_out: '2027-01-22' });
+r = await press('held_confirm_h-confirm', 'PAYMENT ON HOLD. ref_with_an_underscore');
+check('Confirm booking confirms it and settles the request', [state('h-confirm'), req('req-h-confirm').status], [['confirmed', 'paid', 'ref-h-confirm'], 'approved']);
+const edited = rig.telegram.filter((m) => m.url.endsWith('/editMessageText')).at(-1);
+check('the alert is rewritten in plain text, so the buttons cannot be pressed twice', [edited.text.includes('CONFIRMED with this payment'), edited.parse_mode || null, !!edited.reply_markup], [true, null, false]);
+r = await press('held_confirm_h-confirm');
+check('pressing an old copy of it again changes nothing', state('h-confirm'), ['confirmed', 'paid', 'ref-h-confirm']);
+
+await held('h-refund', {}, { check_in: '2027-01-25', check_out: '2027-01-29' });
+mailMark = rig.emails.length;
+r = await press('held_refund_h-refund');
+check('Mark refunded records the refund, closes the booking and the request', [state('h-refund'), row('h-refund').cancel_reason, req('req-h-refund').status], [['cancelled', 'refunded', 'ref-h-refund'], 'admin_rejected', 'rejected']);
+check('and tells the guest', mailsTo(guest.email, mailMark), ['Your payment has been refunded']);
+r = await report('h-refund', 'ref-h-refund');
+check('a refunded payment handed in again is refused', [r.status, r.code, state('h-refund')], [409, 'PAYMENT_REFUNDED', ['cancelled', 'refunded', 'ref-h-refund']]);
+r = await call(rig, openPaymentPage, { booking_id: 'h-refund' }, guest);
+check('and its payment page says it was refunded', [r.status, r.code], [409, 'PAYMENT_REFUNDED']);
+
+console.log('\n— a payment on hold, and the admin rejects the request —');
+await held('h-reject', {}, { check_in: '2027-02-01', check_out: '2027-02-05' });
+mailMark = rig.emails.length;
+let tgMark = rig.telegram.length;
+r = await adminDecides('req-h-reject', 'reject');
+check('the booking is cancelled and the money stays on hold: a refund is owed', [r.status, r.data.refund_owed, state('h-reject'), row('h-reject').cancel_reason, req('req-h-reject').status], [200, true, ['cancelled', 'pending_confirmation', 'ref-h-reject'], 'admin_rejected', 'rejected']);
+const owed = rig.telegram.slice(tgMark).find((m) => (m.text || '').startsWith('REFUND OWED'));
+check('the admin is reminded, with the amount, the reference and the Mark refunded button', [!!owed, owed.text.includes('1,198,000'), owed.text.includes('ref-h-reject'), owed.reply_markup.inline_keyboard[0][0].callback_data], [true, true, true, 'held_refund_h-reject']);
+check('the guest is told their payment will be refunded', rig.emails.slice(mailMark).some((m) => m.to === guest.email && m.body.includes('It will be refunded in full') && m.body.includes('ref-h-reject')), true);
+r = await call(rig, markRefunded, { booking_id: 'h-reject' }, admin);
+check('marking it refunded in the Admin screen settles it', [r.status, state('h-reject')], [200, ['cancelled', 'refunded', 'ref-h-reject']]);
+r = await call(rig, markRefunded, { booking_id: 'h-reject' }, admin);
+check('twice is the same as once', [r.status, r.data.already], [200, true]);
+
+console.log('\n— before a held payment is confirmed, Paystack and the calendar are asked again —');
+await held('h-gone', { status: 'cancelled', cancel_reason: 'payment_expired', ...APPROVED }, { check_in: '2027-02-08', check_out: '2027-02-12' });
+add('took-the-dates', { ...APPROVED, status: 'confirmed', payment_status: 'paid', check_in: '2027-02-10', check_out: '2027-02-14', guest_email: other.email });
+r = await call(rig, verify, { booking_id: 'h-gone', confirm_held: true }, admin);
+check('dates that have gone to another booking are not double-booked', [r.status, r.code, r.error.includes('took-the-dates'), state('h-gone')], [409, 'DATES_TAKEN', true, ['cancelled', 'pending_confirmation', 'ref-h-gone']]);
+row('took-the-dates').status = 'cancelled';
+r = await call(rig, verify, { booking_id: 'h-gone', confirm_held: true }, admin);
+check('once the dates are free, the cancelled booking is confirmed with its payment', [r.status, state('h-gone')], [200, ['confirmed', 'paid', 'ref-h-gone']]);
+
+await held('h-refunded-already', {}, { check_in: '2027-02-15', check_out: '2027-02-19' });
+rig.paystack['ref-h-refunded-already'].status = 'reversed';
+r = await adminDecides('req-h-refunded-already', 'approve');
+check('a payment Paystack no longer calls successful confirms nothing', [r.status, r.code, state('h-refunded-already'), req('req-h-refunded-already').status], [409, 'PAYMENT_NOT_VERIFIED', ['pending', 'pending_confirmation', 'ref-h-refunded-already'], 'pending']);
+rig.paystack['ref-h-refunded-already'].status = 'success';
+
+console.log('\n— who may confirm or mark refunded —');
+r = await call(rig, verify, { booking_id: 'h-refunded-already', confirm_held: true }, guest);
+check('not the guest', [r.status, r.code, state('h-refunded-already')[1]], [403, 'ADMIN_ONLY', 'pending_confirmation']);
+r = await call(rig, verify, { booking_id: 'h-refunded-already', confirm_held: true, internal_secret: 'a-guess' }, null);
+check('not a caller with the wrong secret', [r.status, state('h-refunded-already')[1]], [403, 'pending_confirmation']);
+r = await call(rig, markRefunded, { booking_id: 'h-refunded-already' }, guest);
+check('nor may the guest mark it refunded', [r.status, state('h-refunded-already')[1]], [403, 'pending_confirmation']);
+const realSecret = rig.env.INTERNAL_FUNCTION_SECRET;
+rig.env.INTERNAL_FUNCTION_SECRET = '';
+r = await call(rig, verify, { booking_id: 'h-refunded-already', confirm_held: true, internal_secret: '' }, null);
+check('with no secret configured, a caller without a session is refused: it does not fail open', [r.status, state('h-refunded-already')[1]], [403, 'pending_confirmation']);
+tgMark = rig.telegram.length;
+r = await press('held_confirm_h-refunded-already');
+check('so the Telegram button says to use the Admin screen, and changes nothing', [rig.telegram.slice(tgMark).some((m) => (m.text || '').includes('Open Admin')), state('h-refunded-already')[1]], [true, 'pending_confirmation']);
+r = await call(rig, verify, { booking_id: 'h-refunded-already', confirm_held: true }, admin);
+check('the admin\'s own login still works without it', [r.status, state('h-refunded-already')], [200, ['confirmed', 'paid', 'ref-h-refunded-already']]);
+rig.env.INTERNAL_FUNCTION_SECRET = realSecret;
+r = await call(rig, verify, { booking_id: 'approved', confirm_held: true }, admin);
+check('a booking that is already paid is simply reported as confirmed', [r.status, r.data.already_paid], [200, true]);
+r = await call(rig, verify, { booking_id: 'mine', confirm_held: true }, admin);
+check('and one with nothing on hold is refused', [r.status, r.code, state('mine')], [409, 'NOT_HELD', ['pending', 'unpaid', null]]);
+
+console.log('\n— a held booking is left alone by everything else —');
+await held('h-wait', {}, { check_in: '2027-03-01', check_out: '2027-03-05' });
+r = await call(rig, openPaymentPage, { booking_id: 'h-wait' }, guest);
+check('its payment page does not take a second payment', [r.status, r.code, r.error.includes('do not pay again')], [409, 'PAYMENT_HELD', true]);
+r = await call(rig, cancel, { booking_id: 'h-wait' }, guest);
+check('the guest cannot cancel it away: there is money on it', [r.status, r.code, state('h-wait')], [409, 'PAYMENT_HELD', ['pending', 'pending_confirmation', 'ref-h-wait']]);
+// Approved long ago, deadline long past, and holding a payment.
+Object.assign(row('h-wait'), { approved_at: '2026-01-01T00:00:00.000Z' });
+add('unpaid-and-late', { approved_at: '2026-01-01T00:00:00.000Z', check_in: '2027-03-08', check_out: '2027-03-12' });
+mailMark = rig.emails.length;
+r = await call(rig, sweep, {}, admin);
+check('the expiry sweep cancels the booking nobody paid for', [r.status, state('unpaid-and-late')[0], row('unpaid-and-late').cancel_reason], [200, 'cancelled', 'payment_expired']);
+check('and leaves the one that holds a payment, telling its guest nothing', [state('h-wait'), rig.emails.slice(mailMark).some((m) => m.body.includes('h-wait')), rig.emails.slice(mailMark).some((m) => m.body.includes('unpaid-and-late'))], [['pending', 'pending_confirmation', 'ref-h-wait'], false, true]);
+r = await call(rig, listBookings, { scope: 'mine' }, guest);
+const bucketOf = (id) => (r.data.find((b) => b.id === id) || {}).bucket || null;
+check('the guest finds a held booking under what is still waiting, even a cancelled one', [bucketOf('h-wait'), bucketOf('expired')], ['pending-approval', 'pending-approval']);
+tgMark = rig.telegram.length;
+r = await call(rig, cancel, { booking_id: 'h-wait' }, admin);
+check('the admin can cancel it, and is reminded that money is on hold', [r.status, state('h-wait'), rig.telegram.slice(tgMark).some((m) => (m.text || '').includes('ON HOLD'))], [200, ['cancelled', 'pending_confirmation', 'ref-h-wait'], true]);
+
+console.log('\n— a request acts on its own booking —');
+add('twin-a', { check_in: '2027-04-01', check_out: '2027-04-05' });
+add('twin-b', { check_in: '2027-04-01', check_out: '2027-04-05' });
+request('req-twin-a', 'twin-a');
+request('req-twin-b', 'twin-b');
+r = await adminDecides('req-twin-b', 'approve');
+check('two requests from a double tap: approving the second approves the second booking', [!!row('twin-b').approved_at, !!row('twin-a').approved_at, req('req-twin-a').status], [true, false, 'pending']);
+r = await adminDecides('req-twin-a', 'reject');
+check('and rejecting the first cancels the first', [state('twin-a')[0], row('twin-a').cancel_reason, state('twin-b')[0]], ['cancelled', 'admin_rejected', 'pending']);
+
+add('withdrawn', { status: 'cancelled', cancel_reason: 'user_cancelled', check_in: '2027-04-08', check_out: '2027-04-12' });
+request('req-withdrawn', 'withdrawn');
+mailMark = rig.emails.length;
+r = await adminDecides('req-withdrawn', 'approve');
+check('a request the guest already cancelled cannot be approved; it leaves the list', [r.status, r.code, req('req-withdrawn').status, state('withdrawn')[0]], [409, 'BOOKING_CANCELLED', 'rejected', 'cancelled']);
+check('and the guest is not emailed a link to pay for it', mailsTo(guest.email, mailMark), []);
+
+add('old-style', { check_in: '2027-04-15', check_out: '2027-04-19' });
+request('req-old-style', 'old-style', { booking_id: undefined });
+r = await press('approve_req-old-style');
+check('a request from before the id existed is still matched by property, dates and guest', [!!row('old-style').approved_at, req('req-old-style').status], [true, 'approved']);
+
+add('not-yours', { check_in: '2027-04-22', check_out: '2027-04-26', guest_email: other.email });
+add('yours-really', { check_in: '2027-04-22', check_out: '2027-04-26' });
+request('req-crossed', 'yours-really', { booking_id: 'not-yours' });
+r = await adminDecides('req-crossed', 'approve');
+check('a request whose id points at somebody else\'s booking does not touch that booking', [!!row('not-yours').approved_at, req('req-crossed').status], [false, 'approved']);
+
 console.log('\n— the two functions carry the same rules —');
+const decideRules = (name) => {
+  const src = fs.readFileSync(path.join(ROOT, 'base44/functions', name, 'entry.ts'), 'utf8');
+  const start = src.indexOf('// ── Deciding a stay request');
+  const end = src.indexOf('// ── end of deciding a stay request');
+  return start < 0 || end < 0 ? null : src.slice(start, end);
+};
+check('decideAvailabilityRequest and telegramWebhook decide a request by the same text', [!!decideRules('decideAvailabilityRequest'), decideRules('decideAvailabilityRequest') === decideRules('telegramWebhook')], [true, true]);
 const rules = (name) => {
   const src = fs.readFileSync(path.join(ROOT, 'base44/functions', name, 'entry.ts'), 'utf8');
   const start = src.indexOf('// ── Stay payment rules');

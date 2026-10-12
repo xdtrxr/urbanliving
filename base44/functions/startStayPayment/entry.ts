@@ -23,6 +23,23 @@ const HOUR_MS = 60 * 60 * 1000;
 const PAYMENT_WINDOW_MS = 1 * HOUR_MS;
 const APPROVAL_CAP_MS = 3 * HOUR_MS;
 
+// An id goes into the URL of the row it fetches, so only a plain id is ever
+// used. Lockstep copy, see createWithdrawalRequest.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there.
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -43,13 +60,30 @@ Deno.serve(async (req) => {
         const { booking_id } = await req.json().catch(() => ({}));
         if (!booking_id) return json({ success: false, error: 'booking_id is required' }, 400);
 
-        const booking = await base44.asServiceRole.entities.Booking.get(booking_id);
+        const booking = isId(booking_id) ? await getOrNull(base44.asServiceRole.entities.Booking, booking_id) : null;
         if (!booking) return json({ success: false, error: 'Booking not found' }, 404);
         if (booking.guest_email !== user.email && user.role !== 'admin') {
             return json({ success: false, error: 'Not your booking' }, 403);
         }
         if (booking.payment_status === 'paid') {
             return json({ success: true, data: { already_paid: true, booking_id } });
+        }
+        // A payment is already on hold for this booking (it arrived before
+        // the booking could be confirmed). Asked before anything else: once
+        // the admin approves, nothing below would stop a second payment.
+        if (booking.payment_status === 'pending_confirmation') {
+            return json({
+                success: false,
+                error: `We already have your payment of ₦${(Number(booking.total_price) || 0).toLocaleString()} for this booking. It is waiting for our team to confirm it. Please do not pay again.`,
+                code: 'PAYMENT_HELD',
+            }, 409);
+        }
+        if (booking.payment_status === 'refunded') {
+            return json({
+                success: false,
+                error: 'The payment for this booking was refunded. Please make a new request if you still want these dates.',
+                code: 'PAYMENT_REFUNDED',
+            }, 409);
         }
         if (booking.status === 'cancelled') {
             return json({ success: false, error: 'This booking was cancelled', code: 'CANCELLED' }, 409);
@@ -81,7 +115,7 @@ Deno.serve(async (req) => {
 
         let propertyTitle = '';
         try {
-            const property = await base44.asServiceRole.entities.Property.get(booking.property_id);
+            const property = await getOrNull(base44.asServiceRole.entities.Property, booking.property_id);
             propertyTitle = property?.title || '';
         } catch (err) {
             console.warn('Could not read property title (non-fatal):', err);
