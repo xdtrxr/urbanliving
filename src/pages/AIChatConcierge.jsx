@@ -17,6 +17,7 @@ import BookingDetailsCard from '../components/chat/BookingDetailsCard'; // New i
 import BookingConfirmCard from '../components/chat/BookingConfirmCard';
 import { usePropertySearch } from "../components/hooks/usePropertySearch";
 import { pricingForAssistant } from '@/config/stays';
+import { invokeFn } from '@/lib/invokeFn';
 import { useSpeechToText } from "../components/hooks/useSpeechToText";
 
 const welcomeLines = [
@@ -325,12 +326,23 @@ export default function AIChatConciergePage() {
 
   // For each property in the candidate list, attach the active booked ranges
   // so Nova can avoid recommending properties whose dates conflict with
-  // existing pending/confirmed bookings. Fails open (empty ranges) on error
-  // so a bookings-API blip doesn't take down recommendations.
+  // existing pending/confirmed bookings. The ranges come from the server
+  // (getBookedRanges): read in the browser, Booking shows a guest only their
+  // own rows, so Nova was told a place somebody else had taken was free.
+  // If the function does not answer, the browser read is used as before. It
+  // fails open (empty ranges) on error so a bookings-API blip doesn't take
+  // down recommendations.
   const enrichWithBookedRanges = async (props) => {
     if (!Array.isArray(props) || props.length === 0) return props;
     const dbIds = props.map((p) => p.id).filter((id) => typeof id === 'string' && id.length > 10);
     if (dbIds.length === 0) return props.map((p) => ({ ...p, booked_ranges: [] }));
+    // The function takes 50 ids at a time; Nova is given 12 properties.
+    const answer = await invokeFn('getBookedRanges', { property_ids: dbIds });
+    const ranges = answer.ok && answer.data ? answer.data.ranges : null;
+    if (ranges && typeof ranges === 'object') {
+      return props.map((p) => ({ ...p, booked_ranges: Array.isArray(ranges[p.id]) ? ranges[p.id] : [] }));
+    }
+    console.warn('enrichWithBookedRanges: getBookedRanges did not answer, reading as the guest:', answer.error);
     let activeBookings = [];
     try {
       activeBookings = await base44.entities.Booking.filter({
