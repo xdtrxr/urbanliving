@@ -161,6 +161,10 @@ export default function PropertyPage() {
     const DAY = /^\d{4}-\d{2}-\d{2}$/;
     const stayQuery = `${DAY.test(arrived.get('checkIn') || '') && DAY.test(arrived.get('checkOut') || '') ? `&checkIn=${arrived.get('checkIn')}&checkOut=${arrived.get('checkOut')}` : ''}${Number(arrived.get('guests')) > 0 ? `&guests=${Math.round(Number(arrived.get('guests')))}` : ''}`;
     const optionQuery = `${options.length > 1 && option ? `&bedrooms=${option.bedrooms}` : ''}${stayQuery}`;
+    // No usable price means no option, and the server refuses a request for
+    // such a listing (NO_PRICE), so the page offers no way to make one. A
+    // booking already under way keeps its button: its total is on the Booking.
+    const unpriced = !option && !pendingPaymentBooking && !pendingApprovalBooking;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 p-4 md:p-8">
@@ -340,11 +344,13 @@ export default function PropertyPage() {
                                 <Card className="bg-slate-50/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-md rounded-2xl p-5 sm:p-6 lg:sticky lg:top-24">
                                     <div className="mb-6">
                                         <div className="text-3xl font-bold text-slate-900 dark:text-white">
-                                            {currencySymbol}{(option ? option.price_per_night : property.price_per_night || 0).toLocaleString()}
+                                            {option ? `${currencySymbol}${option.price_per_night.toLocaleString()}` : 'Price on request'}
                                         </div>
-                                        <div className="text-base text-slate-600 dark:text-slate-300 mt-1">
-                                            per night{option && option.max_guests > 0 && options.length > 1 ? `, up to ${option.max_guests} guests` : ''}
-                                        </div>
+                                        {option && (
+                                            <div className="text-base text-slate-600 dark:text-slate-300 mt-1">
+                                                per night{option.max_guests > 0 && options.length > 1 ? `, up to ${option.max_guests} guests` : ''}
+                                            </div>
+                                        )}
 
                                         {options.length > 1 && (
                                             <fieldset className="mt-4">
@@ -407,7 +413,7 @@ export default function PropertyPage() {
                                         </div>
                                     )}
 
-                                    {!isAuthenticated ? (
+                                    {unpriced ? null : !isAuthenticated ? (
                                         <Link to={`/login?from_url=${encodeURIComponent(`${window.location.origin}${createPageUrl('Property')}?id=${property.id}${optionQuery}`)}`}>
                                             <Button size="lg" className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold rounded-xl dark:from-white dark:to-slate-200 dark:text-slate-900">
                                                 Sign in to Book
@@ -439,7 +445,9 @@ export default function PropertyPage() {
                                     )}
 
                                     <p className="text-xs text-center text-slate-500 dark:text-slate-400 mt-4">
-                                        {!isAuthenticated
+                                        {unpriced
+                                            ? 'This place cannot be booked online yet.'
+                                            : !isAuthenticated
                                             ? 'Create an account or sign in to book.'
                                             : pendingPaymentBooking
                                                 ? 'Your booking has been approved — complete payment to confirm.'
