@@ -760,8 +760,10 @@ console.log('\n— function results —');
 {
   // What the platform itself answers when the workspace plan has no functions.
   const r = fromThrown({ message: 'Request failed with status code 402', response: { status: 402, data: { message: 'Functions are blocked - app owner lacks backend functions capability' } } });
-  same('a platform refusal is shown as it was sent',
-    [r.error, r.status], ['Functions are blocked - app owner lacks backend functions capability', 402]);
+  // Worded for a guest: the platform's sentence is about the owner's plan.
+  // The status is kept, so a screen or a script can still tell it is the block.
+  same('a platform refusal is worded for a guest, and still carries its status',
+    [r.error, r.status], ['This part of the site is not available right now. Please try again later.', 402]);
 }
 check('no response at all reads as a connection problem',
   fromThrown({ message: 'Network Error' }).error, 'Could not reach the server. Check your connection and try again.');

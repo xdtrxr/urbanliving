@@ -61,8 +61,8 @@ console.log('\n— what each failure says —');
 {
   // What the platform itself answers while the workspace plan blocks functions.
   const out = withSentence(answered(402, { message: 'Functions are blocked - app owner lacks backend functions capability' }));
-  check('a 402 from the platform is shown as it was sent',
-    [out.message, out.status], ['Functions are blocked - app owner lacks backend functions capability', 402]);
+  check('the platform\'s 402 block is worded for a guest, not as a note about the owner\'s plan',
+    [out.message, out.status], ['This part of the site is not available right now. Please try again later.', 402]);
 }
 {
   const out = withSentence(answered(500, '<!DOCTYPE html><html><body><h1>500 Internal Server Error</h1></body></html>'));

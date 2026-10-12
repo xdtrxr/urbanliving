@@ -231,14 +231,19 @@ export default function VehiclesAdmin() {
       // Upsert the costing row. Only written when something was entered or a
       // row already exists, so vehicles with no internal costing never grow
       // an empty companion row.
-      const num = (v) => (v === '' || v == null ? undefined : Number(v));
+      // On a row that already exists an emptied box has to be sent as
+      // empty, or the old figure stays: an update only changes the fields
+      // it is given. An emptied driver cost went on feeding the pay that
+      // the Assign driver window proposes.
+      const emptied = costingRowId ? null : undefined;
+      const num = (v) => (v === '' || v == null ? emptied : Number(v));
       const costingPayload = {
         vehicle_id: vehicleId,
         partner_cost_per_hour_ngn: num(costing.partner_cost_per_hour_ngn),
         partner_cost_per_day_ngn: num(costing.partner_cost_per_day_ngn),
         driver_cost_per_hour_ngn: num(costing.driver_cost_per_hour_ngn),
         driver_cost_per_day_ngn: num(costing.driver_cost_per_day_ngn),
-        notes: costing.notes.trim() || undefined,
+        notes: costing.notes.trim() || (costingRowId ? '' : undefined),
       };
       const hasCosting = Object.entries(costingPayload)
         .some(([k, v]) => k !== 'vehicle_id' && v !== undefined);

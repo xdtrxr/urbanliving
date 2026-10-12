@@ -308,7 +308,7 @@ check('the vehicle card shows the badge from isElectric', /\{isElectric\(vehicle
 check('the vehicle page shows the badge from isElectric and the fuel line from energyPolicy',
   /\{isElectric\(vehicle\) && \(/.test(source('src/pages/Vehicle.jsx')) && /const energy = energyPolicy\(vehicle\);/.test(source('src/pages/Vehicle.jsx')) && /\{energy\.label\}/.test(source('src/pages/Vehicle.jsx')));
 check('the admin form sends a powertrain only once one is chosen, never an empty one',
-  /\.\.\.\(form\.powertrain \? \{ powertrain: form\.powertrain \} : \{\}\)/.test(source('src/components/admin/VehiclesAdmin.jsx'))
+  /const built = buildVehiclePayload\(form, editingRow\);/.test(source('src/components/admin/VehiclesAdmin.jsx'))
   && !/^\s*powertrain: form\.powertrain,/m.test(source('src/components/admin/VehiclesAdmin.jsx')));
 check('Vehicle.powertrain is a string', powertrain?.type === 'string');
 

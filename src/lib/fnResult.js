@@ -14,13 +14,18 @@
 
 const FALLBACK = 'Something went wrong. Please try again.';
 const OFFLINE = 'Could not reach the server. Check your connection and try again.';
+// What the platform answers (HTTP 402) when the workspace cannot run backend
+// functions: "Functions are blocked - app owner lacks backend functions
+// capability". That is about the owner's plan, and a guest is shown this.
+const BLOCKED = /functions are blocked/i;
+const UNAVAILABLE = 'This part of the site is not available right now. Please try again later.';
 
 // The sentence in a response body, wherever this function put it. Older
 // functions use `error` alone; the platform itself uses `message` or `detail`.
 const sentenceIn = (body) => {
   if (!body || typeof body !== 'object') return null;
   for (const key of ['error', 'message', 'detail']) {
-    if (typeof body[key] === 'string' && body[key].trim()) return body[key];
+    if (typeof body[key] === 'string' && body[key].trim()) return BLOCKED.test(body[key]) ? UNAVAILABLE : body[key];
   }
   return null;
 };
