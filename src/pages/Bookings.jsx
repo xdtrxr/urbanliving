@@ -760,7 +760,7 @@ export default function BookingsPage() {
                   </p>
                   <Link to={createPageUrl("Search")}>
                     <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold dark:from-white dark:to-slate-200 dark:text-slate-900">
-                      Discover Properties
+                      Find a Stay
                     </Button>
                   </Link>
                 </Card>
@@ -779,7 +779,7 @@ export default function BookingsPage() {
                   <p className="text-slate-600 dark:text-slate-300 mb-6">Start planning your next adventure!</p>
                   <Link to={createPageUrl("Search")}>
                     <Button className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-8 py-3 rounded-xl font-semibold dark:from-white dark:to-slate-200 dark:text-slate-900">
-                      Discover Properties
+                      Find a Stay
                     </Button>
                   </Link>
                 </Card>
