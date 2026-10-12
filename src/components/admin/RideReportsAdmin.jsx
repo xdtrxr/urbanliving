@@ -12,7 +12,7 @@ import { Loader2, RefreshCw, Flag, AlertCircle, ShieldAlert, UserRound, Car } fr
 import { base44 } from '@/api/base44Client';
 import { invokeFn } from '@/lib/invokeFn';
 import { useToast } from '@/components/ui/use-toast';
-import { safePhotoUrl } from '@/config/rides';
+import { safePhotoUrl, isOpenGuestReport, reportHoldsPay } from '@/config/rides';
 
 // RideReportsAdmin — complaints about rides, from drivers about guests and
 // from guests about drivers, and what admin decided about each.
@@ -22,8 +22,11 @@ import { safePhotoUrl } from '@/config/rides';
 // resolveRideReport, which applies or lifts a block and tells the reporter
 // their report was looked at.
 //
-// A guest's complaint that is still open or being reviewed holds the driver's
-// pay for that ride. Closing it here is what lets the pay go.
+// A guest's complaint that is still open or being reviewed holds the pay of
+// the driver it names for that ride. Closing it here is what lets the pay go.
+// The badge says so only while that driver still has pay held on the ride:
+// it may have been released before the guest complained, or reversed when
+// the ride was handed to another driver, and then the report holds nothing.
 
 const fmtWhen = (iso) => {
   if (!iso) return '—';
@@ -105,6 +108,9 @@ const decisionsFor = (report) => {
 export default function RideReportsAdmin() {
   const { toast } = useToast();
   const [reports, setReports] = useState([]);
+  // Pay still held on the rides of open guest reports. null until it has been
+  // read, and again if it cannot be: the badge then makes no claim.
+  const [heldPay, setHeldPay] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -117,8 +123,24 @@ export default function RideReportsAdmin() {
     if (silent) setRefreshing(true);
     try {
       const rows = await base44.entities.RideReport.list('-created_date', 200);
-      setReports(Array.isArray(rows) ? rows : []);
+      const list = Array.isArray(rows) ? rows : [];
+      setReports(list);
       setError(null);
+      // The inbox is on screen from here. What follows only decides the
+      // "Holding the driver's pay" badge, and is read on its own so that a
+      // problem with the ledger cannot cost admin the reports. DriverEarning
+      // is admin-only at the API, like RideReport.
+      setLoading(false);
+      try {
+        const rideIds = [...new Set(list.filter(isOpenGuestReport).map((r) => r.ride_booking_id).filter(Boolean))];
+        const held = rideIds.length === 0 ? [] : await base44.entities.DriverEarning.filter(
+          { status: 'held', ride_booking_id: { $in: rideIds } }, '-created_date', 500,
+        );
+        setHeldPay(Array.isArray(held) ? held : null);
+      } catch (err) {
+        console.warn('Could not read held pay (the reports are unaffected):', err);
+        setHeldPay(null);
+      }
     } catch (err) {
       console.error('Could not load ride reports:', err);
       setError(err?.message || 'Could not load the reports.');
@@ -241,7 +263,7 @@ export default function RideReportsAdmin() {
                     {r.action_taken === 'warning' && (
                       <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-0 text-xs">Warned</Badge>
                     )}
-                    {!byDriver && (r.status === 'open' || r.status === 'reviewing') && (
+                    {reportHoldsPay(r, heldPay) && (
                       <Badge variant="outline" className="text-xs">Holding the driver&apos;s pay</Badge>
                     )}
                   </div>

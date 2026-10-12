@@ -367,6 +367,39 @@ check('a complaint about driver A does not hold driver B\'s pay', await hasOpenG
 check('…it still holds driver A\'s', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1', 'drvA'), true);
 check('an earning with no driver on it is held by nothing', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1', ''), false);
 
+// The same rule from the inbox's side. The badge "Holding the driver's pay"
+// used to show on every open guest report. It is true only while the driver
+// the report names still has pay held on that ride.
+const aboutA = filed('guest', 'open');
+const payRow = (driver_id, extra = {}) => ({ id: `e-${driver_id}`, ride_booking_id: 'ride1', driver_id, amount_ngn: 15000, status: 'held', ...extra });
+check('the badge shows while the driver the report names has pay held on that ride', rides.reportHoldsPay(aboutA, [payRow('drvA')]), true);
+check('…and while the report is being reviewed', rides.reportHoldsPay(filed('guest', 'reviewing'), [payRow('drvA')]), true);
+check('…and while admin has paused that pay as well', rides.reportHoldsPay(aboutA, [payRow('drvA', { on_hold: true })]), true);
+// The ride was handed to drvB: drvA's held pay was reversed, drvB's is held.
+check('not after a handover: the report holds nobody\'s pay',
+  rides.reportHoldsPay(aboutA, [payRow('drvA', { status: 'reversed' }), payRow('drvB')]), false);
+check('…a report about the driver who took over holds theirs',
+  rides.reportHoldsPay(filed('guest', 'open', 'ride1', 'drvB'), [payRow('drvA', { status: 'reversed' }), payRow('drvB')]), true);
+// Reports are accepted for a week after the ride; pay is released after two hours.
+check('not when the pay had already been released', rides.reportHoldsPay(aboutA, [payRow('drvA', { status: 'released' })]), false);
+check('not when the driver has no pay row: no login, or assigned at ₦0', rides.reportHoldsPay(aboutA, []), false);
+check('not when the ledger could not be read: no claim is made', rides.reportHoldsPay(aboutA, null), false);
+check('…or has not been read yet', rides.reportHoldsPay(aboutA, undefined), false);
+check('held pay on another ride is not this report\'s', rides.reportHoldsPay(aboutA, [payRow('drvA', { ride_booking_id: 'other' })]), false);
+check('a held row that carries a reversal time counts nowhere', rides.reportHoldsPay(aboutA, [payRow('drvA', { reversed_at: '2026-08-10T12:00:00.000Z' })]), false);
+check('a report the driver filed holds nobody\'s pay', rides.reportHoldsPay(filed('driver', 'open'), [payRow('drvA')]), false);
+for (const closed of ['resolved', 'dismissed']) {
+  check(`a ${closed} report holds nothing`, rides.reportHoldsPay(filed('guest', closed), [payRow('drvA')]), false);
+}
+check('no report, no badge', rides.reportHoldsPay(null, [payRow('drvA')]), false);
+// The inbox and the sweep must agree about which reports can hold pay at all.
+for (const [role, status] of [['guest', 'open'], ['guest', 'reviewing'], ['guest', 'resolved'], ['guest', 'dismissed'], ['driver', 'open']]) {
+  check(`the ${role}'s ${status} report: the inbox says what the sweep does`,
+    rides.reportHoldsPay(filed(role, status), [payRow('drvA')]), await hasOpenGuestReport(reportsOf([filed(role, status)]), 'ride1', 'drvA'));
+}
+check('the inbox draws the badge from reportHoldsPay',
+  /\{reportHoldsPay\(r, heldPay\) && \(/.test(fs.readFileSync(path.join(ROOT, 'src/components/admin/RideReportsAdmin.jsx'), 'utf8')), true);
+
 const settleDueEarning = make('settleDueEarning',
   liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),
   liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId, driverId'), liftSrc(SWEEP, 'keepReversed', 'sr, earningId'),
@@ -536,6 +569,15 @@ const payRows = () => (rig.db.DriverEarning || []).map((e) => `${e.driver_id}:${
   same('…and is not offered a third', await offered(), [false, true]);
   r = await complain('Once more, with feeling.');
   same('…nor accepted if sent anyway', [r.status, r.code, onFile().length], [409, 'ALREADY_REPORTED', 2]);
+
+  // Both reports are open in the inbox. It reads, as admin, the pay still
+  // held on their ride: the first driver's was reversed at the handover.
+  rig.user = BOSS;
+  const held = await rig.client().entities.DriverEarning.filter(
+    { status: 'held', ride_booking_id: { $in: ['ride1'] } }, '-created_date', 500);
+  const [aboutAde, aboutBola] = rig.db.RideReport;
+  same('in the inbox, only the report about the driver who took over says "Holding the driver\'s pay"',
+    [rides.reportHoldsPay(aboutAde, held), rides.reportHoldsPay(aboutBola, held)], [false, true]);
 }
 
 // ---- result ----

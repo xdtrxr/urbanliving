@@ -374,6 +374,29 @@ export function noPayLine(bucket) {
   return { tone: 'muted', text: 'No pay is recorded in the app for this ride.' };
 }
 
+// ── What the reports inbox says about pay ───────────────────────────────────
+// A report that can hold pay at all: a guest's complaint about a driver that
+// admin has not closed. A report the driver filed never holds the driver's
+// own pay. MIRROR of what hasOpenGuestReport looks for in the sweep and in
+// settleDriverEarning; scripts/check-ride-reports.mjs runs the two together.
+export const isOpenGuestReport = (report) => !!report
+  && report.reporter_role === 'guest'
+  && !!report.reported_driver_id
+  && (report.status === 'open' || report.status === 'reviewing');
+
+// Whether a report is holding a driver's pay right now, which is what the
+// inbox badge says. Only while the driver it names still has pay held on
+// that ride: the pay may have been released before the guest complained,
+// reversed when the ride was handed to another driver, or never recorded.
+// heldEarnings is what the inbox read from the ledger. When that read failed
+// it is not a list, and no claim is made.
+export function reportHoldsPay(report, heldEarnings) {
+  return isOpenGuestReport(report) && Array.isArray(heldEarnings) && heldEarnings.some((e) => !!e
+    && e.status === 'held' && !e.reversed_at
+    && e.ride_booking_id === report.ride_booking_id
+    && e.driver_id === report.reported_driver_id);
+}
+
 // ── Ride reports ────────────────────────────────────────────────────────────
 // MIRROR of the limits in base44/functions/createRideReport/entry.ts. The
 // server is the authority; these let the dialog stop a report it would refuse
