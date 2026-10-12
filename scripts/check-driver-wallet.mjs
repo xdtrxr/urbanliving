@@ -1654,6 +1654,21 @@ const B_PAY = ['drvB', { ...dayPay, amount: 20000, rate: 20000 }];
   const out = await randomSchedules(assignRace([A_PAY, B_PAY, ['drvC', dayPay]]), ledgerAgrees, 500, 20261010);
   check(`three drivers assigned at once, ${out.runs} random orders`, `${out.problem}${out.schedule}`, '');
 }
+{
+  // "Record pay" for the driver on the ride while the ride is handed to
+  // another. The same driver again still writes the ride row, to say whose
+  // pay figure it was given, but never who is driving. The ride must end with
+  // the new driver, holding one row, and the first driver with none.
+  const out = await everySchedule(() => {
+    const sr = rideWorld('drvA');
+    const recordPay = (gate) => writeAssignment(
+      gatedWorld(sr, gate), rideA, 'drvA', dayPay, END, { pay_answered_for: 'drvA' }, 'Reassigned to drvA', NOW);
+    return { world: { sr, calls: [A_PAY, B_PAY] }, actors: [recordPay, ...assignActors(sr, [B_PAY])] };
+  }, (world, results) => ledgerAgrees(world, results)
+    || (onRide(world.sr) === 'drvB' ? '' : `"Record pay" put ${onRide(world.sr)} on the ride`), 4);
+  check(`"Record pay" while the ride is handed to another driver (${out.runs} orders): the new driver holds one row, the first none`, `${out.problem}${out.schedule}`, '');
+  check('…and that was more than a handful of orders', out.runs > 500, true);
+}
 
 // ── What the rides list tells admin ────────────────────────────────────────
 console.log('\n— rides list flags —');
@@ -1665,6 +1680,20 @@ same('pay that still stands is keyed by ride and driver', livePayKeys([
   null,
 ]), ['r1:drvA', 'r2:drvB', 'r3:drvA']);
 same('no ledger, no keys', livePayKeys(undefined), []);
+
+// A figure of ₦0 holds nothing, so it leaves no pay row. The ride row says
+// which driver a figure was given for, and that counts as recorded too.
+const payRecorded = make('payRecorded', liftSrc('getRideBookings', 'payRecorded', 'payKeys, ride'));
+const onLedger = new Set(['r1:drvA']);
+check('a pay row for the driver on the ride: recorded', payRecorded(onLedger, { id: 'r1', driver_id: 'drvA' }), true);
+check('no pay row and no figure ever given: not recorded', payRecorded(onLedger, { id: 'r2', driver_id: 'drvA' }), false);
+check('no pay row, but a figure was given for this driver: recorded',
+  payRecorded(onLedger, { id: 'r2', driver_id: 'drvA', pay_answered_for: 'drvA' }), true);
+check('a figure given for the driver before this one says nothing about this one',
+  payRecorded(onLedger, { id: 'r2', driver_id: 'drvB', pay_answered_for: 'drvA' }), false);
+check('a pay row for the driver before this one says nothing either', payRecorded(onLedger, { id: 'r1', driver_id: 'drvB' }), false);
+check('a ride with no driver has nothing recorded', payRecorded(onLedger, { id: 'r2' }), false);
+check('…whatever the ride row says a figure was given for', payRecorded(onLedger, { id: 'r2', driver_id: '', pay_answered_for: '' }), false);
 
 const T0 = at('2026-08-10T12:00:00.000Z');
 const unpaidDriver = {
@@ -2344,6 +2373,59 @@ console.log('\n— a stale assign dialog —');
     [r.status, r.data?.already_assigned, r.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:15000']);
 }
 check('the dialog says who it believes is on the ride', /expected_driver_id: ride\.driver_id \|\| '',/.test(screen('RidesAdmin.jsx')), true);
+
+// ₦0 is a real answer ("paid inside the partner's rate") and holds nothing,
+// so it leaves no pay row. The list used to read that as pay nobody had
+// recorded, for as long as the ride was on it, and no button could say
+// otherwise. The ride row now remembers which driver a figure was given for.
+console.log('\n— a ₦0 assignment —');
+const listHandler = await loadFunction(rig, 'getRideBookings');
+const adminSees = async () => (await call(rig, listHandler, { scope: 'all' }, BOSS)).data[0];
+const guestSees = async () => (await call(rig, listHandler, {}, TUNDE)).data[0];
+// What the admin list says about the ride: has a login, pay recorded, flagged.
+const flags = async () => {
+  const row = await adminSees();
+  return [row.driver_linked, row.driver_pay_recorded, rides.payMissing(row, Date.now())];
+};
+{
+  startOver();
+  const r = await pressAssign({ driver_id: 'ade', expected_driver_id: '', driver_payout_ngn: 0 });
+  same('a driver assigned at ₦0 is on the ride with nothing held', [r.status, r.data?.driver_payout_ngn, drivingNow(), payRows()], [200, 0, 'ade', '']);
+  same('…and the list does not call that "No pay recorded"', await flags(), [true, true, false]);
+  check('…because the ride remembers who the figure was for', rig.db.RideBooking[0].pay_answered_for, 'ade');
+  const guest = await guestSees();
+  same('…which the guest\'s own list does not carry, any more than it carries the driver', [guest.id, 'pay_answered_for' in guest, 'driver_id' in guest], ['ride1', false, false]);
+  const later = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade', driver_payout_ngn: 20000 });
+  same('a real figure can still be added afterwards with "Record pay"',
+    [later.status, later.data?.already_assigned, later.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:20000']);
+}
+{
+  // Assigned before pay was tracked: a driver, a login, and nothing else.
+  startOver({ driver_id: 'ade', driver_assigned_at: ASSIGNED_EARLIER });
+  same('a ride assigned before pay was tracked is still flagged', await flags(), [true, false, true]);
+  const r = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade', driver_payout_ngn: 0 });
+  same('…until "Record pay" answers it, with ₦0 if that is the answer', [r.status, payRows(), ...await flags()], [200, '', true, true, false]);
+  same('…which leaves who is driving, and since when, as they were',
+    [drivingNow(), rig.db.RideBooking[0].driver_assigned_at, told], ['ade', ASSIGNED_EARLIER, []]);
+}
+{
+  // The figure was given for Ade. The ride then goes to a driver with no
+  // login, who is given one afterwards: nobody has said what Uche is paid.
+  startOver();
+  await pressAssign({ driver_id: 'ade', expected_driver_id: '', driver_payout_ngn: 0 });
+  const r = await pressAssign({ driver_id: 'uche', expected_driver_id: 'ade' });
+  same('a driver with no login: nothing is tracked and nothing is flagged', [r.status, r.data?.pay_tracked, drivingNow(), ...await flags()], [200, false, 'uche', false, false, false]);
+  rig.db.Driver.find((d) => d.id === 'uche').user_email = 'uche@drivers.ng';
+  same('…given a login afterwards, the ride is flagged: a figure for the driver before says nothing about this one', await flags(), [true, false, true]);
+  await pressAssign({ driver_id: 'uche', expected_driver_id: 'uche', driver_payout_ngn: 0 });
+  same('…until a figure, or ₦0, is recorded for them', await flags(), [true, true, false]);
+}
+{
+  startOver();
+  await pressAssign({ driver_id: 'ade', expected_driver_id: '', driver_payout_ngn: 0 });
+  const r = await pressAssign({ driver_id: 'bola', expected_driver_id: 'ade', driver_payout_ngn: 0 });
+  same('a change of driver at ₦0 is answered for the new driver', [r.status, rig.db.RideBooking[0].pay_answered_for, ...await flags()], [200, 'bola', true, true, false]);
+}
 
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

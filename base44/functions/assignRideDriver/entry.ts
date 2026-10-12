@@ -14,7 +14,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 // (Driver.user_email), a DriverEarning row is written for the pay figure —
 // what admin typed, or the vehicle's driver cost for the booked duration.
 // The sweep releases it two hours after the booked end. A driver without a
-// login is assigned exactly as before and nothing is recorded.
+// login is assigned exactly as before and nothing is recorded. A figure of
+// ₦0 holds nothing, so the ride row also keeps which driver a figure was
+// given for (pay_answered_for): that is how getRideBookings tells "paid
+// nothing through the app, on purpose" from "nobody recorded their pay".
 //
 // TWO ASSIGNMENTS AT ONCE. Nothing here can lock the ride, so a second
 // assignment can land a moment before or after this one. writeAssignment
@@ -361,7 +364,8 @@ async function realignLedger(sr: any, ride: any, driverId: string, payout: any, 
 // Everything an assignment writes, in the one order that is safe.
 //   1. The pay row. If the ledger cannot be written this throws, and the ride
 //      is not handed to a driver whose pay could not be recorded.
-//   2. The ride row. `patch` is empty when the same driver is submitted again.
+//   2. The ride row. When the same driver is submitted again `patch` names
+//      no driver: at most who the pay figure was for, and new instructions.
 //   3. The ledger is made to agree with the ride row. A failure here is
 //      reported in ledger_error, not thrown: the driver IS on the ride by
 //      then, and answering "it failed" would be a lie admin might act on.
@@ -576,6 +580,12 @@ Deno.serve(async (req) => {
         const patch = {
             // The same driver again changes nothing about who is driving.
             ...(sameDriver ? {} : { driver_id, driver_assigned_at: nowIso }),
+            // Which driver a pay figure was given for. ₦0 holds nothing and
+            // so leaves no pay row; this is what tells the admin list the
+            // question was answered and not forgotten. Written whatever the
+            // figure, so it says nothing about the amount: a guest can read
+            // their own ride row.
+            ...(linkedEmail ? { pay_answered_for: driver_id } : {}),
             // Only overwrite when something was actually typed — a reassignment
             // that leaves the box blank must not wipe instructions already
             // written for this pickup.

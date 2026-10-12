@@ -77,6 +77,16 @@ function livePayKeys(earnings: any[]) {
     return keys;
 }
 
+// Whether the pay question has been answered for the driver on this ride: a
+// pay row for them, or a ride row that says assignRideDriver was given a
+// figure for them. The second is how a deliberate ₦0 is known: it holds
+// nothing, so it leaves no row, and without this the list would flag the
+// ride as pay nobody recorded. Admin only.
+function payRecorded(payKeys: Set<string>, ride: any) {
+    if (!ride.driver_id) return false;
+    return payKeys.has(`${ride.id}:${ride.driver_id}`) || ride.pay_answered_for === ride.driver_id;
+}
+
 const PAGE = 500;
 async function fetchAll(entity: any, query: Record<string, unknown>): Promise<any[]> {
     const out: any[] = [];
@@ -185,9 +195,11 @@ Deno.serve(async (req) => {
                 driver_name: scope === 'all' ? (driverNames.get(r.driver_id) || undefined) : undefined,
                 driver_assigned: !!r.driver_id,
                 // Admin only. driver_pay_recorded is null when the ledger
-                // could not be read.
+                // could not be read. pay_answered_for is on the row that was
+                // spread in above, so it is taken back out for a guest.
                 driver_linked: scope === 'all' ? linkedDrivers.has(r.driver_id) : undefined,
-                driver_pay_recorded: scope === 'all' ? (paid ? paid.has(`${r.id}:${r.driver_id}`) : null) : undefined,
+                driver_pay_recorded: scope === 'all' ? (paid ? payRecorded(paid, r) : null) : undefined,
+                pay_answered_for: scope === 'all' ? r.pay_answered_for : undefined,
                 // Guests only: whether "Report a problem with this driver" is
                 // offered. createRideReport checks every part of it again.
                 already_reported: scope === 'mine' ? reportedRides.has(r.id) : undefined,
