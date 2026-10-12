@@ -7,7 +7,7 @@ import { HelpCircle } from 'lucide-react';
 const faqItems = [
   {
     question: "How do I book a property?",
-    answer: "You can book a property by navigating to the 'Discover' page, searching for your desired destination and dates, selecting a property, and clicking the 'Book Now' button. You will be guided through the payment process to confirm your reservation."
+    answer: "You can book a property by opening 'Find a Stay' in the menu, searching for your desired destination and dates, selecting a property, and clicking the 'Book Now' button. You will be guided through the payment process to confirm your reservation."
   },
   {
     question: "What payment methods do you accept?",
