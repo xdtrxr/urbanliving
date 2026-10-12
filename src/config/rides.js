@@ -256,6 +256,144 @@ export const effectiveCategory = (vehicle) =>
 export const needsCategoryMigration = (vehicle) =>
   !vehicle?.category && !!vehicle?.vehicle_type;
 
+// ── The admin vehicle form ──────────────────────────────────────────────────
+// One rule for both halves: an edit writes what the admin chose, no more and
+// no less. An update only changes the fields it is sent, so a box the admin
+// emptied has to be sent as an explicit empty value or the old one stays. And
+// whatever the form shows, a save may write, so the form must never open on a
+// value the row does not have. scripts/check-vehicle-form.mjs runs the pair.
+
+const csvToArray = (raw) => String(raw || '').split(',').map((s) => s.trim()).filter(Boolean);
+const arrayToCsv = (arr) => (Array.isArray(arr) ? arr.join(', ') : '');
+
+// How a box is read, off the form or off a row. undefined is "not set": a
+// missing key, null and the empty string all read as that.
+const typedText = (v) => String(v ?? '').trim() || undefined;
+const typedNumber = (v) => {
+  const text = String(v ?? '').trim();
+  const n = Number(text);
+  return text !== '' && Number.isFinite(n) ? n : undefined;
+};
+// A year or a seat count. Zero is how older saves wrote a box left blank.
+const typedCount = (v) => {
+  const n = typedNumber(v);
+  return n > 0 ? n : undefined;
+};
+
+// The optional fields: how each is read, and what is written when the admin
+// removes its value. null for a number or a choice, '' for free text.
+const OPTIONAL_VEHICLE_FIELDS = [
+  ['powertrain', typedText, null],
+  ['model_year', typedCount, null],
+  ['description', typedText, ''],
+  ['registration_number', typedText, ''],
+  ['price_per_hour_ngn', typedNumber, null],
+  ['price_extra_hour_ngn', typedNumber, null],
+  ['price_per_extra_day_ngn', typedNumber, null],
+  ['max_passengers', typedCount, null],
+  ['fuel_policy', typedText, null],
+  ['fuel_cap_daily_ngn', typedNumber, null],
+  ['service_area', typedText, ''],
+];
+
+// The form as it opens on a row. Where the row has no category, powertrain,
+// fuel policy, year or seat count, that box opens blank: never on a default,
+// which the next save would write as if someone had chosen it.
+export function vehicleFormFrom(vehicle) {
+  return {
+    name: vehicle.name || '',
+    brand: vehicle.brand || '',
+    category: vehicle.category || '',
+    powertrain: vehicle.powertrain || '',
+    model_year: vehicle.model_year || '',
+    description: vehicle.description || '',
+    images: Array.isArray(vehicle.images) ? vehicle.images : [],
+    videos: Array.isArray(vehicle.videos) ? vehicle.videos : [],
+    city: vehicle.city || CITIES[0],
+    registration_number: vehicle.registration_number || '',
+    price_per_hour_ngn: vehicle.price_per_hour_ngn ?? '',
+    price_extra_hour_ngn: vehicle.price_extra_hour_ngn ?? '',
+    price_12hr_ngn: vehicle.price_12hr_ngn ?? '',
+    price_24hr_ngn: vehicle.price_24hr_ngn ?? '',
+    price_per_extra_day_ngn: vehicle.price_per_extra_day_ngn ?? '',
+    max_passengers: vehicle.max_passengers || '',
+    amenities: vehicle.amenities || [],
+    fuel_policy: vehicle.fuel_policy || '',
+    fuel_cap_daily_ngn: vehicle.fuel_cap_daily_ngn ?? '',
+    pickup_locations: arrayToCsv(vehicle.pickup_locations),
+    service_area: vehicle.service_area || '',
+    active: vehicle.active !== false,
+    admin_approved: vehicle.admin_approved !== false,
+    min_hours_per_booking: vehicle.min_hours_per_booking ?? 1,
+    turnaround_hours: vehicle.turnaround_hours ?? 1,
+  };
+}
+
+// The line under the Category box while the row being edited has none: where
+// guests find the car today, through the legacy fallback above. '' otherwise.
+export function noCategoryLine(vehicle) {
+  if (!vehicle || vehicle.category) return '';
+  const shown = effectiveCategory(vehicle);
+  return shown
+    ? `This car has no category yet. Guests see it under ${categoryLabel(shown)} today.`
+    : 'This car has no category yet, so guests cannot find it by browsing.';
+}
+
+// What to save. `original` is the row being edited, null for a new vehicle.
+//   { ok: true, payload }    the fields to send
+//   { ok: false, message }   why not, for the form's error area
+// The fields in `payload` below go on every save, as the form shows them. An
+// optional field goes only when it no longer says what the row says: the new
+// value, or its empty value when the admin removed one the row had. So a
+// blank box on a new vehicle, and a box nobody touched on an old one, write
+// nothing at all.
+export function buildVehiclePayload(form, original) {
+  const images = Array.isArray(form.images) ? form.images : [];
+  if (images.length === 0) return { ok: false, message: 'Add at least one image.' };
+  if (!form.price_12hr_ngn || !form.price_24hr_ngn) {
+    return { ok: false, message: 'Both 12-hour and 24-hour prices are required.' };
+  }
+  // A row from before the price tiers opens with no category chosen. Filling
+  // one in is how such a car got filed under Comfort without anyone deciding.
+  if (!CATEGORIES.some((c) => c.value === form.category)) {
+    return { ok: false, message: 'Choose a category. This car does not have one yet.' };
+  }
+
+  // Shape matches Vehicle.jsonc.
+  const payload = {
+    name: form.name.trim(),
+    brand: form.brand.trim(),
+    category: form.category,
+    images,
+    videos: Array.isArray(form.videos) ? form.videos : [],
+    city: form.city,
+    price_12hr_ngn: Number(form.price_12hr_ngn),
+    price_24hr_ngn: Number(form.price_24hr_ngn),
+    amenities: form.amenities,
+    pickup_locations: csvToArray(form.pickup_locations),
+    active: form.active,
+    admin_approved: form.admin_approved,
+    min_hours_per_booking: Number(form.min_hours_per_booking) || 1,
+    turnaround_hours: form.turnaround_hours === '' ? 1 : Number(form.turnaround_hours),
+    driver_included: true, // V1 always includes a driver
+  };
+
+  // The cap box is on the form only while the policy is "capped". Moving a
+  // car off that policy takes its cap along; a cap on a car that was not
+  // capped to begin with is not on the form, so it is left alone.
+  const capShown = form.fuel_policy === 'fuel_capped';
+  const capWasShown = original?.fuel_policy === 'fuel_capped';
+
+  for (const [key, read, empty] of OPTIONAL_VEHICLE_FIELDS) {
+    const had = read(original?.[key]);
+    let now = read(form[key]);
+    if (key === 'fuel_cap_daily_ngn' && !capShown) now = capWasShown ? undefined : had;
+    if (now === had) continue;
+    payload[key] = now === undefined ? empty : now;
+  }
+  return { ok: true, payload };
+}
+
 // ── Driver logins ───────────────────────────────────────────────────────────
 // The server matches a driver to a login by exact string, so the address is
 // stored one way only: trimmed and lower-cased.
