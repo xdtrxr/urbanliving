@@ -8,7 +8,15 @@
         "admin",
         "user"
       ],
-      "default": "user"
+      "default": "user",
+      "description": "Who is an admin. Every admin-only rule in the app rests on this field, so only an admin (or the server) may change it; the field-level write rule keeps auth.updateMe from setting it from the browser.",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "profile_picture": {
       "type": "string"
@@ -73,7 +81,15 @@
       "type": "string"
     },
     "referred_by_code": {
-      "type": "string"
+      "type": "string",
+      "description": "The referral code this user signed up with. Stamped once by attributeReferral under the service role. The field-level write rule keeps a user from changing it, because the referral reward follows it.",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "referral_balance_ngn": {
       "type": "number",
