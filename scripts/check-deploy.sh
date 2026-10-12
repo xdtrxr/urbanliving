@@ -70,7 +70,8 @@ request-availability CTA|Request availability
 extra-hour rate|price_extra_hour_ngn
 extra-hour snapshot|extra_hour_rate_ngn
 admin-only costing|VehicleCosting
-nav says Book a Ride|Book a Ride
+nav leads with the two things the app does|Cars & Chauffeurs
+nav: Find a Stay|Browse & book apartments
 stay cancel via function|cancelBooking
 stay payment via function|startStayPayment
 driver pages|getDriverRides
@@ -96,7 +97,7 @@ echo; echo "── stale markers (must all be GONE) ──"
 # never there would report "gone" and read as a false pass. "Check availability"
 # (lower-case a) was the ride CTA; the stays flow uses "Check Availability" and
 # grep -F is case-sensitive, so the stays string does not trip this.
-for m in "Plan a Trip" "Check availability" "/ full day"; do
+for m in "Plan a Trip" "Check availability" "/ full day" "Book a Ride"; do
   grep -qF -- "$m" "$TMP/all.js" && no "stale string still live: $m" || ok "gone: $m"
 done
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Search, Calendar, User, Heart, MessageCircle, LayoutGrid, Compass, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard, Car, Banknote } from "lucide-react";
+import { Search, Calendar, User, Heart, MessageCircle, LayoutGrid, Settings, Shield, HelpCircle, Trophy, LogOut, Wallet, CreditCard, Car, CarFront, Banknote } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -24,18 +24,29 @@ import { LogIn } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import BrandMark from "@/components/brand/BrandMark";
 
+// The two things UrbanStays is for come first, so the menu says what the app
+// does before anything else: a place to stay, and a car with a driver. The
+// order below is the order on screen. Drivers get their own two pages above
+// all of it and admins get the Admin Panel at the very end (both added in
+// Layout, further down).
 const navigationItems = [
+  {
+    title: "Find a Stay",
+    url: createPageUrl("Search"),
+    icon: Search,
+    description: "Browse & book apartments"
+  },
+  {
+    title: "Cars & Chauffeurs",
+    url: createPageUrl("PlanTrip"),
+    icon: CarFront,
+    description: "Book a car with a driver"
+  },
   {
     title: "Dashboard",
     url: createPageUrl("Dashboard"),
     icon: LayoutGrid,
     description: "Your personal overview"
-  },
-  {
-    title: "Discover",
-    url: createPageUrl("Search"),
-    icon: Search,
-    description: "Find your perfect stay"
   },
   {
     title: "Agent Nova",
@@ -44,40 +55,10 @@ const navigationItems = [
     description: "Get personalized advice"
   },
   {
-    title: "Support",
-    url: createPageUrl("Support"),
-    icon: HelpCircle,
-    description: "Get help & assistance"
-  },
-  {
-    title: "Quests",
-    url: createPageUrl("Quests"),
-    icon: Trophy,
-    description: "Earn rewards & points"
-  },
-  {
-    title: "Book a Ride",
-    url: createPageUrl("PlanTrip"),
-    icon: Compass,
-    description: "A car with a driver, in your city"
-  },
-  {
     title: "My Bookings",
     url: createPageUrl("Bookings"),
     icon: Calendar,
-    description: "Manage reservations"
-  },
-  {
-    title: "Withdrawals",
-    url: createPageUrl("Withdrawals"),
-    icon: Wallet,
-    description: "Withdraw earnings"
-  },
-  {
-    title: "Bank Accounts",
-    url: createPageUrl("BankAccounts"),
-    icon: CreditCard,
-    description: "Manage bank accounts"
+    description: "Manage your reservations"
   },
   {
     title: "Wishlist",
@@ -86,10 +67,34 @@ const navigationItems = [
     description: "Saved properties"
   },
   {
+    title: "Quests",
+    url: createPageUrl("Quests"),
+    icon: Trophy,
+    description: "Earn rewards & points"
+  },
+  {
+    title: "Withdrawals",
+    url: createPageUrl("Withdrawals"),
+    icon: Wallet,
+    description: "Withdraw your earnings"
+  },
+  {
+    title: "Bank Accounts",
+    url: createPageUrl("BankAccounts"),
+    icon: CreditCard,
+    description: "Manage bank accounts"
+  },
+  {
     title: "Profile",
     url: createPageUrl("Profile"),
     icon: User,
     description: "Account settings"
+  },
+  {
+    title: "Support",
+    url: createPageUrl("Support"),
+    icon: HelpCircle,
+    description: "Get help & assistance"
   }
 ];
 
