@@ -6,9 +6,11 @@
 // sentence a person is meant to read ("No driver cost is set for this
 // vehicle…") arrives inside the thrown error, not in a response.
 //
-// These two functions turn both outcomes into one shape:
+// fromResponse and fromThrown turn both outcomes into one shape:
 //   { ok, data, error, code, status, body }
-// No imports on purpose: scripts/check-driver-wallet.mjs loads this file as it is.
+// withSentence is for the screens that catch the error themselves.
+// No imports on purpose: the check scripts load this file as it is, and
+// src/api/base44Client.js imports it, so it must not import the client back.
 
 const FALLBACK = 'Something went wrong. Please try again.';
 const OFFLINE = 'Could not reach the server. Check your connection and try again.';
@@ -43,4 +45,22 @@ export function fromThrown(err) {
   // No response and no body means the request never got an answer.
   const error = sentenceIn(body) || (!response && !raw ? OFFLINE : (transport || FALLBACK));
   return { ok: false, data: null, error, code: (body && body.code) || null, status, body };
+}
+
+// The thrown error itself, with that sentence as its message. Most screens
+// call base44.functions.invoke themselves and show err.message, which from
+// axios is "Request failed with status code 409". src/api/base44Client.js
+// passes every thrown call through here, so those screens show the reason
+// without being rewritten. Only the message changes: .response, .status and
+// .code are still there for the callers that read them.
+export function withSentence(err) {
+  if (!err || typeof err !== 'object') return err;
+  const { error, body } = fromThrown(err);
+  // An answer with no sentence in it (a gateway's error page, say) leaves
+  // fromThrown only axios's own line to hand back. Nobody is shown that one.
+  const sentence = (sentenceIn(body) || error === OFFLINE) ? error : FALLBACK;
+  // A frozen error keeps the text it came with: better that than a TypeError
+  // thrown over the real one.
+  try { err.message = sentence; } catch { /* left as it was */ }
+  return err;
 }

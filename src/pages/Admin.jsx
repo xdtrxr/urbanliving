@@ -736,9 +736,12 @@ export default function AdminPage() {
       }
     } catch (error) {
       console.error('MCP Error:', error);
-      setMcpResult({ 
-        success: false, 
-        message: error.message || error.toString()
+      setMcpResult({
+        success: false,
+        message: error.message || error.toString(),
+        // Read off the status: the message is the server's sentence, which
+        // need not hold the number the rate limit note looks for.
+        rateLimited: error?.response?.status === 429
       });
     }
 
@@ -1108,7 +1111,7 @@ export default function AdminPage() {
                     <p className="text-sm text-red-800 dark:text-red-200">{mcpResult.message}</p>
                     
                     {/* Specific guidance for 429 errors */}
-                    {mcpResult.message?.includes('429') && (
+                    {(mcpResult.rateLimited || mcpResult.message?.includes('429')) && (
                       <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg">
                         <p className="text-xs font-semibold text-amber-900 dark:text-amber-100 mb-1">💡 Rate Limit Reached</p>
                         <p className="text-xs text-amber-800 dark:text-amber-200">

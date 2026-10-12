@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -82,6 +82,8 @@ export default function CheckoutPage() {
   const [adminResponse, setAdminResponse] = useState('');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [createdBookingId, setCreatedBookingId] = useState(null);
+  // The approval poll has failed three times running (see the poll below).
+  const [pollStalled, setPollStalled] = useState(false);
 
   const handleSavePhoneNumber = async () => {
     setPhoneError('');
@@ -295,12 +297,17 @@ export default function CheckoutPage() {
 
     console.log(`🔄 Starting polling for request: ${availabilityRequestId}`);
     let stopped = false;
-    
+    // Failed polls in a row. One is a blip. Three and this page has lost sight
+    // of the request, and the guest is told so rather than left on "pending".
+    let failures = 0;
+
     const pollInterval = setInterval(async () => {
       if (stopped) return;
       try {
         const request = await base44.entities.AvailabilityRequest.get(availabilityRequestId);
-        
+        failures = 0;
+        setPollStalled(false);
+
         if (request.status === 'approved') {
           console.log('✅ APPROVED');
           stopped = true;
@@ -318,12 +325,15 @@ export default function CheckoutPage() {
         }
       } catch (error) {
         console.error('❌ Polling error:', error);
+        failures += 1;
+        if (failures >= 3 && !stopped) setPollStalled(true);
       }
     }, 3000);
 
     return () => {
       stopped = true;
       clearInterval(pollInterval);
+      setPollStalled(false);
     };
   }, [availabilityRequestId, existingBooking]);
 
@@ -737,6 +747,12 @@ export default function CheckoutPage() {
                         <div>
                           <p className="font-semibold text-sm mb-1">⏳ Awaiting Admin Approval</p>
                           <p className="text-xs">Your request is being reviewed. You can track it in the "Pending Approval" tab of your bookings!</p>
+                          {pollStalled && (
+                            <p className="text-xs mt-2" role="status">
+                              We received your request, but this page cannot refresh its status right now.{' '}
+                              <Link to={createPageUrl('Bookings')} className="underline font-medium">My Bookings</Link> shows where it stands.
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
