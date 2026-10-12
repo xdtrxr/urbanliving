@@ -186,8 +186,9 @@ check('User.ride_blocked is a boolean, off by default',
 check('User.ride_blocked is admin-write', adminOnly(prop('User', 'ride_blocked')?.rls?.write));
 
 // ── Rules staged for the next publish ──────────────────────────────────────
-// docs/entity-rules-pending-publish/ holds stricter copies of some schemas.
-// On publish day each one is copied over the live file. A staged copy that is
+// docs/entity-rules-pending-publish/ is where a stricter copy of a schema
+// waits when its rule cannot go live before a publish (empty or absent when
+// nothing is waiting). On publish day each copy replaces the live file. A staged copy that is
 // missing a field the live schema has since gained would DELETE that field
 // from production, so the two must always list the same fields.
 console.log('\n— staged rules —');
@@ -216,6 +217,15 @@ for (const file of stagedFiles) {
 check('WithdrawalRequest: only the server may create a row', adminOnly(entities.WithdrawalRequest?.rls?.create));
 check('RideBooking: only the server may create a row', adminOnly(entities.RideBooking?.rls?.create));
 check('LoyaltyTransaction: only the server may create a row', adminOnly(entities.LoyaltyTransaction?.rls?.create));
+// Applied on 2026-10-12, once checkAvailabilityWebhook wrote both rows with
+// the service role. Until then a signed-in guest could write a Booking by
+// hand: any total_price, or already approved, confirmed or paid.
+check('Booking: only the server may create a row', adminOnly(entities.Booking?.rls?.create));
+check('AvailabilityRequest: only the server may create a row', adminOnly(entities.AvailabilityRequest?.rls?.create));
+check('Booking delete is admin-only', adminOnly(entities.Booking?.rls?.delete));
+for (const op of ['update', 'delete']) {
+  check(`AvailabilityRequest ${op} is admin-only`, adminOnly(entities.AvailabilityRequest?.rls?.[op]));
+}
 check('Booking: only admin may update a row', adminOnly(entities.Booking?.rls?.update));
 for (const f of ['loyalty_points', 'loyalty_tier', 'referral_balance_ngn', 'ride_blocked']) {
   check(`User.${f} is admin-write`, adminOnly(prop('User', f)?.rls?.write));
@@ -223,8 +233,7 @@ for (const f of ['loyalty_points', 'loyalty_tier', 'referral_balance_ngn', 'ride
 
 // An "only the server may create" rule only works if nothing
 // creates that row as the signed-in user: no function (it must go through
-// asServiceRole) and nothing in the browser. This is the README's "Needs"
-// column, checked.
+// asServiceRole) and nothing in the browser.
 const filesUnder = (dir, exts) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
   const full = path.join(dir, d.name);
   if (d.isDirectory()) return d.name === 'node_modules' ? [] : filesUnder(full, exts);
@@ -233,7 +242,7 @@ const filesUnder = (dir, exts) => fs.readdirSync(dir, { withFileTypes: true }).f
 const functionFiles = filesUnder(path.join(ROOT, 'base44/functions'), ['.ts']);
 const browserFiles = filesUnder(path.join(ROOT, 'src'), ['.js', '.jsx']);
 const rel = (file) => path.relative(ROOT, file);
-for (const stem of ['WithdrawalRequest', 'RideBooking', 'LoyaltyTransaction']) {
+for (const stem of ['WithdrawalRequest', 'RideBooking', 'LoyaltyTransaction', 'Booking', 'AvailabilityRequest']) {
   const asCaller = new RegExp(`(?<!asServiceRole)\\.entities\\.${stem}\\.(create|bulkCreate)\\(`);
   const inBrowser = new RegExp(`\\b${stem}\\.(create|bulkCreate)\\(`);
   const offenders = [

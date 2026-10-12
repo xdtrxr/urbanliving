@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "check": "node scripts/check-ride-time.mjs && node scripts/check-stay-price.mjs && node scripts/check-stay-handler.mjs && node scripts/check-entities.mjs && node scripts/check-driver-wallet.mjs && node scripts/check-ride-reports.mjs",
+    "check": "node scripts/check-ride-time.mjs && node scripts/check-stay-price.mjs && node scripts/check-stay-handler.mjs && node scripts/check-referral-reward.mjs && node scripts/check-entities.mjs && node scripts/check-driver-wallet.mjs && node scripts/check-ride-reports.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

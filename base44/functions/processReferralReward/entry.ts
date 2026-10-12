@@ -38,6 +38,20 @@ Deno.serve(async (req) => {
             return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), { status: 403, headers });
         }
 
+        // A reward is owed for a stay that was paid for, and for nothing
+        // else. A guest can call this for their own booking, so without this
+        // check an unpaid request (any length, at any listing's price) put 5%
+        // of its total on the referrer's withdrawable balance. Status is
+        // checked as well as payment: a paid stay the admin cancelled keeps
+        // payment_status 'paid'.
+        if (booking.payment_status !== 'paid' || !['confirmed', 'completed'].includes(booking.status)) {
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'This booking has not been paid for.',
+                code: 'NOT_PAID',
+            }), { status: 409, headers });
+        }
+
         // Find the booking guest's referrer code
         const guests = await base44.asServiceRole.entities.User.filter({ email: booking.guest_email });
         const guest = guests[0];
