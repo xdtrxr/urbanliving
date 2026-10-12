@@ -171,6 +171,10 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
     const r = await invokeFn('assignRideDriver', {
       ride_booking_id: ride.id,
       driver_id: driver.id,
+      // Who this dialog believes is on the ride. It was drawn from the ride as
+      // it was when it opened; if someone has changed the driver since, the
+      // server saves nothing rather than take "Record pay" for a reassignment.
+      expected_driver_id: ride.driver_id || '',
       pickup_instructions: instructions.trim() || undefined,
       driver_payout_ngn: typed.value,
     });

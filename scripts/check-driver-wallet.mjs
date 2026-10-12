@@ -1473,6 +1473,21 @@ same('a driver attached after the ride is over: the guest is not told someone is
   assignmentNotices(false, true, true), { guest: false, driver: 'pay' });
 same('…and with no pay recorded, nobody is told', assignmentNotices(false, true, false), { guest: false, driver: '' });
 
+// The Assign driver dialog says who it believed was on the ride when it was
+// opened. "Record pay" for that driver must not turn into a reassignment
+// because somebody changed the driver in the meantime.
+const driverChangedSince = make('driverChangedSince', ar('driverChangedSince', 'expectedDriverId, ride'));
+check('the dialog saw Ade and Ade is on the ride: nothing changed', driverChangedSince('drvA', { driver_id: 'drvA' }), false);
+check('the dialog saw Ade and the ride is now Bola\'s: changed', driverChangedSince('drvA', { driver_id: 'drvB' }), true);
+check('the dialog saw nobody and somebody has been assigned since: changed', driverChangedSince('', { driver_id: 'drvB' }), true);
+check('the dialog saw nobody and nobody is on the ride: nothing changed', driverChangedSince('', {}), false);
+check('…however "nobody" is stored on the ride', driverChangedSince('', { driver_id: null }), false);
+check('the dialog saw Ade and the ride has nobody: changed', driverChangedSince('drvA', { driver_id: '' }), true);
+// A page loaded before the dialog sent this keeps working: it is not checked.
+check('a request that does not say who it expected is not checked', driverChangedSince(undefined, { driver_id: 'drvB' }), false);
+check('…nor is one that sends null', driverChangedSince(null, { driver_id: 'drvB' }), false);
+check('…or anything else that is not text', driverChangedSince({ $ne: '' }, { driver_id: 'drvB' }), false);
+
 const ASSIGN = [
   PAY, FETCH_ALL, constLine(AR, 'MAX_REALIGN_PASSES'),
   ar('releaseAtFor', 'endAtIso'),
@@ -2256,6 +2271,7 @@ const startOver = (ride = {}, drivers = {}) => {
   };
 };
 const pressAssign = (body) => call(rig, assignHandler, { ride_booking_id: 'ride1', ...body }, BOSS);
+const drivingNow = () => rig.db.RideBooking[0].driver_id || '';
 const payRows = () => rig.db.DriverEarning.map((e) => `${e.driver_id}:${e.status}:${e.amount_ngn}`).join(',');
 
 console.log('\n— record pay for a driver the dialog would not offer today —');
@@ -2280,8 +2296,54 @@ console.log('\n— record pay for a driver the dialog would not offer today —'
   startOver({}, { ade: { active: false } });
   const r = await pressAssign({ driver_id: 'ade' });
   same('a driver who is switched off cannot be given a new ride',
-    [r.status, r.code, rig.db.RideBooking[0].driver_id || '', payRows()], [409, 'DRIVER_UNAVAILABLE', '', '']);
+    [r.status, r.code, drivingNow(), payRows()], [409, 'DRIVER_UNAVAILABLE', '', '']);
 }
+
+// The server tells "record pay" from "a new assignment" by comparing the
+// driver submitted with whoever is on the ride at that moment. The dialog
+// works on the ride as it was when it was opened, so it also says who it
+// believed was on it, and the server refuses when that is no longer true.
+console.log('\n— a stale assign dialog —');
+{
+  // Admin 1 opens the dialog while Ade is on the ride with no pay: Ade's row
+  // says "Record pay". Admin 2 then changes the driver to Bola.
+  startOver({ driver_id: 'ade' });
+  const changed = await pressAssign({ driver_id: 'bola', expected_driver_id: 'ade', driver_payout_ngn: 18000 });
+  same('a change of driver from a dialog that is up to date goes through',
+    [changed.status, changed.data?.reassigned, drivingNow(), payRows()], [200, true, 'bola', 'bola:held:18000']);
+  // Admin 1 presses "Record pay" on Ade.
+  told = [];
+  const stale = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade' });
+  same('"Record pay" from a dialog opened before that change is refused', [stale.status, stale.code], [409, 'SUPERSEDED']);
+  check('…the ride stays with the driver it was handed to', drivingNow(), 'bola');
+  check('…whose held pay is not reversed, and nothing is held for the other', payRows(), 'bola:held:18000');
+  same('…and nobody is emailed or notified', told, []);
+  check('…the answer says nothing was saved', /nothing was saved/.test(stale.error || ''), true);
+  // The dialog was opened when nobody was on the ride at all.
+  const first = await pressAssign({ driver_id: 'ade', expected_driver_id: '' });
+  same('a first "Assign" from a dialog opened before somebody else assigned is refused too',
+    [first.status, first.code, drivingNow(), payRows(), told.length], [409, 'SUPERSEDED', 'bola', 'bola:held:18000', 0]);
+  // A page loaded before the dialog said who it expected sends nothing.
+  const older = await pressAssign({ driver_id: 'ade' });
+  same('a request that does not say who it expected is not checked, as before',
+    [older.status, older.data?.reassigned, drivingNow(), payRows()], [200, true, 'ade', 'bola:reversed:18000,ade:held:15000']);
+}
+{
+  startOver();
+  const r = await pressAssign({ driver_id: 'ade', expected_driver_id: '' });
+  same('a first assignment from a dialog that is up to date',
+    [r.status, r.data?.already_assigned, r.data?.guest_notified, drivingNow(), payRows()], [200, false, true, 'ade', 'ade:held:15000']);
+  const again = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade', driver_payout_ngn: 99999 });
+  same('…and the same driver again from one that is up to date changes nothing',
+    [again.status, again.data?.already_assigned, again.data?.pay_recorded, payRows()], [200, true, false, 'ade:held:15000']);
+}
+{
+  startOver({ driver_id: 'ade' });
+  const r = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade' });
+  same('"Record pay" from a dialog that is up to date',
+    [r.status, r.data?.already_assigned, r.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:15000']);
+}
+check('the dialog says who it believes is on the ride', /expected_driver_id: ride\.driver_id \|\| '',/.test(screen('RidesAdmin.jsx')), true);
 
 // ---- result ----
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

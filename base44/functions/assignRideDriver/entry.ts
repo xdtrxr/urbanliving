@@ -28,6 +28,14 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 // was tracked: the checks on whether this driver should be sent are skipped,
 // the guest is not told a second time, and a standing pay row is never
 // repriced.
+//
+// A STALE DIALOG. "The same driver again" is judged against the ride row as
+// it is now, and the dialog was drawn from the ride as it was when it was
+// opened. So the dialog also says who it believed was on the ride
+// (expected_driver_id). If that is no longer who the ride row names, someone
+// has changed the driver since, and nothing is written (SUPERSEDED):
+// otherwise "Record pay" for the driver who was on the ride would hand the
+// ride back to them. A request without the field is not checked.
 
 // An id that arrived in a request, or sits on a row a browser could have
 // written. entity.get(id) is a GET on …/<id>, so "abc#x" or "abc?x=1" fetches
@@ -387,6 +395,14 @@ function assignmentNotices(sameDriver: boolean, rideOver: boolean, payIsNew: boo
     return { guest: newJob, driver: newJob ? 'assigned' : (payIsNew ? 'pay' : '') };
 }
 
+// Whether the driver on the ride is no longer the one the Assign driver
+// dialog saw when it was opened ('' for nobody). Only a request that says who
+// it expected is judged: a page loaded before the dialog sent this sends
+// nothing, and behaves as it always did.
+function driverChangedSince(expectedDriverId: unknown, ride: any) {
+    return typeof expectedDriverId === 'string' && expectedDriverId !== String(ride.driver_id || '');
+}
+
 async function tryPush(sdk: any, opts: Record<string, unknown>) {
     try {
         await sdk.functions.invoke('sendPushNotification', { ...opts, internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '' });
@@ -414,7 +430,7 @@ Deno.serve(async (req) => {
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
         const body = await req.json().catch(() => null);
-        const { ride_booking_id, driver_id, pickup_instructions, driver_payout_ngn } = body || {};
+        const { ride_booking_id, driver_id, pickup_instructions, driver_payout_ngn, expected_driver_id } = body || {};
         if (!isId(ride_booking_id) || !isId(driver_id)) {
             return json({ success: false, error: 'ride_booking_id and driver_id are required' }, 400);
         }
@@ -430,6 +446,15 @@ Deno.serve(async (req) => {
                 success: false,
                 error: 'Assign a driver only after the ride is paid.',
                 code: 'NOT_PAID',
+            }, 409);
+        }
+        // Drawn from a ride that has moved on: see the header. Refused before
+        // anything is read or written for the driver that was submitted.
+        if (driverChangedSince(expected_driver_id, ride)) {
+            return json({
+                success: false,
+                error: 'The driver on this ride changed after this window was opened, so nothing was saved. The list now shows who is on it.',
+                code: 'SUPERSEDED',
             }, 409);
         }
 
