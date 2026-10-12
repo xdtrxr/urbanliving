@@ -398,9 +398,10 @@ class PropertyService {
       console.error('[PropertyService] Error message:', error.message);
       console.error('[PropertyService] Error response:', error.response?.data);
       
-      // Check if it's a rate limit error
+      // Check if it's a rate limit error. The status says so for certain;
+      // error.message is the server's sentence now, which need not hold a 429.
       const errorMessage = error.response?.data?.message || error.message || '';
-      const isRateLimit = errorMessage.includes('429') || errorMessage.includes('Too Many Requests');
+      const isRateLimit = error.response?.status === 429 || errorMessage.includes('429') || errorMessage.includes('Too Many Requests');
       
       console.log('[PropertyService] Is rate limit error:', isRateLimit);
       
