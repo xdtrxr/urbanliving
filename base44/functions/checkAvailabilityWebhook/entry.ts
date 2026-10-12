@@ -31,9 +31,10 @@ function detectConflict(existing: any[], requestedIn: Date, requestedOut: Date):
 // notification" the function logs are the only place we can see whether the
 // property was found, whether it had images, and which URL was attempted.
 // ── Stay pricing — derived from the Property row, never from the request ────
-// MIRRORED client-side by estimateStayPrice / nightsBetween in
-// src/config/stays.js, which draw the figure the guest sees before submitting.
-// Keep the two in lockstep; scripts/check-stay-price.mjs executes both.
+// MIRRORED client-side in src/config/stays.js (nightsBetween,
+// bookingOptionsOf, nightlyRate, priceStay), which draw the figure the guest
+// sees before submitting. Keep the two in lockstep;
+// scripts/check-stay-price.mjs executes both.
 //
 // Until this landed the request body carried total_price and it was stored
 // as-is, so a guest could request any apartment at ₦1, pay ₦1 (the payment
@@ -50,18 +51,6 @@ function nightsBetween(checkIn: string, checkOut: string): number {
     const b = Date.parse(`${checkOut}T00:00:00Z`);
     if (Number.isNaN(a) || Number.isNaN(b)) return 0;
     return Math.max(0, Math.round((b - a) / DAY_MS));
-}
-
-interface StayPrice { nights: number; subtotal: number; serviceFee: number; cautionFee: number; total: number }
-
-function priceForStay(property: any, nights: number): StayPrice | null {
-    const rate = Number(property?.price_per_night) || 0;
-    const n = Number(nights) || 0;
-    if (!rate || n < 1) return null;
-    const subtotal = rate * n;
-    const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
-    const cautionFee = Number(property?.caution_fee) || 0;
-    return { nights: n, subtotal, serviceFee, cautionFee, total: subtotal + serviceFee + cautionFee };
 }
 
 async function fetchPropertyImage(base44Client: any, propertyId: string): Promise<string | null> {
@@ -328,7 +317,7 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json().catch(() => ({}));
-        // total_price is deliberately NOT read from the body — see priceForStay.
+        // total_price is deliberately NOT read from the body — see priceStay.
         // property_title / property_location are accepted only as fallbacks
         // for the Telegram card; the Property row wins when it has them.
         const {

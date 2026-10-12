@@ -1,7 +1,8 @@
 // Stay pricing model — run with: node scripts/check-stay-price.mjs
 //
-// The guest is quoted by estimateStayPrice (client) and charged what
-// priceForStay (server) stores on the Booking. If the two disagree by a naira
+// The guest is quoted by priceStay in src/config/stays.js (client) and charged
+// what priceStay in checkAvailabilityWebhook (server) stores on the Booking.
+// If the two disagree by a naira
 // the guest sees one number and pays another. Like check-ride-time.mjs this
 // lifts the real server function off disk rather than re-implementing it, so
 // drift fails the run.
@@ -12,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { estimateStayPrice, nightsBetween, SERVICE_FEE_RATE, MAX_STAY_NIGHTS, bookingOptionsOf, priceStay, optionsForSearch, cardPricing, pricingForAssistant, stayPricingFromProperty, stayPricingToSave, switchStayPricingMode, newOptionRow, removeOptionRow } from '../src/config/stays.js';
+import { nightsBetween, SERVICE_FEE_RATE, MAX_STAY_NIGHTS, bookingOptionsOf, priceStay, optionsForSearch, cardPricing, pricingForAssistant, stayPricingFromProperty, stayPricingToSave, switchStayPricingMode, newOptionRow, removeOptionRow } from '../src/config/stays.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = path.join(ROOT, 'base44/functions/checkAvailabilityWebhook/entry.ts');
@@ -38,7 +39,6 @@ function lift(fnName, signature, preamble = '') {
 
 const PRE = `const SERVICE_FEE_RATE = ${SERVICE_FEE_RATE}; const DAY_MS = 86400000; const MAX_STAY_NIGHTS = ${MAX_STAY_NIGHTS};`;
 const serverNights = lift('nightsBetween', 'checkIn, checkOut', PRE);
-const serverPrice = lift('priceForStay', 'property, nights', PRE);
 
 // ── Source guards ──────────────────────────────────────────────────────────
 console.log('\n— source guards —');
@@ -75,8 +75,20 @@ for (const [name, a, b, want] of nightCases) {
   check(`${name} (client)`, nightsBetween(a, b), want);
 }
 
-// ── Price ──────────────────────────────────────────────────────────────────
+// The server's pricing, lifted off disk whole: the four functions it is made
+// of run exactly as shipped.
+const liftRaw = (name) => SRC.match(new RegExp(`function ${name}\\([^)]*\\)[^{]*\\{[\\s\\S]*?\\n\\}`))[0].replace(/\(([^)]*)\)[^{]*\{/, (m, a) => `(${a.replace(/:\s*\w+/g, '')}) {`);
+const serverPriceStay = new Function(`${PRE}\n${liftRaw('nightsBetween')}\n${liftRaw('bookingOptionsOf')}\n${liftRaw('nightlyRate')}\n${liftRaw('priceStay')}\nreturn priceStay;`)();
+
+// ── Price ───────────────────────────────────────────────────────────────────
+// A property with no options listed has one: the whole place at
+// price_per_night. These are the plain cases, a flat rate for n nights.
 console.log('\n— price (server vs client) —');
+const DAY = 24 * 60 * 60 * 1000;
+const flat = (fn, property, nights) => {
+  const out = fn(property, '2026-12-01', new Date(Date.parse('2026-12-01T00:00:00Z') + nights * DAY).toISOString().slice(0, 10), undefined);
+  return out && { nights: out.nights, subtotal: out.subtotal, serviceFee: out.serviceFee, cautionFee: out.cautionFee, total: out.total };
+};
 const withCaution = { price_per_night: 45000, caution_fee: 50000 };
 const noCaution = { price_per_night: 45000 };
 const priceCases = [
@@ -87,26 +99,22 @@ const priceCases = [
   ['odd rate rounds the fee', { price_per_night: 33333 }, 1],
 ];
 for (const [name, p, n] of priceCases) {
-  const s = serverPrice(p, n);
-  const c = estimateStayPrice(p, n);
-  check(`${name} agree`, c, s);
+  check(`${name} agree`, flat(priceStay, p, n), flat(serverPriceStay, p, n));
 }
 check('3 nights at 45k + 2.5% + 50k caution',
-  serverPrice(withCaution, 3), { nights: 3, subtotal: 135000, serviceFee: 3375, cautionFee: 50000, total: 188375 });
-check('fee is rounded to the naira', serverPrice({ price_per_night: 33333 }, 1).serviceFee, 833);
+  flat(serverPriceStay, withCaution, 3), { nights: 3, subtotal: 135000, serviceFee: 3375, cautionFee: 50000, total: 188375 });
+check('fee is rounded to the naira', flat(serverPriceStay, { price_per_night: 33333 }, 1).serviceFee, 833);
 
 console.log('\n— price edges —');
-check('zero nights is null (server)', serverPrice(withCaution, 0), null);
-check('zero nights is null (client)', estimateStayPrice(withCaution, 0), null);
-check('no nightly rate is null (server)', serverPrice({ caution_fee: 50000 }, 2), null);
-check('no nightly rate is null (client)', estimateStayPrice({ caution_fee: 50000 }, 2), null);
-check('garbage rate is null', serverPrice({ price_per_night: 'call' }, 2), null);
-check('a client-supplied total cannot leak in', serverPrice({ price_per_night: 45000, total_price: 1 }, 1).total, 46125);
+check('zero nights is null (server)', flat(serverPriceStay, withCaution, 0), null);
+check('zero nights is null (client)', flat(priceStay, withCaution, 0), null);
+check('no nightly rate is null (server)', flat(serverPriceStay, { caution_fee: 50000 }, 2), null);
+check('no nightly rate is null (client)', flat(priceStay, { caution_fee: 50000 }, 2), null);
+check('garbage rate is null', flat(serverPriceStay, { price_per_night: 'call' }, 2), null);
+check('a client-supplied total cannot leak in', flat(serverPriceStay, { price_per_night: 45000, total_price: 1 }, 1).total, 46125);
 
 // ── Booking options and seasonal rates: server and client agree ────────────
 console.log('\n— booking options and seasons —');
-const liftRaw = (name) => SRC.match(new RegExp(`function ${name}\\([^)]*\\)[^{]*\\{[\\s\\S]*?\\n\\}`))[0].replace(/\(([^)]*)\)[^{]*\{/, (m, a) => `(${a.replace(/:\s*\w+/g, '')}) {`);
-const serverPriceStay = new Function(`${PRE}\n${liftRaw('nightsBetween')}\n${liftRaw('bookingOptionsOf')}\n${liftRaw('nightlyRate')}\n${liftRaw('priceStay')}\nreturn priceStay;`)();
 const duplex = {
   bedrooms: 4, price_per_night: 210000, max_guests: 8, caution_fee: 50000,
   booking_options: [
@@ -206,7 +214,7 @@ check('the form opens on "multiple" for a property with options', [form.option_m
 const saved = stayPricingToSave({ ...form, bedrooms: '4' });
 check('saving the form gives back the same prices', priceStay({ ...duplex, ...saved.fields }, '2026-12-13', '2026-12-17', 4), priceStay(duplex, '2026-12-13', '2026-12-17', 4));
 check('the row itself describes the whole place: the largest option\'s price and guests', [saved.fields.price_per_night, saved.fields.max_guests, saved.fields.bedrooms], [210000, 8, 4]);
-check('so option-blind code prices the row as the largest option, to the naira', estimateStayPrice({ ...duplex, ...saved.fields }, 2).subtotal, priceStay({ ...duplex, ...saved.fields }, '2026-12-01', '2026-12-03', undefined).subtotal);
+check('so code that names no option prices the row as the largest option, to the naira', priceStay({ ...duplex, ...saved.fields }, '2026-12-01', '2026-12-03', undefined).subtotal, 2 * saved.fields.price_per_night);
 const season = (name, start_date, end_date) => ({ name, start_date, end_date, prices: { full: '90000' } });
 const whole = { option_mode: 'full', price_per_night: '60000', max_guests: '4', bedrooms: '2', booking_options: [], seasonal_rates: [] };
 check('a full-property season prices the whole place', stayPricingToSave({ ...whole, seasonal_rates: [season('Easter', '2027-03-26', '2027-03-29')] }).fields.seasonal_rates[0].prices, [{ bedrooms: 2, price_per_night: 90000 }]);

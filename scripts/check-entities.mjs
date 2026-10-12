@@ -257,14 +257,51 @@ const filesUnder = (dir, exts) => fs.readdirSync(dir, { withFileTypes: true }).f
   return exts.some((e) => d.name.endsWith(e)) ? [full] : [];
 });
 const functionFiles = filesUnder(path.join(ROOT, 'base44/functions'), ['.ts']);
-const browserFiles = filesUnder(path.join(ROOT, 'src'), ['.js', '.jsx']);
+const browserFiles = filesUnder(path.join(ROOT, 'src'), ['.js', '.jsx', '.ts', '.tsx']);
 const rel = (file) => path.relative(ROOT, file);
-for (const stem of ['WithdrawalRequest', 'RideBooking', 'LoyaltyTransaction', 'Booking', 'AvailabilityRequest']) {
-  const asCaller = new RegExp(`(?<!asServiceRole)\\.entities\\.${stem}\\.(create|bulkCreate)\\(`);
-  const inBrowser = new RegExp(`\\b${stem}\\.(create|bulkCreate)\\(`);
+
+// Every way a create can be spelled. The scan used to know one,
+// `.entities.Booking.create(`, so a bracket, a handle kept in a variable or a
+// destructured name would have walked past it.
+//   x.entities.Booking.create(             the plain call
+//   x.entities['Booking'].create(          bracket access
+//   const rows = x.entities.Booking;       a handle, then rows.create(
+//   const { Booking } = x.entities;        a destructured name, then Booking.create(
+// In a function, `x` being asServiceRole makes it the server's write; anything
+// else is the caller's. In the browser every one of them is the caller's.
+function createsAsCaller(source, stem, where) {
+  const make = '\\.(create|bulkCreate)\\(';
+  const server = where === 'function' ? '(?<!asServiceRole)' : '';
+  const direct = new RegExp(`${server}\\.entities(\\.${stem}|\\[\\s*['"\`]${stem}['"\`]\\s*\\])${make}`);
+  if (direct.test(source)) return true;
+  const handle = new RegExp(`(?:const|let|var)\\s+(\\w+)\\s*=\\s*[\\w.]*?${server}\\.entities(?:\\.${stem}|\\[\\s*['"\`]${stem}['"\`]\\s*\\])\\s*;`, 'g');
+  for (const m of source.matchAll(handle)) {
+    if (new RegExp(`\\b${m[1]}${make}`).test(source)) return true;
+  }
+  const destructured = new RegExp(`\\{[^}]*\\b${stem}\\b[^}]*\\}\\s*=\\s*[\\w.]*?${server}\\.entities\\s*;`);
+  if (destructured.test(source) && new RegExp(`\\b${stem}${make}`).test(source)) return true;
+  // The browser also has the legacy `import { Booking } from '@/entities/Booking'`.
+  return where === 'browser' && new RegExp(`\\b${stem}${make}`).test(source);
+}
+
+// The scan has to be able to fail, or a pass says nothing.
+const spelled = (source, where = 'function') => createsAsCaller(source, 'Booking', where);
+check('the scan sees a plain create as the caller', spelled('await base44.entities.Booking.create({})'));
+check('and bracket access', spelled(`await base44.entities['Booking'].create({})`) && spelled('await base44.entities["Booking"].bulkCreate([])'));
+check('and a handle kept in a variable', spelled('const rows = base44.entities.Booking;\nawait rows.create({});'));
+check('and a destructured name', spelled('const { Booking, Property } = base44.entities;\nawait Booking.create({});'));
+check('and a legacy import in the browser', spelled(`import { Booking } from '@/entities/Booking';\nawait Booking.create({});`, 'browser'));
+check('it lets the server\'s own writes through, however they are spelled',
+  !spelled('await base44.asServiceRole.entities.Booking.create({})')
+  && !spelled(`await sdk.asServiceRole.entities['Booking'].create({})`)
+  && !spelled('const rows = base44.asServiceRole.entities.Booking;\nawait rows.create({});')
+  && !spelled('const { Booking } = base44.asServiceRole.entities;\nawait Booking.create({});'));
+check('and a read as the caller is not a create', !spelled('const rows = base44.entities.Booking;\nawait rows.filter({});'));
+
+for (const stem of ['WithdrawalRequest', 'RideBooking', 'LoyaltyTransaction', 'Booking', 'AvailabilityRequest', 'Referral']) {
   const offenders = [
-    ...functionFiles.filter((f) => asCaller.test(fs.readFileSync(f, 'utf8'))),
-    ...browserFiles.filter((f) => inBrowser.test(fs.readFileSync(f, 'utf8'))),
+    ...functionFiles.filter((f) => createsAsCaller(fs.readFileSync(f, 'utf8'), stem, 'function')),
+    ...browserFiles.filter((f) => createsAsCaller(fs.readFileSync(f, 'utf8'), stem, 'browser')),
   ].map(rel);
   check(`nothing creates a ${stem} as the signed-in user`, offenders.length === 0, offenders.join(', '));
 }
