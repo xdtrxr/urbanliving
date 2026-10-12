@@ -93,6 +93,7 @@ src/
 | `createWithdrawalRequest` | Creates a Paystack transfer for referral withdrawals |
 | `processWithdrawal` | Processes pending withdrawal requests |
 | `getReferralStatistics` | What a referrer sees about their own referrals: people referred, how many have paid, what those bookings were worth, what was earned |
+| `getBookedRanges` | The dates a list of properties is already taken for (dates and status only, no guest details). Agent Nova asks before recommending a place; a browser read of Booking shows a guest only their own rows |
 
 ---
 
