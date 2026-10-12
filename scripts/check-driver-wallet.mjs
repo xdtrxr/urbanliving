@@ -9,7 +9,8 @@
 //
 // This file does not re-implement what it tests. It reads the shipped
 // functions off disk and executes them, and where a helper has several
-// copies it also demands they are identical character for character.
+// copies it also demands they are identical character for character. The
+// last sections run whole handlers through scripts/lib/function-rig.mjs.
 //
 // On the new Function() below: the only input is this repo's own source, read
 // from paths this file computes itself. Nothing here is reachable from user
@@ -22,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import * as rides from '../src/config/rides.js';
 import { fromResponse, fromThrown } from '../src/lib/fnResult.js';
 import { withdrawalActions, showsUnderPending } from '../src/lib/withdrawalRow.js';
+import { createRig, loadFunction, call } from './lib/function-rig.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = (name) => path.join(ROOT, 'base44/functions', name, 'entry.ts');
@@ -1678,6 +1680,35 @@ check('a driver with an earning may not', rides.mayDeleteDriver([{ id: 'e1' }], 
 check('a driver with a withdrawal may not', rides.mayDeleteDriver([], [{ id: 'w1' }]), false);
 check('a lookup that did not answer is not "nothing on record"', rides.mayDeleteDriver(undefined, []), false);
 
+// ── Who the Assign driver dialog lists ─────────────────────────────────────
+// "Record pay" is a button on the row of the driver already on the ride. A
+// driver who was switched off, blocked through a report or moved to another
+// city after the assignment used to drop out of the list and take the button
+// with them, leaving a flag on the rides list that nothing could clear.
+console.log('\n— who the assign dialog lists —');
+const abujaRide = { id: 'ride1', driver_id: 'drvA', pickup_location: { city: 'Abuja' } };
+const onRoster = (id, extra = {}) => ({ id, full_name: id, city: 'Abuja', active: true, admin_approved: true, ...extra });
+const listed = (drivers, ride = abujaRide) => rides.driversForRide(drivers, ride).map((d) => d.id);
+same('active, approved drivers in the pickup city, the one on the ride first',
+  listed([onRoster('drvB'), onRoster('drvA'), onRoster('drvC')]), ['drvA', 'drvB', 'drvC']);
+same('the driver on the ride is still listed after being switched to inactive',
+  listed([onRoster('drvB'), onRoster('drvA', { active: false })]), ['drvA', 'drvB']);
+same('…or when no longer approved', listed([onRoster('drvB'), onRoster('drvA', { admin_approved: false })]), ['drvA', 'drvB']);
+same('…or after moving to another city', listed([onRoster('drvB'), onRoster('drvA', { city: 'Lagos' })]), ['drvA', 'drvB']);
+same('…or all three at once', listed([onRoster('drvA', { active: false, admin_approved: false, city: 'Lagos' })]), ['drvA']);
+same('any other driver who is inactive, not approved or based elsewhere stays hidden',
+  listed([onRoster('drvA'), onRoster('off', { active: false }), onRoster('new', { admin_approved: false }), onRoster('far', { city: 'Lagos' })]), ['drvA']);
+same('a ride nobody is on yet lists only drivers who can be sent',
+  listed([onRoster('drvA', { active: false }), onRoster('drvB')], { ...abujaRide, driver_id: '' }), ['drvB']);
+same('a driver with no city on file is offered in every city', listed([onRoster('drvB', { city: '' })]), ['drvB']);
+same('a ride with no pickup city lists every driver who can be sent',
+  listed([onRoster('drvB'), onRoster('far', { city: 'Lagos' }), onRoster('off', { active: false })], { id: 'ride1' }), ['drvB', 'far']);
+// The profile of the driver on the ride was deleted: there is no row to list.
+same('a driver on the ride whose profile is gone does not break the list', listed([onRoster('drvB'), null]), ['drvB']);
+same('no roster, nobody listed', listed(undefined), []);
+const screen = (file) => fs.readFileSync(path.join(ROOT, 'src/components/admin', file), 'utf8');
+check('the dialog lists who driversForRide says', /const relevant = driversForRide\(drivers, ride\);/.test(screen('RidesAdmin.jsx')), true);
+
 // ── A reversal always wins ─────────────────────────────────────────────────
 console.log('\n— a reversal always wins —');
 const SE = 'settleDriverEarning';
@@ -2184,6 +2215,72 @@ check('unreadable metadata says nothing either way', paymentIsFor('{oops', 'stay
     return heldBy(sr) ? `pay is still held on a cancelled ride (${heldBy(sr)})` : '';
   }, 5);
   check(`a driver assigned while the ride is cancelled (${out.runs} orders): no pay is left held`, `${out.problem}${out.schedule}`, '');
+}
+
+// ── The Assign driver dialog's requests, start to finish ───────────────────
+// Everything above lifts one function at a time. From here the shipped
+// assignRideDriver and getRideBookings run whole, bundled as they are by
+// scripts/lib/function-rig.mjs against tables in memory: the request the
+// dialog sends, what the server does with it, and what the rides list then
+// tells admin.
+const rig = createRig();
+const assignHandler = await loadFunction(rig, AR);
+// Emails and pushes leave through the SDK. They are recorded here, so that a
+// check can say nobody was told anything.
+let told = [];
+const sdk = rig.client;
+rig.client = () => ({
+  ...sdk(),
+  integrations: { Core: { SendEmail: async (mail) => { told.push(`email ${mail.to}`); } } },
+  functions: { invoke: async (_name, push) => { told.push(`push ${push.user_email}`); return { data: { success: true } }; } },
+});
+const BOSS = { id: 'u-admin', email: 'admin@urbanstays.io', role: 'admin' };
+const TUNDE = { id: 'u-tunde', email: 'tunde@mail.ng', role: 'user' };
+const hoursFromNow = (h) => new Date(Date.now() + h * 3600000).toISOString();
+// A paid three-hour ride in Abuja tomorrow, whose car costs ₦5,000 an hour in
+// driver pay. Ade and Bola have logins; Uche does not.
+const startOver = (ride = {}, drivers = {}) => {
+  told = [];
+  const driver = (id, extra) => ({ id, full_name: id, phone: '08010000000', city: 'Abuja', active: true, admin_approved: true, ...extra, ...drivers[id] });
+  rig.db = {
+    RideBooking: [{
+      id: 'ride1', booking_reference: 'UD-AAA111', vehicle_id: 'car1', vehicle_name: 'Prado',
+      duration_tier: 'hourly', duration_hours: 3, start_at: hoursFromNow(24), end_at: hoursFromNow(27),
+      pickup_location: { city: 'Abuja' }, guest_email: TUNDE.email, guest_name: 'Tunde Bello',
+      status: 'confirmed', payment_status: 'paid', ...ride,
+    }],
+    Vehicle: [{ id: 'car1', city: 'Abuja' }],
+    VehicleCosting: [{ id: 'cost1', vehicle_id: 'car1', driver_cost_per_hour_ngn: 5000, driver_cost_per_day_ngn: 15000 }],
+    Driver: [driver('ade', { user_email: 'ade@drivers.ng' }), driver('bola', { user_email: 'bola@drivers.ng' }), driver('uche')],
+    DriverEarning: [],
+  };
+};
+const pressAssign = (body) => call(rig, assignHandler, { ride_booking_id: 'ride1', ...body }, BOSS);
+const payRows = () => rig.db.DriverEarning.map((e) => `${e.driver_id}:${e.status}:${e.amount_ngn}`).join(',');
+
+console.log('\n— record pay for a driver the dialog would not offer today —');
+// What the dialog relies on when it lists the driver already on the ride
+// whatever their state: none of "should this driver be sent?" is asked about
+// a driver who is already there.
+{
+  startOver({ driver_id: 'ade' }, { ade: { active: false, admin_approved: false } });
+  const r = await pressAssign({ driver_id: 'ade' });
+  same('"Record pay" for the driver on the ride is accepted after they were switched off',
+    [r.status, r.data?.already_assigned, r.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:15000']);
+  same('…the driver hears about the pay, and the guest is not told about a driver they already have', told, ['push ade@drivers.ng']);
+}
+{
+  startOver({ driver_id: 'ade' }, { ade: { city: 'Lagos' } });
+  const r = await pressAssign({ driver_id: 'ade' });
+  same('…and after they moved to another city',
+    [r.status, r.data?.already_assigned, r.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:15000']);
+}
+{
+  // The same driver, on a ride they are not already on, is still refused.
+  startOver({}, { ade: { active: false } });
+  const r = await pressAssign({ driver_id: 'ade' });
+  same('a driver who is switched off cannot be given a new ride',
+    [r.status, r.code, rig.db.RideBooking[0].driver_id || '', payRows()], [409, 'DRIVER_UNAVAILABLE', '', '']);
 }
 
 // ---- result ----

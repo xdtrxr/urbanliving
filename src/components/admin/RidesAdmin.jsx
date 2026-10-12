@@ -15,7 +15,7 @@ import { invokeFn } from '@/lib/invokeFn';
 import { useToast } from '@/components/ui/use-toast';
 import {
   categoryLabel, ADJUSTMENT_REASONS, driverPayoutFor, typedDriverPay, RELEASE_BUFFER_HOURS,
-  payMissing, needsDriver,
+  payMissing, needsDriver, driversForRide,
 } from '@/config/rides';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -74,6 +74,10 @@ const STATUS_STYLE = {
 // driver's other bookings, plus a city match). This dialog pre-filters by city
 // to keep the list short, but does not attempt to predict the overlap check —
 // a clash comes back as DRIVER_DOUBLE_BOOKED with the conflicting window.
+//
+// The driver already on the ride is always listed, whatever their state:
+// "Record pay" is on their row, and the server asks none of the above about a
+// driver who is already there. Who else is listed is driversForRide's call.
 function AssignDriverDialog({ ride, onClose, onAssigned }) {
   const { toast } = useToast();
   const [drivers, setDrivers] = useState([]);
@@ -131,7 +135,20 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
         const rows = await base44.entities.Driver.filter(
           { active: true, admin_approved: true }, 'full_name', 200,
         );
-        if (!cancelled) setDrivers(Array.isArray(rows) ? rows : []);
+        let roster = Array.isArray(rows) ? rows : [];
+        // The driver already on the ride may not be in that read: switched
+        // off or blocked through a report since they were assigned, or no
+        // longer approved. They are read on their own. A deleted profile
+        // answers 404, and the list is then shown without it.
+        if (ride.driver_id && !roster.some((d) => d.id === ride.driver_id)) {
+          try {
+            const current = await base44.entities.Driver.get(ride.driver_id);
+            if (current && current.id === ride.driver_id) roster = [current, ...roster];
+          } catch (err) {
+            console.warn('Could not load the driver on this ride:', err);
+          }
+        }
+        if (!cancelled) setDrivers(roster);
       } catch (err) {
         console.error('Could not load drivers:', err);
         if (!cancelled) setDrivers([]);
@@ -206,7 +223,7 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
   };
 
   const city = ride?.pickup_location?.city;
-  const relevant = city ? drivers.filter((d) => !d.city || d.city === city) : drivers;
+  const relevant = driversForRide(drivers, ride);
 
   return (
     <Dialog open={!!ride} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -293,8 +310,13 @@ function AssignDriverDialog({ ride, onClose, onAssigned }) {
                       </span>
                     )}
                   </p>
+                  {/* Only the driver already on the ride can be listed while
+                      inactive or not approved. Said first, so that a narrow
+                      screen cannot cut off why this row is here. */}
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                    {[d.city, d.years_experience ? `${d.years_experience} yrs` : null,
+                    {[d.active === false ? 'inactive' : null,
+                      d.admin_approved === false ? 'not approved' : null,
+                      d.city, d.years_experience ? `${d.years_experience} yrs` : null,
                       d.trips_completed ? `${d.trips_completed} trips` : null,
                       d.user_email ? null : 'no login, pay not tracked'].filter(Boolean).join(' · ')}
                   </p>

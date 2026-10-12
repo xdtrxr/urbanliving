@@ -307,6 +307,24 @@ export function typedDriverPay(hasLogin, typed, computedAmount) {
   return { ok: true, value };
 }
 
+// Who the Assign driver dialog lists for a ride: drivers who are active,
+// approved and based in the pickup city (one with no city on file is offered
+// everywhere). The driver already on the ride is always listed, first,
+// whatever their state. "Record pay" is on their row, and a driver who was
+// switched off, blocked through a report or moved to another city since the
+// assignment would otherwise take it with them. The server agrees:
+// assignRideDriver asks none of this about a driver who is already there.
+export function driversForRide(drivers, ride) {
+  const rows = (Array.isArray(drivers) ? drivers : []).filter((d) => d && d.id);
+  const currentId = ride?.driver_id || '';
+  const city = ride?.pickup_location?.city;
+  const current = rows.find((d) => d.id === currentId);
+  const others = rows.filter((d) => d.id !== currentId
+    && d.active !== false && d.admin_approved !== false
+    && (!city || !d.city || d.city === city));
+  return current ? [current, ...others] : others;
+}
+
 // ── What the admin rides list points at ─────────────────────────────────────
 // Days after a ride's end during which admin is still nudged to record pay
 // for a driver who had none. Older rides were settled outside the app.
