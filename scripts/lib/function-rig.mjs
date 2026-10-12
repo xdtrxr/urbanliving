@@ -11,7 +11,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { webcrypto } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { build } from 'esbuild';
+
+// Deno has the Web Crypto API as a global (the Paystack webhook signs with
+// it). Node only does from version 19.
+if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -29,12 +35,17 @@ const matches = (row, query) => Object.entries(query || {}).every(([k, v]) => {
 // with the service role is not. `serverOnlyCreate` names the entities whose
 // create rule is "an admin, or the server". `userReads` maps an entity to its
 // read rule, (row, user) => boolean, for reads made as the caller.
+// Who is calling. Kept per call, not on the rig, so that two calls in flight
+// at once (the payment page and Paystack's webhook) each keep their own
+// session, and a function invoked by another sees its caller's.
+const session = new AsyncLocalStorage();
+
 export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
   // rig.failOn(entity, op, id) may return true to make that one write fail
   // before it lands, and rig.failAfter(...) to make it fail after it has
   // landed (a timeout on the way back): the two "second write" cases a
   // handler without transactions has to survive.
-  const rig = { db: {}, env: {}, user: null, seq: 0, sent: [], handlers: {}, failOn: null, failAfter: null };
+  const rig = { db: {}, env: {}, user: null, seq: 0, sent: [], telegram: [], emails: [], invoked: [], paystack: {}, handlers: {}, failOn: null, failAfter: null };
   const maybeFail = (name, op, id) => {
     if (rig.failOn && rig.failOn(name, op, id)) throw refuse(500, `${name}.${op} failed (injected)`);
   };
@@ -43,7 +54,8 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
   };
   // A read made as the caller sees only the rows the entity's read rule
   // lets that caller see. Service-role reads see everything.
-  const visible = (name, as) => (row) => as === 'service' || !userReads[name] || !!(rig.user && userReads[name](row, rig.user));
+  const caller = () => { const held = session.getStore(); return held ? held.user : rig.user; };
+  const visible = (name, as) => (row) => as === 'service' || !userReads[name] || !!(caller() && userReads[name](row, caller()));
   const table = (name, as) => {
     const rows = () => (rig.db[name] = rig.db[name] || []);
     return {
@@ -58,7 +70,7 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
       },
       async create(data) {
         maybeFail(name, 'create');
-        if (as !== 'service' && serverOnlyCreate.includes(name) && !(rig.user && rig.user.role === 'admin')) {
+        if (as !== 'service' && serverOnlyCreate.includes(name) && !(caller() && caller().role === 'admin')) {
           throw refuse(403, `Permission denied: only the server may create ${name}`);
         }
         rig.seq += 1;
@@ -68,7 +80,7 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
           ...clone(data),
           id: `${name.toLowerCase()}-${rig.seq}`,
           created_date: new Date(Date.UTC(2026, 9, 12, 12, 0, 0, rig.seq)).toISOString(),
-          created_by: as === 'service' ? 'service' : rig.user && rig.user.email,
+          created_by: as === 'service' ? 'service' : caller() && caller().email,
         };
         rows().push(row);
         return clone(row);
@@ -91,11 +103,42 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
     };
   };
   const tables = (as) => new Proxy({}, { get: (_, name) => table(name, as) });
-  rig.client = () => ({ auth: { me: async () => rig.user }, entities: tables('user'), asServiceRole: { entities: tables('service') } });
+  // One function calling another. A function loaded into this rig runs for
+  // real, seeing the same session as its caller (the SDK forwards the token),
+  // and a refusal throws as base44.functions.invoke does. A function that is
+  // not loaded is only recorded. Every call is kept in rig.invoked.
+  const functions = {
+    async invoke(name, body) {
+      rig.invoked.push({ name, body: clone(body ?? {}) });
+      const handler = rig.handlers[name];
+      if (!handler) return { status: 200, data: { success: true } };
+      const res = await handler(new Request('http://check.local/function', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body ?? {}),
+      }));
+      let data = null;
+      try { data = await res.json(); } catch { /* no body */ }
+      if (res.status >= 400) {
+        throw Object.assign(new Error(`Request failed with status code ${res.status}`), { status: res.status, response: { status: res.status, data } });
+      }
+      return { status: res.status, data };
+    },
+  };
+  // Email leaves through the Core integration; here it is kept in rig.emails.
+  const integrations = { Core: { SendEmail: async (mail) => { rig.emails.push(clone(mail)); return { success: true }; } } };
+  rig.client = () => ({
+    auth: { me: async () => caller() },
+    entities: tables('user'),
+    functions,
+    integrations,
+    asServiceRole: { entities: tables('service'), functions, integrations },
+  });
   return rig;
 }
 
-// Telegram: record the message, answer as the Bot API would.
+// Telegram: record the message, answer as the Bot API would. rig.sent keeps
+// the text of each message, rig.telegram the whole payload (buttons too).
 export function stubTelegram(rig) {
   rig.env.TELEGRAM_BOT_TOKEN = 'check-token';
   rig.env.TELEGRAM_ADMIN_CHAT_ID = '1';
@@ -103,7 +146,32 @@ export function stubTelegram(rig) {
     let payload = {};
     try { payload = JSON.parse(init.body); } catch { /* not JSON */ }
     rig.sent.push(payload.caption || payload.text || '');
+    rig.telegram.push({ url: String(url), ...payload });
     return new Response(JSON.stringify({ ok: true, result: { message_id: 4242 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+}
+
+// Paystack and Telegram together. A transaction is whatever the check put in
+// rig.paystack[reference] ({ status, amount, currency, metadata }); a
+// reference that is not there is answered as Paystack answers an unknown one.
+// Anything else a handler tries to reach fails loudly: nothing leaves the
+// machine.
+export function stubNetwork(rig) {
+  stubTelegram(rig);
+  const telegram = globalThis.fetch;
+  rig.env.PAYSTACK_SECRET_KEY = 'sk_check';
+  globalThis.fetch = async (url, init) => {
+    const to = String(url);
+    if (to.startsWith('https://api.telegram.org/')) return telegram(url, init);
+    if (to.startsWith('https://api.paystack.co/transaction/verify/')) {
+      const reference = decodeURIComponent(to.split('/').pop());
+      const found = rig.paystack[reference];
+      const answer = found
+        ? { status: true, message: 'Verification successful', data: { reference, ...found } }
+        : { status: false, message: 'Transaction reference not found' };
+      return new Response(JSON.stringify(answer), { status: found ? 200 : 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    throw new Error(`a handler tried to reach ${to}`);
   };
 }
 
@@ -144,7 +212,7 @@ export async function loadFunction(rig, name) {
 // console comes back when the last call in flight has finished.
 let muted = 0;
 let realConsole = null;
-export async function call(rig, handler, body, user, method = 'POST') {
+export async function call(rig, handler, body, user, method = 'POST', { headers = {}, rawBody } = {}) {
   rig.user = user;
   if (muted === 0) {
     realConsole = { log: console.log, warn: console.warn, error: console.error };
@@ -153,16 +221,16 @@ export async function call(rig, handler, body, user, method = 'POST') {
   muted += 1;
   let res;
   try {
-    res = await handler(new Request('http://check.local/function', {
+    res = await session.run({ user }, () => handler(new Request('http://check.local/function', {
       method,
-      headers: { 'Content-Type': 'application/json' },
-      body: method === 'POST' ? JSON.stringify(body) : undefined,
-    }));
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: method === 'POST' ? (rawBody ?? JSON.stringify(body)) : undefined,
+    })));
   } finally {
     muted -= 1;
     if (muted === 0) Object.assign(console, realConsole);
   }
   let json = null;
   try { json = await res.json(); } catch { /* no body */ }
-  return { status: res.status, code: json && json.code, error: json && json.error, data: json && json.data };
+  return { status: res.status, code: json && json.code, error: json && json.error, data: json && json.data, json };
 }

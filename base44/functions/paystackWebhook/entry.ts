@@ -196,6 +196,147 @@ async function notifyAdmin(opts: {
     }
 }
 
+// ── Stay payment rules ───────────────────────────────────────────────────────
+// LOCKSTEP: from this line to "end of stay payment rules" the text is the same
+// in verifyPaystackPayment and paystackWebhook. Functions cannot share code;
+// scripts/check-stay-payment.mjs fails if the two copies differ.
+
+// An id goes into the URL of the row it fetches ("../RideBooking/abc" would
+// fetch a row of another entity), so only a plain id is ever used.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there.
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
+// May a payment that has arrived confirm this booking by itself?
+// Only a booking the admin approved, and that is still waiting, may. Until
+// 2026-10-12 any correct payment confirmed any booking: one the admin never
+// approved, or one already cancelled whose dates may have gone to someone
+// else. That skipped the one decision that stops double bookings. Now such a
+// payment is held for a person to decide:
+//   held:not_approved   the request was never approved
+//   held:expired        it ran out of time to pay and was cancelled for that
+//   held:cancelled      it was cancelled, or is otherwise closed
+// An approved booking stays payable for as long as it is still 'pending', even
+// a little past its deadline: it is still holding its dates, so taking the
+// money breaks no promise made to anyone else.
+function stayPaymentVerdict(booking: any) {
+    if (booking.status === 'confirmed') return 'payable';
+    if (booking.status !== 'pending') return booking.cancel_reason === 'payment_expired' ? 'held:expired' : 'held:cancelled';
+    return booking.approved_at ? 'payable' : 'held:not_approved';
+}
+
+// Reads as "this booking ..." for the guest and "a stay that ..." for the admin.
+const HELD_BECAUSE: Record<string, string> = {
+    not_approved: 'has not been approved yet',
+    expired: 'had run out of time to pay and was cancelled',
+    cancelled: 'was cancelled',
+    holding: 'already has a payment on hold',
+};
+
+function heldSentence(amountNGN: number, why: string, reference: string) {
+    return `We received your payment of ₦${amountNGN.toLocaleString()}, but this booking ${HELD_BECAUSE[why] || HELD_BECAUSE.cancelled}, so it is not confirmed. `
+        + `Our team has been told and will confirm it or refund you in full. Please do not pay again. Reference: ${reference}.`;
+}
+
+// Money has arrived for a booking it may not confirm. Nothing a paid booking
+// gets happens here: no confirmation, no arrival details (they hand out the
+// address and the host's number), no points, no referral reward. The row is
+// marked, the admin is told, with the two buttons telegramWebhook answers,
+// and the guest is told what happens next.
+// Answers 'again' when this same payment is already on hold: nothing is
+// written and nobody is told twice. A second, different payment for a booking
+// that already holds one leaves the first reference on the row and tells the
+// admin there are two.
+async function holdStayPayment(sdk: any, booking: any, reference: string, why: string) {
+    const db = sdk.asServiceRole.entities;
+    const alreadyHolding = booking.payment_status === 'pending_confirmation' && !!booking.transaction_hash;
+    if (alreadyHolding && booking.transaction_hash === reference) return 'again';
+    if (!alreadyHolding) {
+        await db.Booking.update(booking.id, {
+            payment_status: 'pending_confirmation',
+            payment_method: 'paystack',
+            transaction_hash: reference,
+        });
+    }
+
+    const amountNGN = Number(booking.total_price) || 0;
+    let title = '';
+    let phone = '';
+    try { title = (await getOrNull(db.Property, booking.property_id))?.title || ''; } catch { /* the id is shown instead */ }
+    try { phone = (await db.User.filter({ email: booking.guest_email }, 'created_date', 1))[0]?.phone_number || ''; } catch { /* shown as missing */ }
+    const lines = [
+        alreadyHolding ? 'SECOND PAYMENT for a booking that already has one on hold' : 'PAYMENT ON HOLD. The booking is NOT confirmed.',
+        '',
+        `₦${amountNGN.toLocaleString()} arrived for a stay that ${HELD_BECAUSE[why] || HELD_BECAUSE.cancelled}.`,
+        `Booking: ${booking.id}`,
+        `Property: ${title || booking.property_id}`,
+        `Guest: ${booking.guest_name || 'no name'} (${booking.guest_email}), ${phone || 'no phone on file'}`,
+        `Stay: ${booking.check_in} to ${booking.check_out}`,
+        `Paystack ref: ${reference}`,
+        '',
+        alreadyHolding
+            ? `The first payment (ref ${booking.transaction_hash}) is still on hold. Refund this second one in Paystack.`
+            : 'The guest has NOT been sent a confirmation, arrival details or points. Confirm the booking with this payment, or refund it in Paystack and then mark it refunded.',
+    ];
+    const message: any = { chat_id: Deno.env.get('TELEGRAM_ADMIN_CHAT_ID'), text: lines.join('\n') };
+    if (!alreadyHolding) {
+        message.reply_markup = { inline_keyboard: [[
+            { text: 'Confirm booking', callback_data: `held_confirm_${booking.id}` },
+            { text: 'Mark refunded', callback_data: `held_refund_${booking.id}` },
+        ]] };
+    }
+    // Plain text, and the answer is read: Telegram drops a message it cannot
+    // parse, and this one is the only word that money is waiting.
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    if (!token || !message.chat_id) {
+        console.error(`Payment on hold for booking ${booking.id} and Telegram is not configured: nobody was told.`);
+    } else {
+        try {
+            const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(message),
+            });
+            const answer = await res.json().catch(() => null);
+            if (!answer || !answer.ok) console.error(`Telegram did not take the payment-on-hold alert for booking ${booking.id}:`, answer);
+        } catch (err) {
+            console.error(`Payment-on-hold alert failed for booking ${booking.id}:`, err);
+        }
+    }
+
+    try {
+        await sdk.integrations.Core.SendEmail({
+            to: booking.guest_email,
+            subject: 'We have your payment. Your booking is not confirmed yet',
+            body: `Hi ${booking.guest_name || 'there'},\n\n${heldSentence(amountNGN, why, reference)}\n\n`
+                + `You can follow it here: ${bookingLink(booking.id)}\n\n— Urban Stays`,
+            from_name: 'Urban Stays',
+        });
+    } catch (err) {
+        console.warn('Payment-on-hold email to the guest failed (non-fatal):', err);
+    }
+    await tryPush(sdk, {
+        user_email: booking.guest_email,
+        title: 'Payment received',
+        body: 'Your booking is not confirmed yet. We will confirm it or refund you in full.',
+        url: `/Bookings#booking-${booking.id}`,
+        tag: `booking-held-${booking.id}`,
+    });
+    return alreadyHolding ? 'second' : 'held';
+}
+// ── end of stay payment rules ────────────────────────────────────────────────
+
 // Referral reward. This function is word for word the same in
 // processReferralReward, verifyPaystackPayment, verifyRidePayment and
 // paystackWebhook: functions cannot share code, and
@@ -362,17 +503,43 @@ Deno.serve(async (req) => {
     const sdk = createClientFromRequest(req);
 
     try {
-        const booking = await sdk.asServiceRole.entities.Booking.get(bookingId);
+        const booking = isId(bookingId) ? await getOrNull(sdk.asServiceRole.entities.Booking, bookingId) : null;
         if (!booking) return ack({ skipped: 'booking_not_found' });
 
-        if (booking.payment_status === 'paid' && booking.status === 'confirmed') {
+        // Paid is paid, whatever became of the booking afterwards. This used
+        // to ask for "paid and confirmed", so a paid stay the admin later
+        // cancelled was confirmed again when its event was delivered again.
+        if (booking.payment_status === 'paid') {
             return ack({ skipped: 'already_paid' });
+        }
+        if (booking.payment_status === 'refunded' && booking.transaction_hash === reference) {
+            return ack({ skipped: 'refunded' });
         }
 
         const expectedKobo = Math.round((Number(booking.total_price) || 0) * 100);
         if (amountKobo !== expectedKobo) {
             console.error(`Webhook amount mismatch: expected ${expectedKobo}, got ${amountKobo}`);
             return ack({ skipped: 'amount_mismatch' });
+        }
+
+        // One reference pays for one booking.
+        const reused = (await sdk.asServiceRole.entities.Booking.filter({ transaction_hash: reference }, '-created_date', 5))
+            .filter((row: any) => row.id !== booking.id);
+        if (reused.length > 0) {
+            console.error(`Webhook reference ${reference} is already on booking ${reused[0].id}`);
+            return ack({ skipped: 'reference_reused' });
+        }
+
+        // The money is real and it is for this booking. Whether it may
+        // confirm the booking is a separate question (stayPaymentVerdict). A
+        // booking that already holds a different payment takes no second one.
+        const verdict = stayPaymentVerdict(booking);
+        const holdsAnother = booking.payment_status === 'pending_confirmation'
+            && !!booking.transaction_hash && booking.transaction_hash !== reference;
+        if (verdict !== 'payable' || holdsAnother) {
+            const why = holdsAnother ? 'holding' : verdict.slice('held:'.length);
+            const outcome = await holdStayPayment(sdk, booking, reference, why);
+            return ack({ held: true, reason: why, outcome, booking_id: booking.id });
         }
 
         const nowIso = new Date().toISOString();
@@ -498,7 +665,10 @@ async function handleRidePayment(
     amountKobo: number,
     ack: (extra?: Record<string, unknown>) => Response,
 ): Promise<Response> {
-    const ride = await sdk.asServiceRole.entities.RideBooking.get(rideId);
+    // get() rejects for a row that is not there, and this runs outside the
+    // handler's try: unguarded, Paystack was answered with an error and sent
+    // the event again and again.
+    const ride = isId(rideId) ? await getOrNull(sdk.asServiceRole.entities.RideBooking, rideId) : null;
     if (!ride) return ack({ skipped: 'ride_not_found' });
     if (rideAlreadyPaid(ride)) {
         return ack({ skipped: 'already_paid' });
