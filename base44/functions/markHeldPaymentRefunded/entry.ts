@@ -134,6 +134,7 @@ Deno.serve(async (req) => {
             console.warn('markHeldPaymentRefunded: could not close the request (non-fatal):', err);
         }
 
+        let guestEmailed = false;
         try {
             await base44.integrations.Core.SendEmail({
                 to: booking.guest_email,
@@ -144,6 +145,7 @@ Deno.serve(async (req) => {
                     + `Your booking: ${bookingLink(booking.id)}\n\n— Urban Stays`,
                 from_name: 'Urban Stays',
             });
+            guestEmailed = true;
         } catch (err) {
             console.warn('Refund email to the guest failed (non-fatal):', err);
         }
@@ -156,7 +158,7 @@ Deno.serve(async (req) => {
         });
 
         console.log(`Payment ${reference} for booking ${booking.id} marked refunded by ${who}`);
-        return respond(200, { success: true, data: { booking_id: booking.id, refunded: true, reference, amount_ngn: amountNGN } });
+        return respond(200, { success: true, data: { booking_id: booking.id, refunded: true, reference, amount_ngn: amountNGN, guest_emailed: guestEmailed } });
     } catch (error) {
         console.error('markHeldPaymentRefunded error:', error);
         return respond(500, { success: false, error: 'Internal server error', details: (error as Error).message });

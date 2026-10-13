@@ -263,20 +263,33 @@ function heldSentence(amountNGN: number, why: string, reference: string) {
 // address and the host's number), no points, no referral reward. The row is
 // marked, the admin is told, with the two buttons telegramWebhook answers,
 // and the guest is told what happens next.
-// Answers 'again' when this same payment is already on hold: nothing is
-// written and nobody is told twice. A second, different payment for a booking
-// that already holds one leaves the first reference on the row and tells the
-// admin there are two.
+//
+// The row is read again first. The caller read it before asking Paystack, and
+// the other path for the same payment (the payment page, or the webhook) may
+// have held it in the meantime: the admin must get one alert, not two.
+// Answers
+//   'held'    this payment is now on hold
+//   'second'  the booking already held a different payment; that first
+//             reference stays on the row, this one is kept beside it and the
+//             admin is told there are two
+//   'again'   this payment was already on hold, or already announced as a
+//             second one: nothing is written and nobody is told twice
+//   'paid'    the booking was confirmed with this very payment while we looked
 async function holdStayPayment(sdk: any, booking: any, reference: string, why: string) {
     const db = sdk.asServiceRole.entities;
+    booking = (await getOrNull(db.Booking, booking.id).catch(() => null)) || booking;
+    if (booking.payment_status === 'paid' && booking.transaction_hash === reference) return 'paid';
     const alreadyHolding = booking.payment_status === 'pending_confirmation' && !!booking.transaction_hash;
-    if (alreadyHolding && booking.transaction_hash === reference) return 'again';
+    const extras: string[] = Array.isArray(booking.payment_extra_refs) ? booking.payment_extra_refs : [];
+    if (alreadyHolding && (booking.transaction_hash === reference || extras.includes(reference))) return 'again';
     if (!alreadyHolding) {
         await db.Booking.update(booking.id, {
             payment_status: 'pending_confirmation',
             payment_method: 'paystack',
             transaction_hash: reference,
         });
+    } else {
+        await db.Booking.update(booking.id, { payment_extra_refs: [...extras, reference] });
     }
 
     const amountNGN = Number(booking.total_price) || 0;
@@ -452,6 +465,9 @@ async function payReferralReward(db: any, paid: any, what: string) {
 // push and arrival email, the host-details prompt, the guest's points and
 // the referral reward. Called once the booking row says paid and confirmed,
 // by a payment that confirmed it and by the admin confirming one on hold.
+// Answers what became of the arrival email: 'sent', 'waiting_for_host_details'
+// (the property has no host phone or instructions; the admin is prompted) or
+// 'not_sent'.
 async function afterStayPaid(base44: any, booking: any, reference: string) {
     // Best-effort phone lookup — Booking rows don't carry a phone, but the
     // guest's User profile usually does. Never let this block the notify.
@@ -485,7 +501,7 @@ async function afterStayPaid(base44: any, booking: any, reference: string) {
 
     // Re-read so we see any host_*_override that may have been filled
     // before payment confirmed (rare but possible if admin pre-filled).
-    const bookingForEmail = await base44.asServiceRole.entities.Booking.get(booking.id);
+    const bookingForEmail = (await getOrNull(base44.asServiceRole.entities.Booking, booking.id).catch(() => null)) || booking;
     const emailResult = await sendArrivalEmail({ sdk: base44, booking: bookingForEmail });
     if (!emailResult.sent && emailResult.needs_admin) {
         try {
@@ -525,6 +541,9 @@ async function afterStayPaid(base44: any, booking: any, reference: string) {
     } catch (refErr) {
         console.warn('Inline referral reward failed (non-fatal):', refErr);
     }
+
+    // What became of the arrival email, for whoever has to tell the admin.
+    return { arrival_email: emailResult.sent ? 'sent' : emailResult.needs_admin ? 'waiting_for_host_details' : 'not_sent' };
 }
 
 // Paystack's own word on a reference. ok only for a successful charge.
@@ -671,8 +690,18 @@ async function confirmHeldPayment(base44: any, body: any, secretKey: string | un
         console.warn('confirmHeldPayment: could not mark the request approved (non-fatal):', err);
     }
 
-    await afterStayPaid(base44, { ...booking, payment_status: 'paid', status: 'confirmed', paid_at: nowIso }, reference);
-    return respond(200, { success: true, data: { booking_id: booking.id, confirmed: true, paid_at: nowIso, reference } });
+    // The booking is confirmed from here on, whatever happens below. A
+    // failure in the steps that follow must not be answered as "not done":
+    // the admin would press again, be told it was already paid, and nobody
+    // would know the guest had not been written to.
+    let arrivalEmail = 'not_sent';
+    try {
+        const after = await afterStayPaid(base44, { ...booking, payment_status: 'paid', status: 'confirmed', paid_at: nowIso }, reference);
+        arrivalEmail = after.arrival_email;
+    } catch (err) {
+        console.error(`confirmHeldPayment: booking ${booking.id} is confirmed, but the steps after it failed:`, err);
+    }
+    return respond(200, { success: true, data: { booking_id: booking.id, confirmed: true, paid_at: nowIso, reference, arrival_email: arrivalEmail } });
 }
 
 Deno.serve(async (req) => {
@@ -776,15 +805,31 @@ Deno.serve(async (req) => {
             return respond(400, { success: false, error: `Unsupported currency: ${currency}` });
         }
 
+        // Asking Paystack takes a moment, and Paystack's own webhook for this
+        // payment usually lands inside it. So the booking is read again: if
+        // it is paid now, the webhook has done everything, and going on would
+        // send the admin a second card and the guest a second arrival email.
+        // What follows is decided on the row as it is now, not as it was.
+        const now = (await getOrNull(base44.asServiceRole.entities.Booking, booking.id).catch(() => null)) || booking;
+        if (now.payment_status === 'paid') {
+            return respond(200, {
+                success: true,
+                data: { booking_id: booking.id, paid_at: now.paid_at || null, already_processed_by: 'webhook' },
+            });
+        }
+
         // The money is real and it is for this booking. Whether it may
         // confirm the booking is a separate question (stayPaymentVerdict). A
         // booking that already holds a different payment takes no second one.
-        const verdict = stayPaymentVerdict(booking);
-        const holdsAnother = booking.payment_status === 'pending_confirmation'
-            && !!booking.transaction_hash && booking.transaction_hash !== reference;
+        const verdict = stayPaymentVerdict(now);
+        const holdsAnother = now.payment_status === 'pending_confirmation'
+            && !!now.transaction_hash && now.transaction_hash !== reference;
         if (verdict !== 'payable' || holdsAnother) {
             const why = holdsAnother ? 'holding' : verdict.slice('held:'.length);
-            await holdStayPayment(base44, booking, reference, why);
+            const outcome = await holdStayPayment(base44, booking, reference, why);
+            if (outcome === 'paid') {
+                return respond(200, { success: true, data: { already_paid: true, booking_id: bookingId } });
+            }
             return respond(409, {
                 success: false,
                 error: heldSentence(amountNGN, why, reference),
@@ -815,7 +860,13 @@ Deno.serve(async (req) => {
             });
         }
 
-        await afterStayPaid(base44, booking, reference);
+        // Confirmed from here on. A failure below is logged, not answered to
+        // the guest as a failed payment.
+        try {
+            await afterStayPaid(base44, booking, reference);
+        } catch (err) {
+            console.error(`Booking ${booking.id} is paid and confirmed, but the steps after it failed:`, err);
+        }
 
         return respond(200, {
             success: true,

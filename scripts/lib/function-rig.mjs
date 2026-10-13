@@ -41,8 +41,9 @@ const matches = (row, query) => Object.entries(query || {}).every(([k, v]) => {
 const session = new AsyncLocalStorage();
 
 export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
-  // rig.failOn(entity, op, id) may return true to make that one write fail
-  // before it lands, and rig.failAfter(...) to make it fail after it has
+  // rig.failOn(entity, op, id) may return true to make that one call fail
+  // (op is 'get', 'create', 'update' or 'delete'; a write fails before it
+  // lands), and rig.failAfter(...) to make an update fail after it has
   // landed (a timeout on the way back): the two "second write" cases a
   // handler without transactions has to survive.
   const rig = { db: {}, env: {}, user: null, seq: 0, sent: [], telegram: [], emails: [], invoked: [], paystack: {}, paystackGate: null, handlers: {}, failOn: null, failAfter: null };
@@ -69,6 +70,7 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
     const rowsOf = (other) => (rig.db[other] = rig.db[other] || []);
     return {
       async get(id) {
+        maybeFail(name, 'get', id);
         const at = named(name, id);
         const row = rowsOf(at.table).find((r) => r.id === at.id && visible(at.table, as)(r));
         if (!row) throw refuse(404, `Entity ${name} with ID ${id} not found`);

@@ -379,6 +379,7 @@ Deno.serve(async (req) => {
                 status: outcome.status,
                 booking_id: outcome.bookingId,
                 confirmed_with_payment: !!outcome.confirmedWithPayment,
+                arrival_email: outcome.arrivalEmail || null,
                 refund_owed: !!outcome.refundOwed,
             },
         }), { status: 200, headers });

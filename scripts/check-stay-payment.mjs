@@ -105,11 +105,32 @@ r = await deliver('ref-webhook-only', 'webhook-only');
 check('a guest who never comes back to the page: the webhook alone confirms, awards points and pays the referrer', [state('webhook-only'), rig.db.User.find((u) => u.id === 'uche').loyalty_points, balanceOf('vera'), rig.db.Referral.find((x) => x.id === 'ref-uche').status], [['confirmed', 'paid', 'ref-webhook-only'], 500, 59900, 'booking_completed']);
 
 console.log('\n— the payment page and Paystack arrive together —');
+// The usual order: the page is still waiting for Paystack's answer when
+// Paystack's own event arrives, is handled in full, and then the page goes on.
 rig.db.Booking.push({ ...stay('together', APPROVED), guest_name: 'Tayo Guest', guest_email: tayo.email });
 pay('ref-together', 'together');
-const both = await Promise.all([report('together', 'ref-together', tayo), deliver('ref-together', 'together')]);
-check('the booking is confirmed once', [both[0].status, both[1].status, state('together')], [200, 200, ['confirmed', 'paid', 'ref-together']]);
-check('and the referrer is paid once, not twice', [balanceOf('sade'), rig.db.LoyaltyTransaction.filter((x) => x.transaction_type === 'referral' && x.booking_id === 'together').length], [59900, 1]);
+{
+  let release;
+  rig.paystackGate = new Promise((go) => { release = go; });
+  const cards = () => rig.sent.filter((t) => t.includes('PAYMENT RECEIVED')).length;
+  const cardsBefore = cards();
+  const mailsBefore = rig.emails.length;
+  const page = report('together', 'ref-together', tayo);
+  await new Promise((tick) => setTimeout(tick, 5));
+  const hook = await deliver('ref-together', 'together');
+  rig.paystackGate = null;
+  release();
+  const pageAnswer = await page;
+  check('the booking is confirmed once', [hook.json.processed, pageAnswer.status, pageAnswer.data && pageAnswer.data.already_processed_by, state('together')], [true, 200, 'webhook', ['confirmed', 'paid', 'ref-together']]);
+  check('the referrer is paid once, not twice', [balanceOf('sade'), rig.db.LoyaltyTransaction.filter((x) => x.transaction_type === 'referral' && x.booking_id === 'together').length], [59900, 1]);
+  check('and the admin gets one payment card, the guest one arrival email and one lot of points', [cards() - cardsBefore, rig.emails.slice(mailsBefore).filter((m) => m.to === tayo.email).length, rig.db.User.find((u) => u.id === 'tayo').loyalty_points], [1, 1, 500]);
+}
+// Both at the very same moment, neither waiting on the other: nothing to
+// lock, so both go through. The booking and the reward still come out once.
+rig.db.Booking.push({ ...stay('same-instant', APPROVED), guest_name: 'Tayo Guest', guest_email: tayo.email, check_in: '2027-09-01', check_out: '2027-09-05' });
+pay('ref-same-instant', 'same-instant');
+const both = await Promise.all([report('same-instant', 'ref-same-instant', tayo), deliver('ref-same-instant', 'same-instant')]);
+check('at the very same moment: still one confirmed booking, and no second referral reward', [both[0].status, both[1].status, state('same-instant'), balanceOf('sade')], [200, 200, ['confirmed', 'paid', 'ref-same-instant'], 59900]);
 
 console.log('\n— a request the admin never approved —');
 const paymentCards = () => rig.sent.filter((t) => t.includes('PAYMENT RECEIVED')).length;
@@ -350,6 +371,73 @@ add('yours-really', { check_in: '2027-04-22', check_out: '2027-04-26' });
 request('req-crossed', 'yours-really', { booking_id: 'not-yours' });
 r = await adminDecides('req-crossed', 'approve');
 check('a request whose id points at somebody else\'s booking does not touch that booking', [!!row('not-yours').approved_at, req('req-crossed').status], [false, 'approved']);
+
+console.log('\n— the admin is told only what happened —');
+// A property with no host phone or arrival instructions: the arrival email
+// cannot be written, and the admin is prompted for the details instead.
+rig.db.Property.push({ id: 'p-bare', title: 'Bare Flat', location: { city: 'Abuja', country: 'Nigeria' } });
+const lastEdit = () => rig.telegram.filter((m) => m.url.endsWith('/editMessageText')).at(-1).text;
+await held('h-bare', { property_id: 'p-bare' }, { check_in: '2027-07-06', check_out: '2027-07-10' });
+mailMark = rig.emails.length;
+r = await press('held_confirm_h-bare', 'PAYMENT ON HOLD.');
+check('confirming a stay whose property has no host details: confirmed, no arrival email, and the note says it is waiting', [state('h-bare')[0], mailsTo(guest.email, mailMark).length, lastEdit().includes('WAITING for the host details'), lastEdit().includes('has been sent their arrival details')], ['confirmed', 0, true, false]);
+
+await held('h-nomail', {}, { check_in: '2027-07-13', check_out: '2027-07-17' });
+const realEmail = rig.client().integrations.Core.SendEmail;
+rig.client().integrations.Core.SendEmail = async () => { throw new Error('email quota used up'); };
+r = await press('held_confirm_h-nomail', 'PAYMENT ON HOLD.');
+check('when email is failing, the note says the guest was NOT written to', [state('h-nomail')[0], lastEdit().includes('could NOT be sent'), lastEdit().includes('has been sent')], ['confirmed', true, false]);
+await held('h-nomail-refund', {}, { check_in: '2027-07-20', check_out: '2027-07-24' });
+r = await press('held_refund_h-nomail-refund', 'PAYMENT ON HOLD.');
+rig.client().integrations.Core.SendEmail = realEmail;
+check('the same for a refund', [state('h-nomail-refund')[1], lastEdit().includes('could NOT be sent'), lastEdit().includes('has been emailed')], ['refunded', true, false]);
+r = await press('held_confirm_h-nomail', 'PAYMENT ON HOLD.');
+check('pressing Confirm on a booking that is already paid says so, and does not claim a confirmation', lastEdit().includes('already paid'), true);
+r = await call(rig, markRefunded, { booking_id: 'h-refund' }, admin);
+check('marking a refunded payment refunded again answers "already"', [r.status, r.data.already], [200, true]);
+
+console.log('\n— a step that fails after the booking is confirmed —');
+await held('h-chain', {}, { check_in: '2027-07-27', check_out: '2027-07-31' });
+// The first read of the booking after the "paid" write fails, once.
+{
+  let paidWritten = false;
+  let failed = false;
+  rig.failOn = (entity, op, id) => {
+    if (entity !== 'Booking' || id !== 'h-chain') return false;
+    if (op === 'update') { paidWritten = true; return false; }
+    if (op === 'get' && paidWritten && !failed) { failed = true; return true; }
+    return false;
+  };
+  mailMark = rig.emails.length;
+  r = await call(rig, verify, { booking_id: 'h-chain', confirm_held: true }, admin);
+  rig.failOn = null;
+  check('the read did fail', failed, true);
+  check('the confirm still answers that the booking is confirmed, and the guest still gets their arrival details', [r.status, r.data && r.data.confirmed, r.data && r.data.arrival_email, state('h-chain'), mailsTo(guest.email, mailMark).some((x) => x.includes('arrival details'))], [200, true, 'sent', ['confirmed', 'paid', 'ref-h-chain'], true]);
+}
+
+console.log('\n— one payment, one alert —');
+add('overlap', { check_in: '2027-08-03', check_out: '2027-08-07' });
+request('req-overlap', 'overlap');
+pay('ref-overlap', 'overlap');
+// The payment page is waiting on Paystack when Paystack's own event arrives.
+let release;
+rig.paystackGate = new Promise((go) => { release = go; });
+tgMark = rig.telegram.length;
+mailMark = rig.emails.length;
+const waiting = report('overlap', 'ref-overlap');
+await new Promise((tick) => setTimeout(tick, 5));
+r = await deliver('ref-overlap', 'overlap');
+rig.paystackGate = null;
+release();
+const pageAnswer = await waiting;
+check('both say the payment is on hold', [r.json.held, pageAnswer.code, state('overlap')], [true, 'PAYMENT_HELD', ['pending', 'pending_confirmation', 'ref-overlap']]);
+check('and the admin and the guest are each told once', [rig.telegram.slice(tgMark).filter((m) => (m.text || '').includes('PAYMENT ON HOLD')).length, mailsTo(guest.email, mailMark).length], [1, 1]);
+tgMark = rig.telegram.length;
+mailMark = rig.emails.length;
+r = await report('overlap', pay('ref-overlap-2', 'overlap'));
+await deliver('ref-overlap-2', 'overlap');
+await report('overlap', 'ref-overlap-2');
+check('a second payment is announced once, however often it is reported', [rig.telegram.slice(tgMark).filter((m) => (m.text || '').includes('SECOND PAYMENT')).length, mailsTo(guest.email, mailMark).length, row('overlap').payment_extra_refs, row('overlap').transaction_hash], [1, 1, ['ref-overlap-2'], 'ref-overlap']);
 
 console.log('\n— a decision that stops halfway is finished by the next press —');
 // A decision is two writes: the booking, then the request. Each case fails

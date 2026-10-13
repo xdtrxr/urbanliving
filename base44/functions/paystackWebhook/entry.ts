@@ -254,20 +254,33 @@ function heldSentence(amountNGN: number, why: string, reference: string) {
 // address and the host's number), no points, no referral reward. The row is
 // marked, the admin is told, with the two buttons telegramWebhook answers,
 // and the guest is told what happens next.
-// Answers 'again' when this same payment is already on hold: nothing is
-// written and nobody is told twice. A second, different payment for a booking
-// that already holds one leaves the first reference on the row and tells the
-// admin there are two.
+//
+// The row is read again first. The caller read it before asking Paystack, and
+// the other path for the same payment (the payment page, or the webhook) may
+// have held it in the meantime: the admin must get one alert, not two.
+// Answers
+//   'held'    this payment is now on hold
+//   'second'  the booking already held a different payment; that first
+//             reference stays on the row, this one is kept beside it and the
+//             admin is told there are two
+//   'again'   this payment was already on hold, or already announced as a
+//             second one: nothing is written and nobody is told twice
+//   'paid'    the booking was confirmed with this very payment while we looked
 async function holdStayPayment(sdk: any, booking: any, reference: string, why: string) {
     const db = sdk.asServiceRole.entities;
+    booking = (await getOrNull(db.Booking, booking.id).catch(() => null)) || booking;
+    if (booking.payment_status === 'paid' && booking.transaction_hash === reference) return 'paid';
     const alreadyHolding = booking.payment_status === 'pending_confirmation' && !!booking.transaction_hash;
-    if (alreadyHolding && booking.transaction_hash === reference) return 'again';
+    const extras: string[] = Array.isArray(booking.payment_extra_refs) ? booking.payment_extra_refs : [];
+    if (alreadyHolding && (booking.transaction_hash === reference || extras.includes(reference))) return 'again';
     if (!alreadyHolding) {
         await db.Booking.update(booking.id, {
             payment_status: 'pending_confirmation',
             payment_method: 'paystack',
             transaction_hash: reference,
         });
+    } else {
+        await db.Booking.update(booking.id, { payment_extra_refs: [...extras, reference] });
     }
 
     const amountNGN = Number(booking.total_price) || 0;
@@ -539,6 +552,7 @@ Deno.serve(async (req) => {
         if (verdict !== 'payable' || holdsAnother) {
             const why = holdsAnother ? 'holding' : verdict.slice('held:'.length);
             const outcome = await holdStayPayment(sdk, booking, reference, why);
+            if (outcome === 'paid') return ack({ skipped: 'already_paid' });
             return ack({ held: true, reason: why, outcome, booking_id: booking.id });
         }
 
@@ -590,7 +604,7 @@ Deno.serve(async (req) => {
         });
 
         // Re-read so we see any host_*_override that may have been filled.
-        const bookingForEmail = await sdk.asServiceRole.entities.Booking.get(booking.id);
+        const bookingForEmail = (await getOrNull(sdk.asServiceRole.entities.Booking, booking.id).catch(() => null)) || booking;
         const emailResult = await sendArrivalEmail({ sdk, booking: bookingForEmail });
         if (!emailResult.sent && emailResult.needs_admin) {
             try {

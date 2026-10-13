@@ -602,12 +602,12 @@ interface HeldPaymentParams {
 async function handleHeldPayment(p: HeldPaymentParams): Promise<Response> {
     const done = () => new Response(JSON.stringify({ ok: true }), { headers: { 'Content-Type': 'application/json' } });
     const internal_secret = Deno.env.get('INTERNAL_FUNCTION_SECRET') || '';
+    let said: any = {};
     try {
-        if (p.confirm) {
-            await p.base44.functions.invoke('verifyPaystackPayment', { booking_id: p.bookingId, confirm_held: true, internal_secret });
-        } else {
-            await p.base44.functions.invoke('markHeldPaymentRefunded', { booking_id: p.bookingId, internal_secret });
-        }
+        const answer = p.confirm
+            ? await p.base44.functions.invoke('verifyPaystackPayment', { booking_id: p.bookingId, confirm_held: true, internal_secret })
+            : await p.base44.functions.invoke('markHeldPaymentRefunded', { booking_id: p.bookingId, internal_secret });
+        said = (answer && answer.data && answer.data.data) || {};
     } catch (err) {
         const said = (err as any)?.response?.data;
         const status = (err as any)?.response?.status || (err as any)?.status;
@@ -618,12 +618,28 @@ async function handleHeldPayment(p: HeldPaymentParams): Promise<Response> {
         await telegramPlain('sendMessage', { chat_id: p.chatId, text: `Not done: ${reason}` });
         return done();
     }
-    const note = p.confirm
-        ? 'CONFIRMED with this payment. The guest has been sent their arrival details.'
-        : 'MARKED REFUNDED. The guest has been told.';
+    // Only what is known to have happened. The email to the guest can fail,
+    // or wait on host details the property does not have, and "the guest has
+    // been told" over a guest who was not is how nobody finds out.
+    let note: string;
+    if (p.confirm) {
+        note = said.already_paid
+            ? 'This booking was already paid. Nothing was changed.'
+            : said.arrival_email === 'sent'
+                ? 'CONFIRMED with this payment. The guest has been sent their arrival details.'
+                : said.arrival_email === 'waiting_for_host_details'
+                    ? 'CONFIRMED with this payment. The arrival email is WAITING for the host details: answer the prompt in this chat.'
+                    : 'CONFIRMED with this payment. The arrival email could NOT be sent: contact the guest yourself.';
+    } else {
+        note = said.already
+            ? 'This payment was already marked refunded.'
+            : said.guest_emailed
+                ? 'MARKED REFUNDED. The guest has been emailed.'
+                : 'MARKED REFUNDED. The email to the guest could NOT be sent: tell them yourself.';
+    }
     // Editing the text also takes the two buttons off, so it cannot be pressed twice.
     await telegramPlain('editMessageText', { chat_id: p.chatId, message_id: p.messageId, text: `${p.originalText}\n\n${note}` });
-    await answerCallbackQuery(p.callbackQueryId, p.confirm ? 'Booking confirmed.' : 'Marked refunded.');
+    await answerCallbackQuery(p.callbackQueryId, p.confirm ? (said.already_paid ? 'Already paid.' : 'Booking confirmed.') : 'Marked refunded.');
     return done();
 }
 
@@ -648,7 +664,7 @@ async function handleSupportCallback(p: SupportCallbackParams): Promise<Response
         headers: { 'Content-Type': 'application/json' },
     });
 
-    const userMessage = await p.base44.asServiceRole.entities.SupportMessage.get(p.supportMessageId);
+    const userMessage = isId(p.supportMessageId) ? await getOrNull(p.base44.asServiceRole.entities.SupportMessage, p.supportMessageId) : null;
     if (!userMessage) {
         await answerCallbackQuery(p.callbackQueryId, 'Message not found.');
         return jsonResp({ ok: true });
@@ -699,7 +715,7 @@ async function handleAdminTextReply(p: AdminReplyParams): Promise<Response> {
         headers: { 'Content-Type': 'application/json' },
     });
 
-    const userMessage = await p.base44.asServiceRole.entities.SupportMessage.get(p.supportMessageId);
+    const userMessage = isId(p.supportMessageId) ? await getOrNull(p.base44.asServiceRole.entities.SupportMessage, p.supportMessageId) : null;
     if (!userMessage) {
         await sendTelegramMessage(token, p.chatId, '⚠️ Could not find that support message.', {});
         return jsonResp({ ok: true });
@@ -739,7 +755,7 @@ async function postAdminReply(base44: any, ticketId: string, message: string) {
     });
     let ticketOwnerEmail: string | undefined;
     try {
-        const ticket = await base44.asServiceRole.entities.SupportTicket.get(ticketId);
+        const ticket = isId(ticketId) ? await getOrNull(base44.asServiceRole.entities.SupportTicket, ticketId) : null;
         if (ticket) {
             ticketOwnerEmail = ticket.user_email;
             if (ticket.status === 'open') {
@@ -815,7 +831,7 @@ async function handleAdminHostReply(p: HostReplyParams): Promise<Response> {
         headers: { 'Content-Type': 'application/json' },
     });
 
-    const booking = await p.base44.asServiceRole.entities.Booking.get(p.bookingId);
+    const booking = isId(p.bookingId) ? await getOrNull(p.base44.asServiceRole.entities.Booking, p.bookingId) : null;
     if (!booking) {
         await sendTelegramMessage(token, p.chatId, '⚠️ Could not find that booking.', {});
         return jsonResp({ ok: true });
@@ -892,7 +908,7 @@ async function handleHostDefaultCallback(p: HostDefaultParams): Promise<Response
         headers: { 'Content-Type': 'application/json' },
     });
 
-    const booking = await p.base44.asServiceRole.entities.Booking.get(p.bookingId);
+    const booking = isId(p.bookingId) ? await getOrNull(p.base44.asServiceRole.entities.Booking, p.bookingId) : null;
     if (!booking) {
         await answerCallbackQuery(p.callbackQueryId, 'Booking not found.');
         return jsonResp({ ok: true });
@@ -1021,7 +1037,8 @@ async function handleRideDecision(p: RideDecisionParams): Promise<Response> {
     const APPROVE_MSG = 'Your ride is confirmed as available — complete payment to lock it in.';
     const REJECT_MSG = 'Sorry, this vehicle is not available for that window. Please try a different time or another vehicle.';
 
-    const ride = await p.base44.asServiceRole.entities.RideBooking.get(p.rideId);
+    // A plain id only: "ride_approve_../Booking/<id>" would approve a stay.
+    const ride = isId(p.rideId) ? await getOrNull(p.base44.asServiceRole.entities.RideBooking, p.rideId) : null;
     if (!ride) {
         await answerCallbackQuery(p.callbackQueryId, 'Ride not found.');
         return jsonResp({ ok: true });
