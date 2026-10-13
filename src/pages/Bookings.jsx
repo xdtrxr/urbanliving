@@ -10,6 +10,9 @@ import { format, parseISO } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import RideBookingsSection from "@/components/booking/RideBookingsSection";
+import {
+  HELD_LABEL, isPaymentHeld, stayStatusLabel, pendingCardState, stayCanBePaid, paymentAllowsCancel, waitsOnTeam, heldNotice,
+} from "@/config/payments";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertDialog,
@@ -22,6 +25,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+// Badge colours, by the key stayStatusLabel (src/config/payments.js) gives a
+// booking. It reads payment_status before status and cancel_reason, so a held
+// or refunded booking is never badged by the status it happens to carry.
 const statusColors = {
   pending: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-900",
   confirmed: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900",
@@ -35,24 +41,20 @@ const statusColors = {
   // pending/confirmed bookings. Distinct amber styling so it doesn't look like
   // an admin rejection or a user cancellation.
   payment_expired: "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900",
-};
-
-// Returns the right label + key for the status badge, factoring in payment_status
-// and cancel_reason.
-const labelForStatus = (booking) => {
-  if (booking.status === 'cancelled' && booking.cancel_reason === 'payment_expired') {
-    return { key: 'payment_expired', label: 'Payment Expired' };
-  }
-  if (booking.payment_status === 'paid' && booking.status !== 'cancelled') {
-    return { key: 'paid', label: '✓ Payment Made' };
-  }
-  return { key: booking.status, label: booking.status.charAt(0).toUpperCase() + booking.status.slice(1) };
+  // payment_held: we have the money but the booking is not confirmed, because
+  // it was never approved or was already cancelled. Blue, not amber or red:
+  // the guest has nothing to do and nothing has gone wrong on their side.
+  payment_held: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900",
+  // refunded: the held payment went back to the guest. Finished, so neutral.
+  refunded: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700",
 };
 
 const approvalStatusColors = {
   pending: "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900",
   approved: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 border-green-200 dark:border-green-900",
-  rejected: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900"
+  rejected: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900",
+  // Not an answer from the admin: a payment is being held (pendingCardState).
+  held: statusColors.payment_held,
 };
 
 const isValidSystemId = (id) => id && typeof id === 'string' && id.length > 10 && !id.startsWith("prop_");
@@ -65,13 +67,36 @@ const formatRemaining = (ms) => {
   return `${m}m ${s.toString().padStart(2, '0')}s`;
 };
 
+// What a guest reads on the card of a booking whose payment is being held.
+// One component for both cards, so the promise is worded the same whichever
+// tab the server files the booking under.
+function HeldPaymentNotice({ booking }) {
+  const notice = heldNotice(booking);
+  return (
+    <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl p-4">
+      <div className="flex items-start gap-3">
+        <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">{notice.title}</p>
+          <p className="text-xs text-blue-700 dark:text-blue-300">{notice.body}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Defined at module scope so React keeps the same component reference across
 // parent re-renders (the polling re-render was unmounting/remounting cards
 // which made the page look like it was blinking and reset the countdown timer).
 const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, property, availabilityRequest }) {
   const checkIn = parseISO(booking.check_in);
   const checkOut = parseISO(booking.check_out);
-  const approvalStatus = availabilityRequest?.status || 'pending';
+  // The admin's answer to the request, or 'held' once a payment is being held
+  // for this booking. Everything below that talks about approval, paying or
+  // being declined is keyed on this, so none of it shows to a guest who has
+  // already paid.
+  const approvalStatus = pendingCardState(booking, availabilityRequest);
+  const canPay = stayCanBePaid(booking, approvalStatus);
 
   const [deadlineMs] = useState(() => {
     const t = Date.parse(booking.payment_deadline || '');
@@ -128,8 +153,9 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                     {approvalStatus === 'pending' && '⏳ Awaiting Approval'}
                     {approvalStatus === 'approved' && '✅ Approved'}
                     {approvalStatus === 'rejected' && '❌ Rejected'}
+                    {approvalStatus === 'held' && HELD_LABEL}
                   </Badge>
-                  {approvalStatus === 'approved' && msLeft != null && msLeft > 0 && (
+                  {canPay && msLeft != null && msLeft > 0 && (
                     <Badge className={`border font-medium ${
                       msLeft < 5 * 60 * 1000
                         ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900'
@@ -180,7 +206,9 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                 </div>
               </div>
 
-              {availabilityRequest?.admin_response && (
+              {approvalStatus === 'held' && <HeldPaymentNotice booking={booking} />}
+
+              {approvalStatus !== 'held' && availabilityRequest?.admin_response && (
                 <div className={`rounded-xl p-4 ${
                   approvalStatus === 'approved' ? 'bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-900' :
                   approvalStatus === 'rejected' ? 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900' :
@@ -236,7 +264,7 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                       </Button>
                     </Link>
                   )}
-                  {approvalStatus === 'approved' && booking.payment_status !== 'paid' && (
+                  {canPay && (
                     <Link to={`${createPageUrl('PaymentPage')}?${new URLSearchParams({
                       booking_id: booking.id,
                       total: String(booking.total_price || 0),
@@ -253,6 +281,13 @@ const PendingApprovalCard = React.memo(function PendingApprovalCard({ booking, p
                     <Link to={createPageUrl('Search')}>
                       <Button size="sm" className="rounded-xl bg-slate-900 hover:bg-slate-800">
                         Find Another Property
+                      </Button>
+                    </Link>
+                  )}
+                  {approvalStatus === 'held' && (
+                    <Link to={createPageUrl('Support')}>
+                      <Button variant="outline" size="sm" className="rounded-xl">
+                        Contact Support
                       </Button>
                     </Link>
                   )}
@@ -312,7 +347,7 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                   )}
                 </div>
                 {(() => {
-                  const s = labelForStatus(booking);
+                  const s = stayStatusLabel(booking);
                   return (
                     <Badge className={`${statusColors[s.key]} border font-medium flex-shrink-0 self-start`}>
                       {s.label}
@@ -365,6 +400,10 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                   <p className="text-sm text-slate-600 dark:text-slate-300">{booking.special_requests}</p>
                 </div>
               )}
+
+              {/* A held booking can be filed under Cancelled, where without
+                  this it would read as a dead booking to a guest who has paid. */}
+              {isPaymentHeld(booking) && <HeldPaymentNotice booking={booking} />}
 
               {booking.payment_status === 'paid' && property && (() => {
                 const loc = property.location || {};
@@ -457,6 +496,13 @@ const BookingCard = React.memo(function BookingCard({ booking, property, isCance
                       </Button>
                     </Link>
                   )}
+                  {isPaymentHeld(booking) && (
+                    <Link to={createPageUrl('Support')}>
+                      <Button variant="outline" size="sm" className="rounded-xl">
+                        Contact Support
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -490,14 +536,14 @@ export default function BookingsPage() {
     loadBookings();
 
     // Poll every 5s, but stop after 60 ticks (5 min) without finding any
-    // pending approvals. User can hit Refresh to re-arm.
+    // pending approvals. User can hit Refresh to re-arm. A held payment
+    // counts as pending here: the admin confirms or refunds it with no move
+    // from the guest, so this page is how they find out.
     let ticksWithoutPending = 0;
     const MAX_IDLE_TICKS = 60;
 
     const interval = setInterval(() => {
-      const hasPending = bookingsRef.current.some(b =>
-        b.status === 'pending' && b.payment_status === 'unpaid'
-      );
+      const hasPending = bookingsRef.current.some(waitsOnTeam);
       if (hasPending) {
         ticksWithoutPending = 0;
         loadBookings(true);
@@ -608,7 +654,8 @@ export default function BookingsPage() {
 
   const canCancelBooking = (booking) => {
     // Paid bookings need a refund pipeline — admin handles those manually for now.
-    if (booking.payment_status === 'paid') return false;
+    // A payment being held is already with the admin, and a refunded one is done.
+    if (!paymentAllowsCancel(booking)) return false;
 
     const checkIn = parseISO(booking.check_in);
     const hoursUntilCheckIn = (checkIn - new Date()) / (1000 * 60 * 60);

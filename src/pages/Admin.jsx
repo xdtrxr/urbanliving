@@ -4,8 +4,10 @@ import { UploadFile } from '@/integrations/Core';
 import { SupportTicket } from '@/entities/SupportTicket';
 import { SupportMessage } from '@/entities/SupportMessage';
 import { base44 } from "@/api/base44Client";
+import { invokeFn } from '@/lib/invokeFn';
 import StayPricingFields from '@/components/admin/StayPricingFields';
 import { EMPTY_STAY_PRICING, stayPricingFromProperty, stayPricingToSave } from '@/config/stays';
+import { heldBookingFor, heldBadgeLabel } from '@/config/payments';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +53,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // NEW Tabs components
 import LeadsAdmin from '@/components/admin/LeadsAdmin';
 import ConfirmedBookingsAdmin from '@/components/admin/ConfirmedBookingsAdmin';
+import HeldPaymentsAdmin from '@/components/admin/HeldPaymentsAdmin';
 import VehiclesAdmin from '@/components/admin/VehiclesAdmin';
 import WithdrawalsAdmin from '@/components/admin/WithdrawalsAdmin';
 import PlatformStatsAdmin from '@/components/admin/PlatformStatsAdmin';
@@ -232,6 +235,12 @@ export default function AdminPage() {
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [decidingId, setDecidingId] = useState(null);
 
+  // Bookings whose payment is being held. HeldPaymentsAdmin loads the list
+  // and hands it up, so a pending request whose booking is already paid for
+  // can say so. Bumping heldReloadKey asks that card to load again.
+  const [heldBookings, setHeldBookings] = useState([]);
+  const [heldReloadKey, setHeldReloadKey] = useState(0);
+
   useEffect(() => {
     checkAdminAccess();
   }, []);
@@ -301,12 +310,16 @@ export default function AdminPage() {
   const handleDecide = async (requestId, action) => {
     setDecidingId(requestId);
     try {
-      const result = await base44.functions.invoke('decideAvailabilityRequest', {
+      // Through invokeFn: approving a request whose booking holds a payment
+      // confirms the booking with it, and the server can refuse (the dates
+      // have gone, Paystack no longer has the money). The alert below has to
+      // give its reason, not "status code 409".
+      const result = await invokeFn('decideAvailabilityRequest', {
         request_id: requestId,
         action,
       });
-      if (!result?.data?.success) {
-        throw new Error(result?.data?.error || 'Failed to update request');
+      if (!result.ok) {
+        throw new Error(result.error || 'Failed to update request');
       }
       // Optimistic remove
       setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
@@ -317,8 +330,14 @@ export default function AdminPage() {
       loadPendingRequests();
     } finally {
       setDecidingId(null);
+      // If the booking was holding a payment, the decision has just settled
+      // it or changed why it is held, and the Held Payments card is out of date.
+      setHeldReloadKey((n) => n + 1);
     }
   };
+
+  // The held booking a pending request belongs to, if its guest has paid.
+  const heldFor = (req) => heldBookingFor(req, heldBookings);
 
   const loadPlatformStats = async (silent = false) => {
     if (!silent) setIsRefreshingPlatformStats(true);
@@ -878,6 +897,19 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
+        {/* Payments held for a booking that was never approved or was already
+            cancelled. Renders nothing while there are none. */}
+        <HeldPaymentsAdmin
+          properties={properties}
+          reloadKey={heldReloadKey}
+          onLoaded={setHeldBookings}
+          onSettled={() => {
+            loadPendingRequests(true);
+            loadInFlightBookings(true);
+            loadPlatformStats(true);
+          }}
+        />
+
         {/* Pending Availability Requests */}
         <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
           <CardHeader>
@@ -919,10 +951,16 @@ export default function AdminPage() {
                   >
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                       <div className="flex-1 min-w-[260px]">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                           <p className="font-semibold text-slate-900 dark:text-white">{req.property_title || 'Untitled property'}</p>
                           {req.has_conflict && (
                             <Badge className="bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 border-red-200 dark:border-red-900 text-xs">⚠ Conflict</Badge>
+                          )}
+                          {/* The guest paid before anyone answered this
+                              request. The money is held, and approving
+                              confirms the booking with it. */}
+                          {heldFor(req) && (
+                            <Badge className="bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900 text-xs">{heldBadgeLabel(heldFor(req))}</Badge>
                           )}
                         </div>
                         <p className="text-sm text-slate-600 dark:text-slate-300">
@@ -944,14 +982,14 @@ export default function AdminPage() {
                           {' · '}ID <code className="font-mono">{req.id}</code>
                         </p>
                       </div>
-                      <div className="flex gap-2 flex-shrink-0">
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           onClick={() => handleDecide(req.id, 'approve')}
                           disabled={decidingId === req.id}
                           className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
                         >
-                          {decidingId === req.id ? 'Working…' : '✅ Approve'}
+                          {decidingId === req.id ? 'Working…' : heldFor(req) ? '✅ Approve and confirm payment' : '✅ Approve'}
                         </Button>
                         <Button
                           size="sm"
