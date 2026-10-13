@@ -222,6 +222,10 @@
       "format": "date-time",
       "description": "When admin assigned a driver. Used by the UI to know when to surface the driver contact card."
     },
+    "pay_answered_for": {
+      "type": "string",
+      "description": "The driver id assignRideDriver was last given a pay figure for on this ride, a figure of 0 included. It says only that the question was answered for that driver, which is what stops the admin list flagging a ride whose driver is deliberately paid nothing through the app. It carries no amount: the figure lives on DriverEarning and never on this row."
+    },
     "payment_warning_pushed_at": {
       "type": "string",
       "format": "date-time",

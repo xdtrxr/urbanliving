@@ -10,7 +10,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 //   - WHO   the reporter is taken from the session and must be the guest who
 //           booked the ride or the driver assigned to it
 //   - WHEN  from the ride's start until seven days after its end
-//   - ONCE  one report per reporter per ride
+//   - ONCE  one report per reporter per ride; for a guest, one per driver
+//           they had on it
 //   - WHAT  a category from a fixed list, 10 to 2000 characters of text, and
 //           at most three photos, each a link to a file uploaded through
 //           this platform
@@ -164,10 +165,18 @@ function reportCardText(report: any) {
 // stored row both use the ride's own id. reporter is { email, role, name,
 // reported_name }; input is validateReportInput's value.
 //
+// A guest's report is about the driver on the ride when it is filed, so for a
+// guest "once" is once per driver. When admin hands the ride to someone else,
+// often because of that very complaint, the guest can report the driver who
+// took over, and only that report can hold the second driver's pay. It
+// cannot be used to stack reports: only admin changes who is on a ride.
+//
 // Two taps on Submit can both pass the "already" check. The oldest report
 // stands; a later twin is removed and answered as a duplicate.
 async function fileRideReport(sr: any, ride: any, reporter: any, input: any) {
-    const mine = { ride_booking_id: ride.id, reporter_email: reporter.email };
+    const mine = reporter.role === 'guest'
+        ? { ride_booking_id: ride.id, reporter_email: reporter.email, reported_driver_id: ride.driver_id || '' }
+        : { ride_booking_id: ride.id, reporter_email: reporter.email };
     const already = await sr.RideReport.filter(mine);
     if (Array.isArray(already) && already.length > 0) return { ok: false, code: 'ALREADY_REPORTED' };
     const row = {
