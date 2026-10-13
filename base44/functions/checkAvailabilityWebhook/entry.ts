@@ -113,7 +113,7 @@ async function sendAdminTelegram(opts: {
         : 'Not provided';
 
     const conflictBlock = opts.hasConflict && opts.conflicting
-        ? `\n\n⚠️ *${conflictText}*\n• Conflicting Booking: \`${opts.conflicting.id}\`\n• Dates: ${opts.conflicting.check_in} → ${opts.conflicting.check_out}\n• Guest: ${opts.conflicting.guest_email}`
+        ? `\n\n⚠️ *${conflictText}*\n• Conflicting Booking: \`${opts.conflicting.id}\`\n• Dates: ${opts.conflicting.check_in} → ${opts.conflicting.check_out}\n• Guest: ${opts.conflicting.guest_email}${opts.conflicting.payment_status === 'pending_confirmation' ? '\n• That booking has a payment ON HOLD: settle it first' : ''}`
         : `\n\n✅ *${conflictText}*\nNo overlapping bookings.`;
 
     const specialRequestsBlock = opts.specialRequests && opts.specialRequests.trim()
@@ -409,6 +409,25 @@ Deno.serve(async (req) => {
         // unlocked once their prior booking is paid (status='confirmed'),
         // cancelled, or completed. Per product rule: paid/cancelled/current/past
         // are all re-bookable, only 'upcoming + unpaid' blocks.
+        // A payment of this guest's is on hold for this property. That booking
+        // may be cancelled (the money came after it ran out of time, and the
+        // guest was told to re-book), so the "still pending" test below does
+        // not see it. A new request would be answered "no conflicts",
+        // approved, and the guest asked to pay a second time for one stay.
+        const guestHeld = await base44.asServiceRole.entities.Booking.filter({
+            property_id,
+            guest_email: user.email,
+            payment_status: 'pending_confirmation',
+        }, '-created_date', 5);
+        if (guestHeld && guestHeld.length > 0) {
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'We are holding a payment for your earlier request for this property. Our team will confirm it or refund you. Please wait for that before booking it again.',
+                code: 'EXISTING_PAYMENT_HELD',
+                existing_booking_id: guestHeld[0].id,
+            }), { status: 409, headers });
+        }
+
         const userPending = await base44.asServiceRole.entities.Booking.filter({
             property_id,
             guest_email: user.email,
@@ -440,6 +459,17 @@ Deno.serve(async (req) => {
             property_id,
             status: { $in: ['confirmed', 'pending'] },
         }, '-check_out', 500);
+        // A booking that holds a payment still has a claim on its dates even
+        // when it is cancelled: the admin may yet confirm it. It is put in
+        // front of the admin as a conflict, so they do not approve a second
+        // guest for dates somebody has already paid for.
+        const held = await base44.asServiceRole.entities.Booking.filter({
+            property_id,
+            payment_status: 'pending_confirmation',
+        }, '-check_out', 100);
+        for (const row of held || []) {
+            if (!existing.some((e: any) => e.id === row.id)) existing.push(row);
+        }
         const { hasConflict, conflicting } = detectConflict(existing, checkInDate, checkOutDate);
         const conflictDetails: ConflictDetails | null = hasConflict && conflicting ? {
             booking_id: conflicting.id,

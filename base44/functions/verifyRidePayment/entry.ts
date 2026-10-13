@@ -305,8 +305,8 @@ Deno.serve(async (req) => {
         if (!secretKey) return json({ success: false, error: 'Payment service not configured' }, 500);
 
         // A plain id only. "../Booking/<a stay>" would fetch a stay as if it
-        // were a ride and mark it paid and confirmed from here, past the rule
-        // that a stay nobody approved is held, not confirmed.
+        // were a ride, and every check below would be made on the wrong kind
+        // of row.
         const ride = isId(ride_booking_id) ? await getOrNull(base44.asServiceRole.entities.RideBooking, ride_booking_id) : null;
         if (!ride) return json({ success: false, error: 'Ride booking not found' }, 404);
         if (ride.guest_email !== user.email && user.role !== 'admin') {

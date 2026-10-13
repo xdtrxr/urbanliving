@@ -140,40 +140,32 @@ async function bookingForRequest(db: any, request: any) {
 }
 
 // What approving or rejecting a request does. Answers
-//   { ok: true, status, bookingId, confirmedWithPayment, refundOwed, guestCancelled }
+//   { ok: true, status, bookingId, confirmedWithPayment, arrivalEmail, refundOwed, guestCancelled }
 //   { ok: false, code, error }   nothing was decided; the request is still open
+//                                (or, where the sentence says so, was closed)
 //
 // A booking may already hold a payment (the guest paid before the request was
 // decided; see stayPaymentVerdict in verifyPaystackPayment). Then approving
 // means confirming the booking with that payment, which only
 // verifyPaystackPayment does, and rejecting leaves a refund owed.
+//
+// Two writes, the booking then the request, and nothing ties them together.
+// So a press can find the booking already changed by an earlier press whose
+// second write failed. Each branch below is written to finish that job, not
+// to take the half-done state for something the guest did.
 async function decideRequest(sdk: any, request: any, action: 'approve' | 'reject') {
     const db = sdk.asServiceRole.entities;
     const booking = await bookingForRequest(db, request);
     const held = !!booking && booking.payment_status === 'pending_confirmation' && !!booking.transaction_hash;
+    const APPROVED = 'Property is available for your requested dates!';
+    const REJECTED = 'Sorry, the property is not available for these dates. Please try different dates or check other properties.';
+    const close = (status: string, admin_response: string) => db.AvailabilityRequest.update(request.id, { status, admin_response });
 
-    // The guest withdrew the request before it was decided, and no money is
-    // waiting. There is nothing to approve; it only needs to leave the list.
-    if (booking && booking.status === 'cancelled' && !held) {
-        await db.AvailabilityRequest.update(request.id, {
-            status: 'rejected',
-            admin_response: 'This request was cancelled before it was decided.',
-        });
-        if (action === 'approve') {
-            return {
-                ok: false,
-                code: 'BOOKING_CANCELLED',
-                error: 'The guest cancelled this request, so there was nothing to approve. It has been taken off the list.',
-            };
-        }
-        return { ok: true, status: 'rejected', bookingId: booking.id, guestCancelled: true };
-    }
-
-    // Already paid and confirmed. Only rows from before payments were held can
-    // be in this state with the request still open: the guest paid, and the
-    // booking was confirmed, without anyone having answered. There is nothing
-    // left to approve, and "rejecting" must not tell a guest with a paid,
-    // confirmed stay that it is cancelled.
+    // Already paid and confirmed. The guest paid and the booking was
+    // confirmed without this request having been closed: a row from before
+    // payments were held, or a confirm whose last write failed. There is
+    // nothing left to approve, and "rejecting" must not tell a guest with a
+    // paid, confirmed stay that it is cancelled.
     if (booking && booking.payment_status === 'paid') {
         if (action === 'reject') {
             return {
@@ -182,29 +174,64 @@ async function decideRequest(sdk: any, request: any, action: 'approve' | 'reject
                 error: 'This booking is already paid and confirmed, so the request cannot be rejected. To cancel it, cancel the booking itself and refund the guest.',
             };
         }
-        await db.AvailabilityRequest.update(request.id, {
-            status: 'approved',
-            admin_response: 'Property is available for your requested dates!',
-        });
+        await close('approved', APPROVED);
         return { ok: true, status: 'approved', bookingId: booking.id, confirmedWithPayment: true };
     }
 
+    // The booking is already cancelled, and no money is waiting on it.
+    if (booking && booking.status === 'cancelled' && !held) {
+        const byGuest = booking.cancel_reason === 'user_cancelled';
+        if (action === 'reject') {
+            // Cancelled by the guest: it only needs to leave the list.
+            // Cancelled any other way: an earlier Reject got as far as the
+            // booking and no further, and the guest has not been told. This
+            // press finishes it, and the caller emails them.
+            await close('rejected', byGuest ? 'This request was cancelled before it was decided.' : REJECTED);
+            return { ok: true, status: 'rejected', bookingId: booking.id, guestCancelled: byGuest };
+        }
+        const expired = booking.cancel_reason === 'payment_expired';
+        await close('rejected', expired ? 'This booking ran out of time to pay.' : 'This request was cancelled before it was decided.');
+        return {
+            ok: false,
+            code: 'BOOKING_CANCELLED',
+            error: byGuest
+                ? 'The guest cancelled this request, so there was nothing to approve. It has been taken off the list.'
+                : expired
+                    ? 'This booking ran out of time to pay and was cancelled before its approval was finished. It has been taken off the list. Ask the guest to request again.'
+                    : 'This booking was already cancelled, so there was nothing to approve. It has been taken off the list.',
+        };
+    }
+
     if (action === 'approve' && held) {
+        let confirmed: any = null;
         try {
-            await sdk.functions.invoke('verifyPaystackPayment', {
+            const answer = await sdk.functions.invoke('verifyPaystackPayment', {
                 booking_id: booking.id,
                 confirm_held: true,
                 internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '',
             });
+            confirmed = (answer && answer.data && answer.data.data) || {};
         } catch (err) {
             const said = err && err.response && err.response.data;
+            // No admin session reached the other function and no secret is
+            // set: the Admin screen's own button works from the admin's login.
+            if (said && said.code === 'ADMIN_ONLY') {
+                return {
+                    ok: false,
+                    code: 'ADMIN_ONLY',
+                    error: 'The payment on hold could not be confirmed from here. Open Admin and press "Confirm booking" on the Payments on hold card.',
+                };
+            }
             return {
                 ok: false,
                 code: (said && said.code) || 'HELD_NOT_CONFIRMED',
                 error: (said && said.error) || 'The payment on hold could not be confirmed. Nothing was changed.',
             };
         }
-        return { ok: true, status: 'approved', bookingId: booking.id, confirmedWithPayment: true };
+        // verifyPaystackPayment closes the request as well, but treats that
+        // write as optional. It is written here, where a failure is seen.
+        await close('approved', APPROVED);
+        return { ok: true, status: 'approved', bookingId: booking.id, confirmedWithPayment: true, arrivalEmail: confirmed.arrival_email || null };
     }
 
     // The booking first: if the second write fails the request is still open
@@ -215,12 +242,7 @@ async function decideRequest(sdk: any, request: any, action: 'approve' | 'reject
             : { status: 'cancelled', cancel_reason: 'admin_rejected' });
     }
     const status = action === 'approve' ? 'approved' : 'rejected';
-    await db.AvailabilityRequest.update(request.id, {
-        status,
-        admin_response: action === 'approve'
-            ? 'Property is available for your requested dates!'
-            : 'Sorry, the property is not available for these dates. Please try different dates or check other properties.',
-    });
+    await close(status, action === 'approve' ? APPROVED : REJECTED);
     return {
         ok: true,
         status,

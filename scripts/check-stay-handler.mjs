@@ -120,6 +120,28 @@ await ask({ property_id: 'whole', check_in: '2027-02-01', check_out: '2027-02-03
 r = await ask({ property_id: 'whole', check_in: '2027-03-01', check_out: '2027-03-03', guests: 2 }, same);
 check('one guest cannot stack requests on a property', [r.status, r.code], [409, 'EXISTING_PENDING_APPROVAL']);
 
+// ── A payment on hold keeps its claim on the dates ──────────────────────────
+// A guest's booking ran out of time and was cancelled; their money landed a
+// moment later and is on hold (check-stay-payment.mjs). The expiry email told
+// them to book again. Until the admin settles the payment, a new request for
+// that stay would be approved and paid for a second time.
+console.log('\n— a payment on hold for the property —');
+const late = guest();
+rig.db.Booking.push({ id: 'late-and-held', property_id: 'legacy', guest_name: late.full_name, guest_email: late.email, check_in: '2027-06-10', check_out: '2027-06-14', guests: 2, total_price: 358000, status: 'cancelled', cancel_reason: 'payment_expired', approved_at: '2026-10-12T08:00:00.000Z', payment_status: 'pending_confirmation', transaction_hash: 'ref-late' });
+before = bookings();
+r = await ask({ property_id: 'legacy', check_in: '2027-06-10', check_out: '2027-06-14', guests: 2 }, late);
+check('the guest whose payment is held cannot request it again: they are told the money is being held', [r.status, r.code, /holding a payment/.test(r.error), bookings() - before], [409, 'EXISTING_PAYMENT_HELD', true, 0]);
+r = await ask({ property_id: 'legacy', check_in: '2027-07-01', check_out: '2027-07-03', guests: 2 }, late);
+check('for other dates at that property either, until it is settled', [r.status, r.code], [409, 'EXISTING_PAYMENT_HELD']);
+r = await ask({ property_id: 'duplex', check_in: '2027-06-10', check_out: '2027-06-14', guests: 2, bedrooms: 1 }, late);
+check('another property is not affected', r.status, 200);
+const sentBefore = rig.sent.length;
+r = await ask({ property_id: 'legacy', check_in: '2027-06-12', check_out: '2027-06-16', guests: 2 });
+check('somebody else asking for those dates is accepted, but flagged as a conflict with the held booking', [r.status, r.data && r.data.has_conflict, r.data && r.data.conflict_details && r.data.conflict_details.booking_id], [200, true, 'late-and-held']);
+check('and the admin\'s card says a payment is on hold for it', rig.sent.slice(sentBefore).some((t) => t.includes('CONFLICT DETECTED') && t.includes('payment ON HOLD')), true);
+r = await ask({ property_id: 'legacy', check_in: '2027-08-01', check_out: '2027-08-03', guests: 2 });
+check('dates the held booking does not touch are not a conflict', [r.status, r.data && r.data.has_conflict], [200, false]);
+
 // ── Requests that are not a stay ────────────────────────────────────────────
 console.log('\n— bad requests —');
 before = bookings();

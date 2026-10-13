@@ -351,6 +351,50 @@ request('req-crossed', 'yours-really', { booking_id: 'not-yours' });
 r = await adminDecides('req-crossed', 'approve');
 check('a request whose id points at somebody else\'s booking does not touch that booking', [!!row('not-yours').approved_at, req('req-crossed').status], [false, 'approved']);
 
+console.log('\n— a decision that stops halfway is finished by the next press —');
+// A decision is two writes: the booking, then the request. Each case fails
+// the request write once and presses again.
+const failRequestWriteOnce = () => { let failed = false; rig.failOn = (entity, op) => { if (entity === 'AvailabilityRequest' && op === 'update' && !failed) { failed = true; return true; } return false; }; };
+add('half-reject', { check_in: '2027-06-01', check_out: '2027-06-05' });
+request('req-half-reject', 'half-reject');
+failRequestWriteOnce();
+mailMark = rig.emails.length;
+r = await adminDecides('req-half-reject', 'reject');
+rig.failOn = null;
+check('reject: the booking is cancelled, the request write fails, and the admin is shown a failure', [r.status, state('half-reject')[0], row('half-reject').cancel_reason, req('req-half-reject').status, mailsTo(guest.email, mailMark)], [500, 'cancelled', 'admin_rejected', 'pending', []]);
+r = await adminDecides('req-half-reject', 'reject');
+check('pressing Reject again finishes it, and the guest is told it was declined', [r.status, req('req-half-reject').status, mailsTo(guest.email, mailMark).some((x) => x.startsWith('Update on your booking request'))], [200, 'rejected', true]);
+
+add('half-approve', { check_in: '2027-06-08', check_out: '2027-06-12' });
+request('req-half-approve', 'half-approve');
+failRequestWriteOnce();
+mailMark = rig.emails.length;
+tgMark = rig.telegram.length;
+r = await press('approve_req-half-approve');
+rig.failOn = null;
+check('approve from Telegram: when it fails part-way the admin is told, not left to think it was done', [!!row('half-approve').approved_at, req('req-half-approve').status, rig.telegram.slice(tgMark).some((m) => (m.text || '').includes('Press the button again')), mailsTo(guest.email, mailMark)], [true, 'pending', true, []]);
+r = await press('approve_req-half-approve');
+check('pressing Approve again finishes it, and the guest is told to pay', [req('req-half-approve').status, mailsTo(guest.email, mailMark).some((x) => x.startsWith('Approved'))], ['approved', true]);
+
+// The same, but nobody pressed again in time and the sweep cancelled the booking.
+add('half-approve-late', { check_in: '2027-06-15', check_out: '2027-06-19', status: 'cancelled', cancel_reason: 'payment_expired', approved_at: '2026-01-01T00:00:00.000Z' });
+request('req-half-approve-late', 'half-approve-late');
+r = await adminDecides('req-half-approve-late', 'approve');
+check('approving a booking that ran out of time says so, and does not blame the guest', [r.status, r.code, /ran out of time/.test(r.error), /guest cancelled/.test(r.error), req('req-half-approve-late').status], [409, 'BOOKING_CANCELLED', true, false, 'rejected']);
+
+await held('half-confirm', {}, { check_in: '2027-06-22', check_out: '2027-06-26' });
+failRequestWriteOnce();
+r = await adminDecides('req-half-confirm', 'approve');
+rig.failOn = null;
+check('approve with a payment on hold: the request is closed here, not left to a write that may be skipped', [r.status, state('half-confirm'), req('req-half-confirm').status], [200, ['confirmed', 'paid', 'ref-half-confirm'], 'approved']);
+
+await held('no-secret', {}, { check_in: '2027-06-29', check_out: '2027-07-03' });
+rig.env.INTERNAL_FUNCTION_SECRET = '';
+tgMark = rig.telegram.length;
+r = await press('approve_req-no-secret');
+rig.env.INTERNAL_FUNCTION_SECRET = realSecret;
+check('with no secret set, Approve on the Telegram card points the admin at the Admin screen', [rig.telegram.slice(tgMark).some((m) => (m.text || '').includes('Open Admin')), rig.telegram.slice(tgMark).some((m) => (m.text || '').includes('Only an admin')), state('no-secret')[1], req('req-no-secret').status], [true, false, 'pending_confirmation', 'pending']);
+
 console.log('\n— the two functions carry the same rules —');
 const decideRules = (name) => {
   const src = fs.readFileSync(path.join(ROOT, 'base44/functions', name, 'entry.ts'), 'utf8');

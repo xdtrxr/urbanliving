@@ -7,10 +7,10 @@
 //     HTTP 500 for a stale or mistyped id.
 //   - the id goes into the URL of the row it fetches, so "../Booking/abc" sent
 //     to a function that reads RideBooking fetches a STAY. The guest owns that
-//     stay, so every check after the fetch passes, and the function then
-//     writes to it by the same id. verifyRidePayment would have marked a stay
-//     nobody approved as paid and confirmed, past the rule that such a payment
-//     is held (scripts/check-stay-payment.mjs).
+//     stay, so every check after the fetch passes, and a function that then
+//     writes by the same id writes to the stay: cancelRideBooking would have
+//     cancelled a stay past the stay's own rules (a paid one, or one holding a
+//     payment), and cancelBooking a ride past the ride's.
 //
 // This runs the shipped functions (scripts/lib/function-rig.mjs) with both
 // kinds of id and wants the refusal each one intended, never a 500.
@@ -40,9 +40,9 @@ rig.db.Property = [{ id: 'p1', title: 'Maitama Duplex' }];
 const stay = () => rig.db.Booking.find((b) => b.id === 'stay1');
 const untouched = () => [stay().status, stay().payment_status, stay().transaction_hash || null];
 
-// What a path dressed as an id would name. The rig, like the platform, would
-// find nothing under RideBooking for it; what matters is that the function
-// says "not found" before it asks, and never writes by it.
+// A path dressed as an id. The rig resolves it as the platform's URL would,
+// to row stay1 of Booking, so a function that does not refuse it really does
+// fetch the stay, and one that writes by it really does change it.
 const PATH = '../Booking/stay1';
 rig.paystack['ref-path'] = { status: 'success', amount: 120000 * 100, currency: 'NGN', metadata: { ride_booking_id: PATH } };
 

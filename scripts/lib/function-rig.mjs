@@ -45,7 +45,7 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
   // before it lands, and rig.failAfter(...) to make it fail after it has
   // landed (a timeout on the way back): the two "second write" cases a
   // handler without transactions has to survive.
-  const rig = { db: {}, env: {}, user: null, seq: 0, sent: [], telegram: [], emails: [], invoked: [], paystack: {}, handlers: {}, failOn: null, failAfter: null };
+  const rig = { db: {}, env: {}, user: null, seq: 0, sent: [], telegram: [], emails: [], invoked: [], paystack: {}, paystackGate: null, handlers: {}, failOn: null, failAfter: null };
   const maybeFail = (name, op, id) => {
     if (rig.failOn && rig.failOn(name, op, id)) throw refuse(500, `${name}.${op} failed (injected)`);
   };
@@ -56,17 +56,36 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
   // lets that caller see. Service-role reads see everything.
   const caller = () => { const held = session.getStore(); return held ? held.user : rig.user; };
   const visible = (name, as) => (row) => as === 'service' || !userReads[name] || !!(caller() && userReads[name](row, caller()));
+  // On the platform an id is a piece of the URL that fetches the row, so
+  // "../Booking/x" asked of RideBooking names row x of Booking. The stand-in
+  // does the same for get, update and delete: without it a check cannot tell
+  // a function that refuses such an id from one that never looked.
+  const named = (name, id) => {
+    const path = /^\.\.\/(\w+)\/([^/?#]+)$/.exec(String(id));
+    return path ? { table: path[1], id: path[2] } : { table: name, id };
+  };
   const table = (name, as) => {
     const rows = () => (rig.db[name] = rig.db[name] || []);
+    const rowsOf = (other) => (rig.db[other] = rig.db[other] || []);
     return {
       async get(id) {
-        const row = rows().find((r) => r.id === id && visible(name, as)(r));
+        const at = named(name, id);
+        const row = rowsOf(at.table).find((r) => r.id === at.id && visible(at.table, as)(r));
         if (!row) throw refuse(404, `Entity ${name} with ID ${id} not found`);
         return clone(row);
       },
       async filter(query, sort, limit, skip) {
         const from = skip || 0;
-        return clone(rows().filter((r) => matches(r, query) && visible(name, as)(r)).slice(from, from + (limit || 50)));
+        const found = rows().filter((r) => matches(r, query) && visible(name, as)(r));
+        // "field" ascending, "-field" descending; rows without the field
+        // first. A stable sort, so rows that tie keep the order they were made.
+        if (typeof sort === 'string' && sort) {
+          const down = sort.startsWith('-');
+          const field = sort.replace(/^[-+]/, '');
+          const key = (r) => (r[field] === undefined || r[field] === null ? '' : String(r[field]));
+          found.sort((a, b) => key(a).localeCompare(key(b)) * (down ? -1 : 1));
+        }
+        return clone(found.slice(from, from + (limit || 50)));
       },
       async create(data) {
         maybeFail(name, 'create');
@@ -87,7 +106,8 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
       },
       async update(id, patch) {
         maybeFail(name, 'update', id);
-        const row = rows().find((r) => r.id === id);
+        const at = named(name, id);
+        const row = rowsOf(at.table).find((r) => r.id === at.id);
         if (!row) throw refuse(404, `Entity ${name} with ID ${id} not found`);
         Object.assign(row, clone(patch));
         maybeFailAfter(name, 'update', id);
@@ -95,9 +115,10 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
       },
       async delete(id) {
         maybeFail(name, 'delete', id);
-        const at = rows().findIndex((r) => r.id === id);
-        if (at < 0) throw refuse(404, `Entity ${name} with ID ${id} not found`);
-        rows().splice(at, 1);
+        const at = named(name, id);
+        const index = rowsOf(at.table).findIndex((r) => r.id === at.id);
+        if (index < 0) throw refuse(404, `Entity ${name} with ID ${id} not found`);
+        rowsOf(at.table).splice(index, 1);
         return { success: true };
       },
     };
@@ -164,6 +185,9 @@ export function stubNetwork(rig) {
     const to = String(url);
     if (to.startsWith('https://api.telegram.org/')) return telegram(url, init);
     if (to.startsWith('https://api.paystack.co/transaction/verify/')) {
+      // rig.paystackGate, when set, is a promise Paystack's answer waits on:
+      // the way to hold one caller mid-flight while another runs.
+      if (rig.paystackGate) await rig.paystackGate;
       const reference = decodeURIComponent(to.split('/').pop());
       const found = rig.paystack[reference];
       const answer = found
