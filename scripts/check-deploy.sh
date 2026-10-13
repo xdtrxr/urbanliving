@@ -90,6 +90,17 @@ search lands on an option|bedroom option available
 stay refusals shown to the guest|OPTION_UNAVAILABLE
 assistant told about options|BOOKING OPTIONS AND SEASONAL RATES
 vehicle powertrain in the admin form|Electric cars get an Electric badge
+payments on hold (admin)|Payments on hold
+payment on hold (guest)|Payment received, awaiting confirmation
+admin confirms a held payment|confirm_held
+admin records a refund|markHeldPaymentRefunded
+ride pay asks the server again|We could not check this ride just now
+no-price listings|Price on request
+vehicle form asks for a category|Choose a category
+platform block worded for a guest|This part of the site is not available right now.
+Nova reads booked dates from the server|getBookedRanges
+stale assign-driver window refused|expected_driver_id
+reports inbox follows the pay ledger|May be holding the driver
 points via function|awardPoints
 MARKERS
 
@@ -118,7 +129,8 @@ for f in checkRideAvailability decideRideBooking assignRideDriver getRideDriverC
          cancelBooking startStayPayment submitBookingId awardPoints checkAvailabilityWebhook \
          getDriverProfile getDriverRides getDriverWallet getDriverEarningsAdmin \
          settleDriverEarning completeRide createRideReport resolveRideReport \
-         createWithdrawalRequest processWithdrawal; do
+         createWithdrawalRequest processWithdrawal \
+         verifyPaystackPayment markHeldPaymentRefunded getBookedRanges; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
          -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
   # 402 is the platform refusing to run ANY function for this workspace (the
