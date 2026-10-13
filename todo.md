@@ -5,15 +5,20 @@ The numbered items 1 to 6 further down date from 2026-07-29 and have not been re
 
 ---
 
-# Built on 2026-10-12 and 13, waiting to go live
+# Live since 2026-10-13
 
-Branch `fix/todo-findings`, local, not pushed. It fixes items A, C, D, F, G and H of the list that stood here on 2026-10-12, plus what that work turned up. `npm run check` runs 14 scripts (about 2,000 assertions) and passes. The new screens were opened in a local browser against a stand-in backend. On 2026-10-13 three independent readers reviewed the referral and payment code by running it, with a second reader trying to refute each finding; everything they confirmed is fixed and has a case in the checks. Nothing in the branch has run on the real platform: every backend function still answers 402.
+Published on 2026-10-13 at 22:16 WAT, on the owner's "make it live": commit `bc8bfb6` (the merge of branch `fix/todo-findings`, `0fd9e2d`, with Base44's own "Update base44 packages" commit on top), checkpoint `6ace9f76b094f901a1099c66`. It fixes items A, C, D, F, G and H of the list that stood here on 2026-10-12, plus what that work turned up. `npm run check` runs 14 scripts (about 2,000 assertions) and passes. The new screens were opened in a local browser against a stand-in backend. On 2026-10-13 three independent readers reviewed the referral and payment code by running it, with a second reader trying to refute each finding; everything they confirmed is fixed and has a case in the checks.
 
-**To go live, in this order**
-1. **Set `INTERNAL_FUNCTION_SECRET` on the live app** (Base44 dashboard, Secrets, or `POST /api/apps/{app_id}/secrets` through the connector; any long random value). It is not set today (the list of secret names was read on 2026-10-12). Without it `sendPushNotification`, `requestHostDetails` and `notifyLead` accept calls from anybody, and the two Telegram buttons on a "payment on hold" alert answer "use the Admin screen" instead of working.
-2. Merge into `main` and push. When Base44 pulls the push it adds three optional fields to the live database by itself: `AvailabilityRequest.booking_id`, `Booking.payment_extra_refs` and `RideBooking.pay_answered_for`. No rule changes ride on the push.
-3. Smoke-test the checkpoint's preview, publish it, run `scripts/check-deploy.sh`.
-4. Do the "Not yet tried on the live platform" list below as far as it can be done while functions are blocked (the sign-up test can).
+**None of the function code in it has run on the real platform.** Every backend function still answers 402 (see "Not yet tried on the live platform"). What is live and working today is the client: the screens, the wording, the vehicle form.
+
+**Done at the publish**
+- `INTERNAL_FUNCTION_SECRET` is set on the live app (a long random value, set through the connector; the value is written down nowhere). Until then `sendPushNotification`, `requestHostDetails` and `notifyLead` accepted calls from anybody, and the two Telegram buttons on a "payment on hold" alert would have answered "use the Admin screen". Nothing outside the functions sends it: the two schedules do not (those functions check for an admin session instead), and Telegram and Paystack have secrets of their own. If it is ever needed by hand, set a new one in the dashboard. The platform says that setting a secret redeploys the functions; whether it did, under the plan block, cannot be read.
+- Base44's pull of the push added three optional fields to the live database by itself: `AvailabilityRequest.booking_id`, `Booking.payment_extra_refs` and `RideBooking.pay_answered_for`. Read back after the pull; every other field and rule is as it was. No rule changes rode on the push.
+- Checked after publishing: the preview and the live site serve the same bundle as a local build of the commit; `scripts/check-deploy.sh` has 56 passes and 26 failures, all 26 the 402; search, a listing, the ride page and the FAQ opened signed out with nothing in the console but the signed-out 401.
+
+**Still to do**
+- The owner: one sign-up with a fresh email (see "Can be tried today" below). It was promised as part of this go-live.
+- The rest of "Not yet tried on the live platform", the day functions are unblocked.
 
 **What changes for the owner**
 - **A payment for a stay you have not approved, or that was cancelled, no longer confirms it.** The money is put on hold. You get a Telegram alert with two buttons, and Admin shows a "Payments on hold" card: **Confirm booking** (the guest gets their arrival details) or **Mark refunded** (only after you have sent the money back in Paystack; the app sends none). Approving such a request confirms it with the payment already there. Rejecting it leaves a refund owed and reminds you. The guest is told by email, push and on their bookings page, and cannot pay twice or cancel it away.
@@ -32,7 +37,7 @@ Branch `fix/todo-findings`, local, not pushed. It fixes items A, C, D, F, G and 
 
 ## Decision 1: Rides need the same payment hold as stays
 **Found 2026-10-12. Not built.** `verifyRidePayment` and the ride branch of `paystackWebhook` confirm a ride whenever the payment is right and the ride is not already paid. They do not look at whether the ride was approved, cancelled or expired, or whether the guest has since been blocked from rides. A guest who pays through Paystack directly for a cancelled ride gets a confirmed one, on a car that may have gone to someone else.
-**What exists:** the stay version, to copy. `stayPaymentVerdict`, `holdStayPayment`, the `confirm_held` branch and `markHeldPaymentRefunded` in `base44/functions/`, the screens in `src/config/payments.js`, and `scripts/check-stay-payment.mjs` (80 cases). The payment page already asks the server again before Paystack opens for a ride, which closes the easy way in (a page left open); it cannot stop a payment made outside the page.
+**What exists:** the stay version, to copy. `stayPaymentVerdict`, `holdStayPayment`, the `confirm_held` branch and `markHeldPaymentRefunded` in `base44/functions/`, the screens in `src/config/payments.js`, and `scripts/check-stay-payment.mjs` (102 cases). The payment page already asks the server again before Paystack opens for a ride, which closes the easy way in (a page left open); it cannot stop a payment made outside the page.
 **Also in the ride payment path, and to be closed by the same work:** a Paystack transaction whose metadata names no booking is still accepted for a ride (the stay path now refuses one), so one such payment handed in for two rides of the same price at the same moment marks both paid.
 **Decision:** whether rides follow the same rule as stays (hold, alert, confirm or refund by hand). That is the recommendation, and about a day of work.
 
@@ -71,12 +76,12 @@ Every backend function has answered HTTP 402 ("app owner lacks backend functions
 
 1. **Publish again first.** It is not known whether a publish deploys functions while the plan blocks them, and deployed function code cannot be read through the connector. Since 2026-10-12 only the server may create Booking and AvailabilityRequest rows; an older copy of `checkAvailabilityWebhook` would be refused on every request.
 2. **One stay request end to end** on a listing with bedroom options and a seasonal rate, dates crossing into the season. Check the total, `bedrooms_booked`, the Telegram card, that the rows are created by the service account, that the request carries `booking_id`, approval, the payment page, the confirmation email.
-3. **One payment on hold.** With a test account, request a stay, do NOT approve it, and pay its exact total through Paystack (the payment page will not let you; use a test transaction with `metadata.booking_id` set). Expect: booking not confirmed, a "PAYMENT ON HOLD" Telegram alert with two buttons, the guest email, the card in Admin. Press Confirm booking from Admin, then repeat and press it from Telegram (needs `INTERNAL_FUNCTION_SECRET`). Then one Mark refunded.
+3. **One payment on hold.** With a test account, request a stay, do NOT approve it, and pay its exact total through Paystack (the payment page will not let you; use a test transaction with `metadata.booking_id` set). Expect: booking not confirmed, a "PAYMENT ON HOLD" Telegram alert with two buttons, the guest email, the card in Admin. Press Confirm booking from Admin, then repeat and press it from Telegram (it needs `INTERNAL_FUNCTION_SECRET`, set since 2026-10-13). Then one Mark refunded.
 4. **One referral.** Sign up through a `?ref=` link, pay for a stay, and check the referrer's balance rises once, by 5%, with one Referral row stamped. This is also the first time the server writes `referral_balance_ngn` and `loyalty_points` since those fields were given admin-only write rules on 2026-10-10: read the balance back. If the platform dropped the write without an error, the row would be stamped and the balance unchanged.
 5. With an ordinary account, in the browser console: `base44.entities.Booking.create({...})` must be refused, and so must `base44.auth.updateMe({ role: 'admin' })` and `base44.auth.updateMe({ referred_by_code: 'X' })`. Check what the last two do: refuse the whole call, or drop the field.
 6. One ride request, one withdrawal request. Press Process on one withdrawal in two tabs (Paystack must refuse the duplicate reference).
 7. The sandbox checklists at the end of each task in `docs/superpowers/plans/2026-10-10-driver-wallet.md`, `2026-10-10-ride-reports.md` and `2026-10-10-review-hardening.md` (now with Task R07).
-8. `scripts/check-deploy.sh`. Today its only failures are the 402s.
+8. `scripts/check-deploy.sh`. Today its only failures are the 402s (26 of them on 2026-10-13, one per function it asks).
 
 **Can be tried today, while functions are blocked**
 - **One sign-up with a fresh email.** Nobody has signed up since 2026-08-11, and field-level write rules have been on `User` since 2026-10-10 (`role` since 2026-10-12). The platform should set `role` at sign-up by itself; this is the check that it still can. If sign-up fails, clear the rule on `role` with `update_entity_schema` (`"rls": {}` on that property).
