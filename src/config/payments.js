@@ -150,11 +150,15 @@ export function holdReason(booking) {
   // nobody approved it. An approved booking that is still waiting is never
   // held for being late: it still has its dates, so its payment confirms it.
   if (booking.status === 'cancelled') return booking.cancel_reason === 'payment_expired' ? 'expired' : 'cancelled';
-  return 'not_approved';
+  // Held and approved: the money and the approval crossed. It arrived a
+  // moment before the request was approved, so it was held, and nothing
+  // confirms it now but the button.
+  return booking.approved_at ? 'approved_since' : 'not_approved';
 }
 
 export const HOLD_REASON_TEXT = {
   not_approved: 'Held because the request has not been approved.',
+  approved_since: 'Held because it arrived just before the request was approved. Confirm the booking to finish.',
   cancelled: 'Held because the booking was cancelled.',
   expired: 'Held because the booking had run out of time to pay and was cancelled.',
 };

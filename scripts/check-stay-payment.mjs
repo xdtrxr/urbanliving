@@ -44,10 +44,14 @@ const admin = { id: 'root', email: 'root@example.com', role: 'admin' };
 const rita = { id: 'rita', email: 'rita@example.com', role: 'user', referral_balance_ngn: 0, loyalty_points: 0 };
 const sade = { id: 'sade', email: 'sade@example.com', role: 'user', referral_balance_ngn: 0, loyalty_points: 0 };
 const tayo = { id: 'tayo', email: 'tayo@example.com', role: 'user', full_name: 'Tayo Guest', loyalty_points: 0 };
-rig.db.User = [guest, other, admin, rita, sade, tayo].map((u) => ({ ...u }));
+// Vera referred Uche, who pays without ever coming back to the payment page.
+const vera = { id: 'vera', email: 'vera@example.com', role: 'user', referral_balance_ngn: 0, loyalty_points: 0 };
+const uche = { id: 'uche', email: 'uche@example.com', role: 'user', full_name: 'Uche Guest', loyalty_points: 0 };
+rig.db.User = [guest, other, admin, rita, sade, tayo, vera, uche].map((u) => ({ ...u }));
 rig.db.Referral = [
   { id: 'ref-gina', referrer_email: rita.email, referred_email: guest.email, status: 'signed_up' },
   { id: 'ref-tayo', referrer_email: sade.email, referred_email: tayo.email, status: 'signed_up' },
+  { id: 'ref-uche', referrer_email: vera.email, referred_email: uche.email, status: 'signed_up' },
 ];
 const balanceOf = (id) => rig.db.User.find((u) => u.id === id).referral_balance_ngn || 0;
 rig.db.Property = [{ id: 'p1', title: 'Maitama Duplex', host_phone: '08011111111', host_name: 'Hadiza', arrival_instructions: 'Ring the bell.', location: { address: '1 Aso Drive', city: 'Abuja', country: 'Nigeria' } }];
@@ -95,6 +99,10 @@ r = await deliver('ref-hook', 'approved-webhook');
 check('Paystack\'s event alone confirms an approved booking too', [r.json.processed, state('approved-webhook')], [true, ['confirmed', 'paid', 'ref-hook']]);
 
 check('the guest\'s second stay earns the referrer nothing more', balanceOf('rita'), 59900);
+
+rig.db.Booking.push({ ...stay('webhook-only', APPROVED), guest_name: 'Uche Guest', guest_email: uche.email });
+r = await deliver('ref-webhook-only', 'webhook-only');
+check('a guest who never comes back to the page: the webhook alone confirms, awards points and pays the referrer', [state('webhook-only'), rig.db.User.find((u) => u.id === 'uche').loyalty_points, balanceOf('vera'), rig.db.Referral.find((x) => x.id === 'ref-uche').status], [['confirmed', 'paid', 'ref-webhook-only'], 500, 59900, 'booking_completed']);
 
 console.log('\n— the payment page and Paystack arrive together —');
 rig.db.Booking.push({ ...stay('together', APPROVED), guest_name: 'Tayo Guest', guest_email: tayo.email });
@@ -322,6 +330,15 @@ mailMark = rig.emails.length;
 r = await adminDecides('req-withdrawn', 'approve');
 check('a request the guest already cancelled cannot be approved; it leaves the list', [r.status, r.code, req('req-withdrawn').status, state('withdrawn')[0]], [409, 'BOOKING_CANCELLED', 'rejected', 'cancelled']);
 check('and the guest is not emailed a link to pay for it', mailsTo(guest.email, mailMark), []);
+
+// A row from before payments were held: paid and confirmed, request never answered.
+add('paid-unanswered', { status: 'confirmed', payment_status: 'paid', transaction_hash: 'ref-long-ago', paid_at: '2026-09-01T10:00:00.000Z', check_in: '2027-05-01', check_out: '2027-05-05' });
+request('req-paid-unanswered', 'paid-unanswered');
+mailMark = rig.emails.length;
+r = await adminDecides('req-paid-unanswered', 'reject');
+check('a request whose booking is already paid and confirmed cannot be rejected', [r.status, r.code, state('paid-unanswered'), req('req-paid-unanswered').status, mailsTo(guest.email, mailMark)], [409, 'ALREADY_PAID', ['confirmed', 'paid', 'ref-long-ago'], 'pending', []]);
+r = await adminDecides('req-paid-unanswered', 'approve');
+check('approving it only clears the request: no "you have an hour to pay" for a paid stay', [r.status, req('req-paid-unanswered').status, state('paid-unanswered'), mailsTo(guest.email, mailMark)], [200, 'approved', ['confirmed', 'paid', 'ref-long-ago'], []]);
 
 add('old-style', { check_in: '2027-04-15', check_out: '2027-04-19' });
 request('req-old-style', 'old-style', { booking_id: undefined });

@@ -170,9 +170,11 @@ check('paid after the sweep expired it', holdReason(heldExpired), 'expired');
 // The server never holds an approved booking for being late: while it is
 // still waiting it still has its dates, and its payment confirms it. If one
 // is ever seen held, it is not called "expired".
-check('an approved booking that is still waiting is never "expired"', holdReason(heldNotSweptYet), 'not_approved');
+check('an approved booking that is still waiting is never "expired": the money and the approval crossed', holdReason(heldNotSweptYet), 'approved_since');
 check('nothing held, no reason', [holdReason(approved), holdReason(paid), holdReason(refunded), holdReason(null)], [null, null, null, null]);
-check('a sentence for each of the server\'s three reasons, and no others', Object.keys(HOLD_REASON_TEXT).sort(), ['cancelled', 'expired', 'not_approved']);
+// The server's three reasons, and one the screen works out for itself: a
+// payment held a moment before its request was approved.
+check('a sentence for each of the server\'s three reasons and for the crossed approval, and no others', Object.keys(HOLD_REASON_TEXT).sort(), ['approved_since', 'cancelled', 'expired', 'not_approved']);
 check('each one a sentence the admin can read', Object.values(HOLD_REASON_TEXT).every((t) => /^Held because .+\.$/.test(t)), true);
 
 console.log('\n— admin: which pending request is already paid for —');

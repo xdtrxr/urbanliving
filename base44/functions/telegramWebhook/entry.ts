@@ -101,6 +101,26 @@ async function decideRequest(sdk: any, request: any, action: 'approve' | 'reject
         return { ok: true, status: 'rejected', bookingId: booking.id, guestCancelled: true };
     }
 
+    // Already paid and confirmed. Only rows from before payments were held can
+    // be in this state with the request still open: the guest paid, and the
+    // booking was confirmed, without anyone having answered. There is nothing
+    // left to approve, and "rejecting" must not tell a guest with a paid,
+    // confirmed stay that it is cancelled.
+    if (booking && booking.payment_status === 'paid') {
+        if (action === 'reject') {
+            return {
+                ok: false,
+                code: 'ALREADY_PAID',
+                error: 'This booking is already paid and confirmed, so the request cannot be rejected. To cancel it, cancel the booking itself and refund the guest.',
+            };
+        }
+        await db.AvailabilityRequest.update(request.id, {
+            status: 'approved',
+            admin_response: 'Property is available for your requested dates!',
+        });
+        return { ok: true, status: 'approved', bookingId: booking.id, confirmedWithPayment: true };
+    }
+
     if (action === 'approve' && held) {
         try {
             await sdk.functions.invoke('verifyPaystackPayment', {
@@ -355,7 +375,7 @@ Deno.serve(async (req) => {
         const statusText = action === 'approve' ? 'APPROVED' : 'REJECTED';
 
         const statusNote = outcome.confirmedWithPayment
-            ? 'APPROVED by admin and CONFIRMED with the payment that was on hold'
+            ? 'APPROVED by admin. The booking is paid and confirmed.'
             : `${statusText} by admin`;
         const updatedMessage = `${statusEmoji} ${statusText}\n\n${callbackQuery.message.text || ''}\n\nStatus: ${statusNote}`;
 
