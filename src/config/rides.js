@@ -535,6 +535,16 @@ export function reportHoldsPay(report, heldEarnings) {
     && e.driver_id === report.reported_driver_id);
 }
 
+// What the inbox badge says about a report and pay: 'holding', 'unknown' or
+// null. 'unknown' is for a report that could be holding pay while the ledger
+// has not been read or could not be: the server holds the pay whatever this
+// screen shows, so saying nothing would read as "nothing is held".
+export function reportPayNote(report, heldEarnings) {
+  if (!isOpenGuestReport(report)) return null;
+  if (!Array.isArray(heldEarnings)) return 'unknown';
+  return reportHoldsPay(report, heldEarnings) ? 'holding' : null;
+}
+
 // ── Ride reports ────────────────────────────────────────────────────────────
 // MIRROR of the limits in base44/functions/createRideReport/entry.ts. The
 // server is the authority; these let the dialog stop a report it would refuse

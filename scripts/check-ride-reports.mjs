@@ -397,8 +397,16 @@ for (const [role, status] of [['guest', 'open'], ['guest', 'reviewing'], ['guest
   check(`the ${role}'s ${status} report: the inbox says what the sweep does`,
     rides.reportHoldsPay(filed(role, status), [payRow('drvA')]), await hasOpenGuestReport(reportsOf([filed(role, status)]), 'ride1', 'drvA'));
 }
-check('the inbox draws the badge from reportHoldsPay',
-  /\{reportHoldsPay\(r, heldPay\) && \(/.test(fs.readFileSync(path.join(ROOT, 'src/components/admin/RideReportsAdmin.jsx'), 'utf8')), true);
+check('the inbox draws the badge from reportPayNote',
+  /\{reportPayNote\(r, heldPay\) === 'holding' && \(/.test(fs.readFileSync(path.join(ROOT, 'src/components/admin/RideReportsAdmin.jsx'), 'utf8')), true);
+// The server holds the pay whatever the screen manages to read. An inbox that
+// went quiet when the ledger could not be read would be saying "nothing is
+// held" about pay that is.
+same('with the ledger read, the note is "holding" or nothing', [rides.reportPayNote(aboutA, [payRow('drvA')]), rides.reportPayNote(aboutA, [])], ['holding', null]);
+same('with the ledger unread or unreadable, an open guest report says "unknown", not nothing', [rides.reportPayNote(aboutA, null), rides.reportPayNote(aboutA, undefined)], ['unknown', 'unknown']);
+same('a closed report, or one a driver filed, says nothing either way', [rides.reportPayNote(filed('guest', 'resolved'), null), rides.reportPayNote(filed('driver', 'open'), null)], [null, null]);
+check('the inbox shows the "may be holding" badge for it',
+  /\{reportPayNote\(r, heldPay\) === 'unknown' && \(/.test(fs.readFileSync(path.join(ROOT, 'src/components/admin/RideReportsAdmin.jsx'), 'utf8')), true);
 
 const settleDueEarning = make('settleDueEarning',
   liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),

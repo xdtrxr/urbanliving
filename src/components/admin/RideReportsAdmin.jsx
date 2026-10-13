@@ -12,7 +12,7 @@ import { Loader2, RefreshCw, Flag, AlertCircle, ShieldAlert, UserRound, Car } fr
 import { base44 } from '@/api/base44Client';
 import { invokeFn } from '@/lib/invokeFn';
 import { useToast } from '@/components/ui/use-toast';
-import { safePhotoUrl, isOpenGuestReport, reportHoldsPay } from '@/config/rides';
+import { safePhotoUrl, isOpenGuestReport, reportPayNote } from '@/config/rides';
 
 // RideReportsAdmin — complaints about rides, from drivers about guests and
 // from guests about drivers, and what admin decided about each.
@@ -27,6 +27,8 @@ import { safePhotoUrl, isOpenGuestReport, reportHoldsPay } from '@/config/rides'
 // The badge says so only while that driver still has pay held on the ride:
 // it may have been released before the guest complained, or reversed when
 // the ride was handed to another driver, and then the report holds nothing.
+// While the ledger has not been read, or cannot be, it says "may be": the
+// server holds the pay whatever this screen shows.
 
 const fmtWhen = (iso) => {
   if (!iso) return '—';
@@ -109,7 +111,7 @@ export default function RideReportsAdmin() {
   const { toast } = useToast();
   const [reports, setReports] = useState([]);
   // Pay still held on the rides of open guest reports. null until it has been
-  // read, and again if it cannot be: the badge then makes no claim.
+  // read, and again if it cannot be: the badge then says "may be holding".
   const [heldPay, setHeldPay] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -263,8 +265,11 @@ export default function RideReportsAdmin() {
                     {r.action_taken === 'warning' && (
                       <Badge className="bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 border-0 text-xs">Warned</Badge>
                     )}
-                    {reportHoldsPay(r, heldPay) && (
+                    {reportPayNote(r, heldPay) === 'holding' && (
                       <Badge variant="outline" className="text-xs">Holding the driver&apos;s pay</Badge>
+                    )}
+                    {reportPayNote(r, heldPay) === 'unknown' && (
+                      <Badge variant="outline" className="text-xs">May be holding the driver&apos;s pay</Badge>
                     )}
                   </div>
 
