@@ -69,6 +69,18 @@ function isId(value: unknown) {
     return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
 }
 
+// entity.get() rejects for a row that is not there. Unguarded, a stale or
+// mistyped id is answered with a 500 instead of "not found".
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -92,7 +104,7 @@ Deno.serve(async (req) => {
         if (!isId(ride_booking_id)) return json({ success: false, error: 'ride_booking_id is required' }, 400);
 
         const sr = base44.asServiceRole.entities;
-        const ride = await sr.RideBooking.get(ride_booking_id);
+        const ride = await getOrNull(sr.RideBooking, ride_booking_id);
         if (!ride || ride.id !== ride_booking_id) {
             return json({ success: false, error: 'Ride booking not found', code: 'NOT_FOUND' }, 404);
         }

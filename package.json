@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "check": "node scripts/check-ride-time.mjs && node scripts/check-stay-price.mjs && node scripts/check-stay-handler.mjs && node scripts/check-stay-payment.mjs && node scripts/check-referral-reward.mjs && node scripts/check-referral-attribution.mjs && node scripts/check-booked-ranges.mjs && node scripts/check-entities.mjs && node scripts/check-driver-wallet.mjs && node scripts/check-ride-reports.mjs && node scripts/check-vehicle-form.mjs && node scripts/check-invoke-errors.mjs && node scripts/check-held-payment-screens.mjs",
+    "check": "node scripts/check-ride-time.mjs && node scripts/check-stay-price.mjs && node scripts/check-stay-handler.mjs && node scripts/check-stay-payment.mjs && node scripts/check-referral-reward.mjs && node scripts/check-referral-attribution.mjs && node scripts/check-booked-ranges.mjs && node scripts/check-entities.mjs && node scripts/check-driver-wallet.mjs && node scripts/check-ride-reports.mjs && node scripts/check-vehicle-form.mjs && node scripts/check-invoke-errors.mjs && node scripts/check-held-payment-screens.mjs && node scripts/check-missing-rows.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

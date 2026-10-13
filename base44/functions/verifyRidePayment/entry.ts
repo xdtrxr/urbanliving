@@ -259,6 +259,26 @@ async function payReferralReward(db: any, paid: any, what: string) {
     return { referrer_email: referral.referrer_email, amount_ngn: amountNGN, referral_id: referral.id };
 }
 
+// An id goes into the URL of the row it fetches ("../Booking/abc" would fetch
+// a row of another entity, and every check that follows would then be made on
+// the wrong kind of row), so only a plain id is ever used. Lockstep copy, see
+// createWithdrawalRequest.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there. Unguarded, a stale or
+// mistyped id is answered with a 500 instead of "not found".
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -284,7 +304,10 @@ Deno.serve(async (req) => {
         const secretKey = Deno.env.get('PAYSTACK_SECRET_KEY');
         if (!secretKey) return json({ success: false, error: 'Payment service not configured' }, 500);
 
-        const ride = await base44.asServiceRole.entities.RideBooking.get(ride_booking_id);
+        // A plain id only. "../Booking/<a stay>" would fetch a stay as if it
+        // were a ride and mark it paid and confirmed from here, past the rule
+        // that a stay nobody approved is held, not confirmed.
+        const ride = isId(ride_booking_id) ? await getOrNull(base44.asServiceRole.entities.RideBooking, ride_booking_id) : null;
         if (!ride) return json({ success: false, error: 'Ride booking not found' }, 404);
         if (ride.guest_email !== user.email && user.role !== 'admin') {
             return json({ success: false, error: 'Not your booking' }, 403);
