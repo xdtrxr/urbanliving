@@ -196,6 +196,274 @@ async function notifyAdmin(opts: {
     }
 }
 
+// ── Stay payment rules ───────────────────────────────────────────────────────
+// LOCKSTEP: from this line to "end of stay payment rules" the text is the same
+// in verifyPaystackPayment and paystackWebhook. Functions cannot share code;
+// scripts/check-stay-payment.mjs fails if the two copies differ.
+
+// An id goes into the URL of the row it fetches ("../RideBooking/abc" would
+// fetch a row of another entity), so only a plain id is ever used.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there.
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
+// May a payment that has arrived confirm this booking by itself?
+// Only a booking the admin approved, and that is still waiting, may. Until
+// 2026-10-12 any correct payment confirmed any booking: one the admin never
+// approved, or one already cancelled whose dates may have gone to someone
+// else. That skipped the one decision that stops double bookings. Now such a
+// payment is held for a person to decide:
+//   held:not_approved   the request was never approved
+//   held:expired        it ran out of time to pay and was cancelled for that
+//   held:cancelled      it was cancelled, or is otherwise closed
+// An approved booking stays payable for as long as it is still 'pending', even
+// a little past its deadline: it is still holding its dates, so taking the
+// money breaks no promise made to anyone else.
+function stayPaymentVerdict(booking: any) {
+    if (booking.status === 'confirmed') return 'payable';
+    if (booking.status !== 'pending') return booking.cancel_reason === 'payment_expired' ? 'held:expired' : 'held:cancelled';
+    return booking.approved_at ? 'payable' : 'held:not_approved';
+}
+
+// Reads as "this booking ..." for the guest and "a stay that ..." for the admin.
+const HELD_BECAUSE: Record<string, string> = {
+    not_approved: 'has not been approved yet',
+    expired: 'had run out of time to pay and was cancelled',
+    cancelled: 'was cancelled',
+    holding: 'already has a payment on hold',
+};
+
+function heldSentence(amountNGN: number, why: string, reference: string) {
+    return `We received your payment of ₦${amountNGN.toLocaleString()}, but this booking ${HELD_BECAUSE[why] || HELD_BECAUSE.cancelled}, so it is not confirmed. `
+        + `Our team has been told and will confirm it or refund you in full. Please do not pay again. Reference: ${reference}.`;
+}
+
+// Money has arrived for a booking it may not confirm. Nothing a paid booking
+// gets happens here: no confirmation, no arrival details (they hand out the
+// address and the host's number), no points, no referral reward. The row is
+// marked, the admin is told, with the two buttons telegramWebhook answers,
+// and the guest is told what happens next.
+//
+// The row is read again first. The caller read it before asking Paystack, and
+// the other path for the same payment (the payment page, or the webhook) may
+// have held it in the meantime: the admin must get one alert, not two.
+// Answers
+//   'held'    this payment is now on hold
+//   'second'  the booking already held a different payment; that first
+//             reference stays on the row, this one is kept beside it and the
+//             admin is told there are two
+//   'again'   this payment was already on hold, or already announced as a
+//             second one: nothing is written and nobody is told twice
+//   'paid'    the booking was confirmed with this very payment while we looked
+async function holdStayPayment(sdk: any, booking: any, reference: string, why: string) {
+    const db = sdk.asServiceRole.entities;
+    booking = (await getOrNull(db.Booking, booking.id).catch(() => null)) || booking;
+    if (booking.payment_status === 'paid' && booking.transaction_hash === reference) return 'paid';
+    const alreadyHolding = booking.payment_status === 'pending_confirmation' && !!booking.transaction_hash;
+    const extras: string[] = Array.isArray(booking.payment_extra_refs) ? booking.payment_extra_refs : [];
+    if (alreadyHolding && (booking.transaction_hash === reference || extras.includes(reference))) return 'again';
+    if (!alreadyHolding) {
+        await db.Booking.update(booking.id, {
+            payment_status: 'pending_confirmation',
+            payment_method: 'paystack',
+            transaction_hash: reference,
+        });
+    } else {
+        await db.Booking.update(booking.id, { payment_extra_refs: [...extras, reference] });
+    }
+
+    const amountNGN = Number(booking.total_price) || 0;
+    let title = '';
+    let phone = '';
+    try { title = (await getOrNull(db.Property, booking.property_id))?.title || ''; } catch { /* the id is shown instead */ }
+    try { phone = (await db.User.filter({ email: booking.guest_email }, 'created_date', 1))[0]?.phone_number || ''; } catch { /* shown as missing */ }
+    const lines = [
+        alreadyHolding ? 'SECOND PAYMENT for a booking that already has one on hold' : 'PAYMENT ON HOLD. The booking is NOT confirmed.',
+        '',
+        `₦${amountNGN.toLocaleString()} arrived for a stay that ${HELD_BECAUSE[why] || HELD_BECAUSE.cancelled}.`,
+        `Booking: ${booking.id}`,
+        `Property: ${title || booking.property_id}`,
+        `Guest: ${booking.guest_name || 'no name'} (${booking.guest_email}), ${phone || 'no phone on file'}`,
+        `Stay: ${booking.check_in} to ${booking.check_out}`,
+        `Paystack ref: ${reference}`,
+        '',
+        alreadyHolding
+            ? `The first payment (ref ${booking.transaction_hash}) is still on hold. Refund this second one in Paystack.`
+            : 'The guest has NOT been sent a confirmation, arrival details or points. Confirm the booking with this payment, or refund it in Paystack and then mark it refunded.',
+    ];
+    const message: any = { chat_id: Deno.env.get('TELEGRAM_ADMIN_CHAT_ID'), text: lines.join('\n') };
+    if (!alreadyHolding) {
+        message.reply_markup = { inline_keyboard: [[
+            { text: 'Confirm booking', callback_data: `held_confirm_${booking.id}` },
+            { text: 'Mark refunded', callback_data: `held_refund_${booking.id}` },
+        ]] };
+    }
+    // Plain text, and the answer is read: Telegram drops a message it cannot
+    // parse, and this one is the only word that money is waiting.
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    if (!token || !message.chat_id) {
+        console.error(`Payment on hold for booking ${booking.id} and Telegram is not configured: nobody was told.`);
+    } else {
+        try {
+            const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(message),
+            });
+            const answer = await res.json().catch(() => null);
+            if (!answer || !answer.ok) console.error(`Telegram did not take the payment-on-hold alert for booking ${booking.id}:`, answer);
+        } catch (err) {
+            console.error(`Payment-on-hold alert failed for booking ${booking.id}:`, err);
+        }
+    }
+
+    try {
+        await sdk.integrations.Core.SendEmail({
+            to: booking.guest_email,
+            subject: 'We have your payment. Your booking is not confirmed yet',
+            body: `Hi ${booking.guest_name || 'there'},\n\n${heldSentence(amountNGN, why, reference)}\n\n`
+                + `You can follow it here: ${bookingLink(booking.id)}\n\n— Urban Stays`,
+            from_name: 'Urban Stays',
+        });
+    } catch (err) {
+        console.warn('Payment-on-hold email to the guest failed (non-fatal):', err);
+    }
+    await tryPush(sdk, {
+        user_email: booking.guest_email,
+        title: 'Payment received',
+        body: 'Your booking is not confirmed yet. We will confirm it or refund you in full.',
+        url: `/Bookings#booking-${booking.id}`,
+        tag: `booking-held-${booking.id}`,
+    });
+    return alreadyHolding ? 'second' : 'held';
+}
+// ── end of stay payment rules ────────────────────────────────────────────────
+
+// Referral reward. This function is word for word the same in
+// processReferralReward, verifyPaystackPayment, verifyRidePayment and
+// paystackWebhook: functions cannot share code, and
+// scripts/check-referral-reward.mjs fails if the copies drift apart.
+//
+// What it keeps:
+//  - Only a paid stay or ride earns, and the row handed in must say so.
+//  - The referrer is whoever the guest's Referral row names. Only
+//    attributeReferral writes that row, once per guest and never naming the
+//    guest. The codes on the two profiles are not read here: a code is text
+//    anyone can copy onto their own profile, and until 2026-10-12 a guest
+//    could point their own profile at any code they liked.
+//  - One reward per referred guest, for the first stay or ride they pay for.
+//    Every row for the guest is looked at, because rewards paid in May 2026
+//    left a second row beside the sign-up one.
+//  - Never twice for one booking, never to the guest, and never for a
+//    booking that was paid for before the guest was referred.
+// Two writers reach this for one payment (the payment page and Paystack's
+// webhook), and there is nothing to lock. So each first writes a claim, the
+// referrer's loyalty row for this booking, then reads all the claims: only the
+// oldest goes on to move money, and the others take theirs back. If the money
+// then fails to move, what was written here is undone so a retry can pay; if
+// it cannot be told whether the money moved, it is left as paid, because a
+// reward that needs a person to look is better than one paid twice.
+async function payReferralReward(db: any, paid: any, what: string) {
+    const oldestFirst = (a: any, b: any) => String(a.created_date || '').localeCompare(String(b.created_date || ''))
+        || String(a.id).localeCompare(String(b.id));
+    const guestEmail = String(paid.guest_email || '').toLowerCase();
+    if (!guestEmail) return { skipped: 'no_referrer' };
+    if (paid.payment_status !== 'paid') return { skipped: 'not_paid' };
+    // Nothing to pay must not use the guest's one reward up.
+    const amountNGN = Math.round((Number(paid.total_price) || 0) * REFERRAL_RATE);
+    if (amountNGN <= 0) return { skipped: 'no_amount' };
+
+    const rows = await db.Referral.filter({ referred_email: paid.guest_email }, 'created_date', 50);
+    if (rows.length === 0) return { skipped: 'no_referrer' };
+    if (rows.some((row: any) => row.booking_id === paid.id || row.status === 'booking_completed')) {
+        return { skipped: 'already_awarded' };
+    }
+    const referral = rows.slice().sort(oldestFirst)[0];
+    const referrerEmail = String(referral.referrer_email || '').toLowerCase();
+    if (!referrerEmail || referrerEmail === guestEmail) return { skipped: 'self_referral' };
+    // Compared to the second: both are UTC, written in different precisions.
+    if (paid.paid_at && referral.created_date
+        && String(paid.paid_at).slice(0, 19) < String(referral.created_date).slice(0, 19)) {
+        return { skipped: 'paid_before_referral' };
+    }
+    const findReferrer = async () => (await db.User.filter({ email: referral.referrer_email }, 'created_date', 1))[0];
+    if (!(await findReferrer())) return { skipped: 'referrer_not_found' };
+
+    const claim = await db.LoyaltyTransaction.create({
+        user_email: referral.referrer_email,
+        points_earned: REFERRER_LOYALTY_BONUS,
+        transaction_type: 'referral',
+        booking_id: paid.id,
+        description: `REFERRAL_BONUS — Referred ${paid.guest_email} who ${what}`,
+    });
+    const claims = await db.LoyaltyTransaction.filter({ transaction_type: 'referral', booking_id: paid.id }, 'created_date', 50);
+    if (claims.slice().sort(oldestFirst)[0].id !== claim.id) {
+        await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        return { skipped: 'already_awarded' };
+    }
+
+    // The guest's rows once more, now that the claim is ours. Two bookings
+    // of one guest confirmed a moment apart (a stay and a ride, say) each win
+    // the claim for their own booking; the one that gets here second finds
+    // the first one's stamp, and stands down.
+    const rowsNow = await db.Referral.filter({ referred_email: paid.guest_email }, 'created_date', 50);
+    if (rowsNow.some((row: any) => row.status === 'booking_completed')) {
+        await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        return { skipped: 'already_awarded' };
+    }
+
+    // Read right before the credit: the balance is a number a withdrawal may
+    // have changed since the first read.
+    let before: any = null;
+    try {
+        await db.Referral.update(referral.id, {
+            status: 'booking_completed',
+            booking_id: paid.id,
+            amount_earned_ngn: amountNGN,
+        });
+        before = await findReferrer();
+        await db.User.update(before.id, {
+            referral_balance_ngn: (Number(before.referral_balance_ngn) || 0) + amountNGN,
+            loyalty_points: (Number(before.loyalty_points) || 0) + REFERRER_LOYALTY_BONUS,
+        });
+    } catch (err) {
+        // A write can fail after it has landed. Undo only when the balance
+        // reads exactly as it did before the credit was sent.
+        let moved = false;
+        if (before) {
+            try {
+                const now = await findReferrer();
+                moved = !now || (Number(now.referral_balance_ngn) || 0) !== (Number(before.referral_balance_ngn) || 0);
+            } catch {
+                moved = true;
+            }
+        }
+        if (!moved) {
+            // Emptied with '' and 0, not null: what the platform does with a
+            // null in a text or number field has not been seen.
+            await db.Referral.update(referral.id, {
+                status: referral.status || 'signed_up',
+                booking_id: '',
+                amount_earned_ngn: 0,
+            }).catch(() => {});
+            await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        }
+        throw err;
+    }
+    return { referrer_email: referral.referrer_email, amount_ngn: amountNGN, referral_id: referral.id };
+}
+
 Deno.serve(async (req) => {
     const ack = (extra: Record<string, unknown> = {}) =>
         new Response(JSON.stringify({ ok: true, ...extra }), {
@@ -260,17 +528,44 @@ Deno.serve(async (req) => {
     const sdk = createClientFromRequest(req);
 
     try {
-        const booking = await sdk.asServiceRole.entities.Booking.get(bookingId);
+        const booking = isId(bookingId) ? await getOrNull(sdk.asServiceRole.entities.Booking, bookingId) : null;
         if (!booking) return ack({ skipped: 'booking_not_found' });
 
-        if (booking.payment_status === 'paid' && booking.status === 'confirmed') {
+        // Paid is paid, whatever became of the booking afterwards. This used
+        // to ask for "paid and confirmed", so a paid stay the admin later
+        // cancelled was confirmed again when its event was delivered again.
+        if (booking.payment_status === 'paid') {
             return ack({ skipped: 'already_paid' });
+        }
+        if (booking.payment_status === 'refunded' && booking.transaction_hash === reference) {
+            return ack({ skipped: 'refunded' });
         }
 
         const expectedKobo = Math.round((Number(booking.total_price) || 0) * 100);
         if (amountKobo !== expectedKobo) {
             console.error(`Webhook amount mismatch: expected ${expectedKobo}, got ${amountKobo}`);
             return ack({ skipped: 'amount_mismatch' });
+        }
+
+        // One reference pays for one booking.
+        const reused = (await sdk.asServiceRole.entities.Booking.filter({ transaction_hash: reference }, '-created_date', 5))
+            .filter((row: any) => row.id !== booking.id);
+        if (reused.length > 0) {
+            console.error(`Webhook reference ${reference} is already on booking ${reused[0].id}`);
+            return ack({ skipped: 'reference_reused' });
+        }
+
+        // The money is real and it is for this booking. Whether it may
+        // confirm the booking is a separate question (stayPaymentVerdict). A
+        // booking that already holds a different payment takes no second one.
+        const verdict = stayPaymentVerdict(booking);
+        const holdsAnother = booking.payment_status === 'pending_confirmation'
+            && !!booking.transaction_hash && booking.transaction_hash !== reference;
+        if (verdict !== 'payable' || holdsAnother) {
+            const why = holdsAnother ? 'holding' : verdict.slice('held:'.length);
+            const outcome = await holdStayPayment(sdk, booking, reference, why);
+            if (outcome === 'paid') return ack({ skipped: 'already_paid' });
+            return ack({ held: true, reason: why, outcome, booking_id: booking.id });
         }
 
         const nowIso = new Date().toISOString();
@@ -321,7 +616,7 @@ Deno.serve(async (req) => {
         });
 
         // Re-read so we see any host_*_override that may have been filled.
-        const bookingForEmail = await sdk.asServiceRole.entities.Booking.get(booking.id);
+        const bookingForEmail = (await getOrNull(sdk.asServiceRole.entities.Booking, booking.id).catch(() => null)) || booking;
         const emailResult = await sendArrivalEmail({ sdk, booking: bookingForEmail });
         if (!emailResult.sent && emailResult.needs_admin) {
             try {
@@ -342,68 +637,22 @@ Deno.serve(async (req) => {
 
         await awardGuestBookingPoints(sdk, booking.guest_email, booking.id);
 
-        // Inline referral reward — direct service-role writes, idempotent.
+        // Referral reward. Who is paid, and how often, is decided in
+        // payReferralReward, which every writer of the reward shares.
         try {
-            const guests = await sdk.asServiceRole.entities.User.filter({ email: booking.guest_email });
-            const guest = guests[0];
-            if (guest?.referred_by_code) {
-                const referrers = await sdk.asServiceRole.entities.User.filter({ referral_code: guest.referred_by_code });
-                const referrer = referrers[0];
-                if (referrer) {
-                    let referrals = await sdk.asServiceRole.entities.Referral.filter({
-                        referrer_email: referrer.email,
-                        referred_email: guest.email,
-                    });
-                    let referral = referrals[0];
-                    if (!referral) {
-                        referral = await sdk.asServiceRole.entities.Referral.create({
-                            referrer_email: referrer.email,
-                            referred_email: guest.email,
-                            status: 'signed_up',
-                        });
-                    }
-                    // Second idempotency guard: even if status check passes
-                    // under a race, the booking_id stamp on the referral row
-                    // will catch a second writer trying to credit the same
-                    // booking.
-                    const alreadyCreditedThisBooking = referral.booking_id === booking.id;
-                    if (referral.status !== 'booking_completed' && !alreadyCreditedThisBooking) {
-                        const amountNGN = Math.round((Number(booking.total_price) || 0) * REFERRAL_RATE);
-                        const newBalance = (Number(referrer.referral_balance_ngn) || 0) + amountNGN;
-                        const newLoyalty = (Number(referrer.loyalty_points) || 0) + REFERRER_LOYALTY_BONUS;
-                        await sdk.asServiceRole.entities.User.update(referrer.id, {
-                            referral_balance_ngn: newBalance,
-                            loyalty_points: newLoyalty,
-                        });
-                        try {
-                            await sdk.asServiceRole.entities.LoyaltyTransaction.create({
-                                user_email: referrer.email,
-                                points_earned: REFERRER_LOYALTY_BONUS,
-                                transaction_type: 'referral',
-                                booking_id: booking.id,
-                                description: `REFERRAL_BONUS — Referred ${guest.email} who booked (webhook)`,
-                            });
-                        } catch (loyaltyErr) {
-                            console.warn('Referrer loyalty log failed (non-fatal):', loyaltyErr);
-                        }
-                        await sdk.asServiceRole.entities.Referral.update(referral.id, {
-                            status: 'booking_completed',
-                            booking_id: booking.id,
-                            amount_earned_ngn: amountNGN,
-                        });
-                        console.log(`🎁 Referrer ${referrer.email} awarded ₦${amountNGN}`);
-                        // Push the referrer. Same tag as the verify path so we
-                        // don't double-notify if both paths land for the same
-                        // payment in close succession.
-                        await tryPush(sdk, {
-                            user_email: referrer.email,
-                            title: '🎁 Referral payout',
-                            body: `₦${amountNGN.toLocaleString()} just landed in your referral balance.`,
-                            url: '/Withdrawals',
-                            tag: `referral-${referral.id}`,
-                        });
-                    }
-                }
+            const reward: any = await payReferralReward(sdk.asServiceRole.entities, bookingForEmail, 'booked (webhook)');
+            if (!reward.skipped) {
+                console.log(`🎁 Referrer ${reward.referrer_email} awarded ₦${reward.amount_ngn}`);
+                // Push the referrer. Same tag as the verify path so we
+                // don't double-notify if both paths land for the same
+                // payment in close succession.
+                await tryPush(sdk, {
+                    user_email: reward.referrer_email,
+                    title: '🎁 Referral payout',
+                    body: `₦${reward.amount_ngn.toLocaleString()} just landed in your referral balance.`,
+                    url: '/Withdrawals',
+                    tag: `referral-${reward.referral_id}`,
+                });
             }
         } catch (refErr) {
             console.warn('Webhook inline referral reward failed (non-fatal):', refErr);
@@ -424,8 +673,6 @@ Deno.serve(async (req) => {
 // duplicated. KEEP THE TWO IN LOCKSTEP — the equivalent stays pair has already
 // drifted in the ordering of its referral writes.
 
-const RIDE_REFERRAL_RATE = 0.05;
-const RIDE_REFERRER_LOYALTY_BONUS = 250;
 const GUEST_RIDE_POINTS = 500;
 
 // A ride that has been paid stays paid, whatever happened to it afterwards.
@@ -444,7 +691,10 @@ async function handleRidePayment(
     amountKobo: number,
     ack: (extra?: Record<string, unknown>) => Response,
 ): Promise<Response> {
-    const ride = await sdk.asServiceRole.entities.RideBooking.get(rideId);
+    // get() rejects for a row that is not there, and this runs outside the
+    // handler's try: unguarded, Paystack was answered with an error and sent
+    // the event again and again.
+    const ride = isId(rideId) ? await getOrNull(sdk.asServiceRole.entities.RideBooking, rideId) : null;
     if (!ride) return ack({ skipped: 'ride_not_found' });
     if (rideAlreadyPaid(ride)) {
         return ack({ skipped: 'already_paid' });
@@ -560,50 +810,18 @@ async function handleRidePayment(
         console.warn('Ride loyalty award failed (non-fatal):', err);
     }
 
-    // Referral payout
+    // Referral reward. Who is paid, and how often, is decided in
+    // payReferralReward, which every writer of the reward shares.
     try {
-        const guests = await sdk.asServiceRole.entities.User.filter({ email: ride.guest_email });
-        const guest = guests[0];
-        if (guest?.referred_by_code) {
-            const referrers = await sdk.asServiceRole.entities.User.filter({ referral_code: guest.referred_by_code });
-            const referrer = referrers[0];
-            if (referrer) {
-                let rows = await sdk.asServiceRole.entities.Referral.filter({
-                    referrer_email: referrer.email, referred_email: guest.email,
-                });
-                let referral = rows[0];
-                if (!referral) {
-                    referral = await sdk.asServiceRole.entities.Referral.create({
-                        referrer_email: referrer.email, referred_email: guest.email, status: 'signed_up',
-                    });
-                }
-                if (referral.status !== 'booking_completed' && referral.booking_id !== ride.id) {
-                    const amountNGN = Math.round((Number(ride.total_price) || 0) * RIDE_REFERRAL_RATE);
-                    await sdk.asServiceRole.entities.User.update(referrer.id, {
-                        referral_balance_ngn: (Number(referrer.referral_balance_ngn) || 0) + amountNGN,
-                        loyalty_points: (Number(referrer.loyalty_points) || 0) + RIDE_REFERRER_LOYALTY_BONUS,
-                    });
-                    await sdk.asServiceRole.entities.Referral.update(referral.id, {
-                        status: 'booking_completed', booking_id: ride.id, amount_earned_ngn: amountNGN,
-                    });
-                    try {
-                        await sdk.asServiceRole.entities.LoyaltyTransaction.create({
-                            user_email: referrer.email,
-                            points_earned: RIDE_REFERRER_LOYALTY_BONUS,
-                            transaction_type: 'referral',
-                            booking_id: ride.id,
-                            description: `REFERRAL_BONUS — Referred ${guest.email} who booked a ride (webhook)`,
-                        });
-                    } catch { /* log-only */ }
-                    await tryPush(sdk, {
-                        user_email: referrer.email,
-                        title: '🎁 Referral payout',
-                        body: `₦${amountNGN.toLocaleString()} just landed in your referral balance.`,
-                        url: '/Withdrawals',
-                        tag: `referral-${referral.id}`,
-                    });
-                }
-            }
+        const reward: any = await payReferralReward(sdk.asServiceRole.entities, after, 'booked a ride (webhook)');
+        if (!reward.skipped) {
+            await tryPush(sdk, {
+                user_email: reward.referrer_email,
+                title: '🎁 Referral payout',
+                body: `₦${reward.amount_ngn.toLocaleString()} just landed in your referral balance.`,
+                url: '/Withdrawals',
+                tag: `referral-${reward.referral_id}`,
+            });
         }
     } catch (err) {
         console.warn('Ride referral reward failed (non-fatal):', err);

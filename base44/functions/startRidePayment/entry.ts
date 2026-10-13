@@ -45,6 +45,18 @@ function guestIsBlocked(accounts: any[], email: string) {
     return (accounts || []).some((a) => !!a && String(a.email || '').trim().toLowerCase() === wanted && isRideBlocked(a));
 }
 
+// entity.get() rejects for a row that is not there. Unguarded, a stale or
+// mistyped id is answered with a 500 instead of "not found".
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -66,7 +78,7 @@ Deno.serve(async (req) => {
         const ride_booking_id = body?.ride_booking_id;
         if (!isId(ride_booking_id)) return json({ success: false, error: 'ride_booking_id is required' }, 400);
 
-        const ride = await base44.asServiceRole.entities.RideBooking.get(ride_booking_id);
+        const ride = await getOrNull(base44.asServiceRole.entities.RideBooking, ride_booking_id);
         if (!ride || ride.id !== ride_booking_id) return json({ success: false, error: 'Ride booking not found' }, 404);
         if (ride.guest_email !== user.email && user.role !== 'admin') {
             return json({ success: false, error: 'Not your booking' }, 403);

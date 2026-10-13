@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the seventeen defects three independent reviewers found in the driver wallet and ride reports work, before any of it is published.
+**Goal:** Close the seventeen defects three independent reviewers found in the driver wallet and ride reports work, and what a second review then found in those fixes, before any of it is published. Not everything from the second review was closed: see Second review.
 
-**Architecture:** Five tasks, one per kind of failure: a payout that could be sent twice or left stuck; an assignment that could leave the driver with no pay row; a release that could overwrite a reversal; ride rows a browser could write for itself; and reports that could be stacked, pinned on the wrong driver or carry a link to anywhere. Every fix that is a decision is a pure function the check scripts run; every helper copied between functions is compared character for character, as before.
+**Architecture:** Seven tasks. The first five take one kind of failure each: a payout that could be sent twice or left stuck; an assignment that could leave the driver with no pay row; a release that could overwrite a reversal; ride rows a browser could write for itself; and reports that could be stacked, pinned on the wrong driver or carry a link to anywhere. In those five, every fix that is a decision is a pure function the check scripts run; every helper copied between functions is compared character for character, as before. The last two come from the second review: R06 for payouts, and R07 for assignment, payment and reports. R07 says which of its changes no check runs.
 
 **Tech Stack:** As the two plans this follows: Base44 Deno functions and entity schemas, React 18 + Vite + Tailwind + shadcn/ui, Paystack transfers. Checks: eslint, the node check scripts, esbuild parse, vite build.
 
@@ -24,6 +24,8 @@
 ## How to read the steps
 
 As in the earlier plans: **Create `path`:**, **Replace `path` with:** and **Edit `path`** — find: … replace with: …, each followed by exact content; a find-block occurs exactly once in its file.
+
+**Verified by replay (2026-10-12):** every Create, Replace and Edit below was applied mechanically, in order, to a clean copy of the tree at commit `dd01ee5`, the commit Task R01 was built on. All 164 operations found their text exactly once and the result passed `npm run check`. It matched commit `ef34f98`, the one Task R07 records, file for file, apart from the three files commit `e4b8c96` changed between Tasks R06 and R07, which no task touches: this plan, the spec and `scripts/check-deploy.sh`. Each task applied on its own to the parent of its commit also reproduced that commit exactly. If a find-block does not match when you run it, the file has changed since; stop and read the diff.
 
 ## Review Focus
 
@@ -5469,7 +5471,7 @@ git commit -m "fix(rides): a report is filed once, holds only the driver it is a
 
 ## Second review
 
-Four more reviewers were asked to break Tasks R01 to R05 once they were committed: one each for payouts, for assignment and reversal, for ride rows and reports, and one for the check scripts themselves. They reported 33 findings, 27 once duplicates are merged. Tasks R06 to R08 close them. The fourth reviewer also tested the schedule walker on races whose answers are known (it visits exactly the right number of orders and finds the lost update) and re-ran the assignment races under stricter verdicts than the ones shipped; those held.
+Four more reviewers were asked to break Tasks R01 to R05 once they were committed: one each for payouts, for assignment and reversal, for ride rows and reports, and one for the check scripts themselves. They reported 33 findings, 27 once duplicates are merged. Task R06 closes findings about payouts and Task R07 four more, about assignment, payment and reports; each lists what it closes at its head. Findings of lower severity were never scheduled. On 2026-10-12 `todo.md` carried a list of them under "Still open from the driver wallet review (2026-10-10)"; the reviewers' own notes are not in this repo. The fourth reviewer also tested the schedule walker on races whose answers are known (it visits exactly the right number of orders and finds the lost update) and re-ran the assignment races under stricter verdicts than the ones shipped; those held.
 
 ### Task R06: Payouts, second review
 
@@ -7902,4 +7904,479 @@ Expected: no `PARSE FAIL` line, no lint output.
 ```bash
 git add scripts/check-entities.mjs scripts/check-driver-wallet.mjs base44/entities/WithdrawalLedger.jsonc base44/functions/processWithdrawal/entry.ts base44/functions/paystackTransferWebhook/entry.ts base44/functions/createWithdrawalRequest/entry.ts src/lib/withdrawalRow.js src/components/admin/WithdrawalsAdmin.jsx
 git commit -m "fix(rides): a payout is never sent on a stale reading, and is credited back once and only if it was taken" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task R07: Assignment, payment and reports, second review
+
+**Findings closed:**
+- A Paystack reference was good for any booking of the same price. `verifyRidePayment` and `verifyPaystackPayment` asked Paystack whether the reference was a successful payment, compared the amount and the currency, and never asked which booking it had paid for. A guest with two rides, or two stays, at one price could pay for the first and hand its reference in for the second, and a ride payment could be handed in for a stay.
+- A report "photo" could still lead out of the file store. The rule from Task R05 allowed `%` in the path, so `%2e%2e/` passed its test for `..`, and a browser reads `%2e%2e` as `..`: such a link passed as an upload and was fetched from somewhere else on the platform's host. The rule also allowed any file name, so an uploaded web page or an SVG could be attached as a photo, and the inbox opens a photo in a new tab when it is pressed.
+- An assignment that overlapped a cancellation could leave pay held on the cancelled ride, and tell the guest and the driver that a driver was on it. `realignLedger` took who is driving from the ride row's `driver_id`, which a cancelled row still carries. `cancelRideBooking` looked at the ledger only when the row it had read had a driver, which a row read a moment before a first assignment does not. The release pass reverses a held row whose ride is cancelled, so the pay would not have been released; until it fell due it stood as held.
+- Pay that admin had reversed was offered as pay that was never recorded. The rides list and the Assign dialog counted held and released rows only, so a ride whose driver's pay admin had reversed on purpose showed "No pay recorded" and **Record pay**, and pressing it held pay for that driver again.
+
+**Files:**
+- Modify: `scripts/check-driver-wallet.mjs` (one expectation; two new sections above `// ---- result ----`)
+- Modify: `scripts/check-ride-reports.mjs` (six more links that must be refused)
+- Modify: `base44/functions/verifyRidePayment/entry.ts`, `base44/functions/verifyPaystackPayment/entry.ts` (`paymentIsFor`, the handler)
+- Modify: `base44/functions/createRideReport/entry.ts`, `src/config/rides.js` (`UPLOAD_URL`, both copies)
+- Modify: `src/components/rides/RideReportDialog.jsx` (the upload)
+- Modify: `base44/functions/assignRideDriver/entry.ts` (`realignLedger`, the handler)
+- Modify: `base44/functions/cancelRideBooking/entry.ts` (the handler)
+- Modify: `base44/functions/getRideBookings/entry.ts` (`livePayKeys`, the ledger read)
+- Modify: `src/components/admin/RidesAdmin.jsx` (the Assign dialog)
+
+**Interfaces:**
+- Produces, lockstep in `verifyRidePayment/entry.ts` and `verifyPaystackPayment/entry.ts`: `paymentIsFor(metadata, kind, id) → true | false | null`, where `kind` is `'ride'` or `'stay'`. `true`: the metadata names this booking. `false`: it names another booking, or one of the other kind. `null`: it names none.
+- New refusal in both functions: `REFERENCE_MISMATCH` (400), "This payment was made for a different booking."
+- Changes: `UPLOAD_URL`, both copies. `isUploadUrl(url)` and `safePhotoUrl(url)` are untouched and accept less.
+- Changes: `realignLedger(...)` also returns `cancelled`, and `writeAssignment(...)` hands it on. When it is true, `superseded` is true, `current_driver_id` is `''` and `earning` is `null`.
+- Changes: `assignRideDriver` answers `CANCELLED` (409) in a second place. That code was already its answer for a ride cancelled before the call began ("This ride was cancelled"). A cancellation that lands while the call is writing gets a sentence of its own: "This ride was cancelled while the driver was being assigned. Nobody has been notified."
+- Changes: `livePayKeys(earnings)` keeps the key of a reversed row, so `driver_pay_recorded` is `true` for a ride whose driver has a pay row of any status.
+
+**What a reference proves.** Paystack's answer to a verification says that a reference is a successful payment of a certain amount. Which booking it was for is in the metadata the payment page attached when it started the transaction: `ride_booking_id` for a ride, `booking_id` for a stay, the same two keys `paystackWebhook` routes on. Paystack hands that metadata back with the verification, and `paymentIsFor` reads it. A reference that names another booking is refused. Otherwise the handler also looks for another row already carrying the reference as its `transaction_hash`, and refuses if there is one.
+
+**What this does not close.** A transaction whose metadata names no booking is still accepted for a booking of that amount. The payment page always names one, so this takes a payment started some other way. The lookup for a used reference reads rides in `verifyRidePayment` and stays in `verifyPaystackPayment`, so such a reference could still be handed in for one ride and one stay of the same price, and two calls made at the same moment can both find it unused.
+
+**Where uploads live, more exactly.** Task R05's rule accepted the shape of every file link then on the live listings, which is wider than a report photo needs. A photo's path is now plain: segments of letters, digits, `.`, `_` and `-`, none of them starting with a dot, nothing percent-encoded, ending in `jpg`, `jpeg`, `png`, `webp`, `gif`, `heic` or `heif` in either case. A phone's own file name may not pass (the dialog's comment gives `IMG (1).jpeg`), so the dialog uploads every photo under the name `report-photo.<ext>`, with the extension taken from the file's type. That rests on one thing no check here can see: the link the file store returns has to carry that plain name and nothing the rule refuses. If it does not, every photo is refused at the upload step, with the message that step already had, and the report can still be sent without it. Step 8 starts with that test.
+
+**A cancelled ride has nobody driving it.** Cancelling a ride leaves its `driver_id` where it was, and an assignment that lands a moment later writes a new one onto the cancelled row. So `realignLedger` no longer takes a driver from a cancelled row: a pass that finds the ride cancelled treats it as having no driver, which takes every held row off and puts none on. The cancellation does the same from its side whatever the row it read said, because an assignment writes its pay row before it writes the ride row. Whichever of the two finishes last, nothing is left held. An assignment that found the ride cancelled answers `CANCELLED` and tells nobody: not the guest, and not the driver it was assigning. The ride row does end up carrying that driver's id, so the ride shows under Cancelled in that driver's My rides, with no pay standing on it.
+
+**Reversed is not missing.** Admin reverses a driver's pay in Rides → Earnings for a reason. The list then showed "No pay recorded" on that ride until a week after it ended, with a button that led to holding the pay again. A pay row of any status now counts as pay on record, both in the flag `getRideBookings` sends and in the Assign dialog, so neither the badge nor **Record pay** appears for such a ride. That is all that changed: what the list is told and what the dialog reads. `assignRideDriver` is as it was: asked to record pay for the driver already on a ride, it still holds a new row when that driver has no standing one, which includes a driver whose only row was reversed.
+
+**What the checks reach.** The check scripts lift named functions out of the shipped files and run them; they do not run a handler. So `paymentIsFor`, the photo rule, `livePayKeys`, and `writeAssignment` with `realignLedger` are run. The lookup for a used reference, the `REFERENCE_MISMATCH` and `CANCELLED` answers, `cancelRideBooking`'s own handler, the unfiltered ledger read, the dialog's renamed upload and the Assign dialog's reading of the ledger are not run by any check: they were read, and Step 8 tries what can be tried by hand.
+
+- [ ] **Step 1: Write the failing checks**
+
+A reversed row is about to count as pay on record, so the expectation for `livePayKeys` gains its key.
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+  { ride_booking_id: 'r3', driver_id: 'drvA', status: 'reversed' },
+  null,
+]), ['r1:drvA', 'r2:drvB']);
+```
+
+replace with:
+
+```js
+  { ride_booking_id: 'r3', driver_id: 'drvA', status: 'reversed' },
+  null,
+]), ['r1:drvA', 'r2:drvB', 'r3:drvA']);
+```
+
+Two new sections. The first runs the shipped `paymentIsFor` and compares its two copies. In the second, the cancellation is an actor of its own beside the shipped `writeAssignment`. It takes the two steps `cancelRideBooking` takes, in the same order: the ride is marked cancelled, then the shipped `reverseHeldEarnings` reverses whatever is held on it. The walker from Task R01 runs the two against each other in every order with up to five changes of turn.
+
+**Edit `scripts/check-driver-wallet.mjs`** — find:
+
+```js
+// ---- result ----
+```
+
+replace with:
+
+```js
+// ── A payment reference pays for one booking ───────────────────────────────
+console.log('\n— payment reference —');
+identical('paymentIsFor', 'metadata, kind, id', ['verifyRidePayment', 'verifyPaystackPayment']);
+const paymentIsFor = make('paymentIsFor', liftSrc('verifyRidePayment', 'paymentIsFor', 'metadata, kind, id'));
+check('a ride payment for this ride', paymentIsFor({ ride_booking_id: 'r1' }, 'ride', 'r1'), true);
+check('a ride payment replayed on another ride of the same price', paymentIsFor({ ride_booking_id: 'r1' }, 'ride', 'r2'), false);
+check('a stay payment handed in for a ride', paymentIsFor({ booking_id: 'b1' }, 'ride', 'r1'), false);
+check('a ride payment handed in for a stay', paymentIsFor({ ride_booking_id: 'r1' }, 'stay', 'b1'), false);
+check('a stay payment for this stay', paymentIsFor({ booking_id: 'b1' }, 'stay', 'b1'), true);
+check('a stay payment replayed on another stay', paymentIsFor({ booking_id: 'b1' }, 'stay', 'b2'), false);
+check('metadata that came back as text is read', paymentIsFor('{"ride_booking_id":"r1"}', 'ride', 'r1'), true);
+check('no metadata says nothing either way', paymentIsFor('', 'ride', 'r1'), null);
+check('unreadable metadata says nothing either way', paymentIsFor('{oops', 'stay', 'b1'), null);
+
+// ── An assignment that overlaps a cancellation ─────────────────────────────
+{
+  const out = await everySchedule(() => {
+    const sr = rideWorld('drvC', [heldRow('c1', 'drvC')]);
+    const cancel = async (gate) => {
+      const w = gatedWorld(sr, gate);
+      await w.RideBooking.update('ride1', { status: 'cancelled' });
+      return reverseHeldEarnings(w, 'ride1', '', 'Ride cancelled', NOW);
+    };
+    return { world: { sr }, actors: [...assignActors(sr, [A_PAY]), cancel] };
+  }, ({ sr }, results) => {
+    if (results.some((r) => !r || r.threw)) return `a call threw: ${JSON.stringify(results)}`;
+    return heldBy(sr) ? `pay is still held on a cancelled ride (${heldBy(sr)})` : '';
+  }, 5);
+  check(`a driver assigned while the ride is cancelled (${out.runs} orders): no pay is left held`, `${out.problem}${out.schedule}`, '');
+}
+
+// ---- result ----
+```
+
+Six links the rule from Task R05 lets through.
+
+**Edit `scripts/check-ride-reports.mjs`** — find:
+
+```js
+  ['plain http', uploaded('a.jpg').replace('https:', 'http:')],
+```
+
+replace with:
+
+```js
+  ['plain http', uploaded('a.jpg').replace('https:', 'http:')],
+  ['a path that climbs with encoded dots', uploaded('%2e%2e/functions/p.jpg')],
+  ['…in capitals', uploaded('%2E%2E/functions/p.jpg')],
+  ['…half encoded', uploaded('.%2e/entities/User.jpg')],
+  ['a hidden path segment', uploaded('.x/a.jpg')],
+  ['a page, not a picture', uploaded('x.html')],
+  ['a scripted image', uploaded('x.svg')],
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `node scripts/check-driver-wallet.mjs`
+
+Expected: ` FAIL  pay that still stands is keyed by ride and driver`, and further down the script stops with `Error: could not find paymentIsFor in base44/functions/verifyRidePayment/entry.ts`.
+
+Run: `node scripts/check-ride-reports.mjs`
+
+Expected: six ` FAIL ` lines, `a "photo" from a path that climbs with encoded dots is refused` and the five after it. The rule accepts all six.
+
+- [ ] **Step 3: A reference pays for the booking it was made for**
+
+The same function, character for character, goes into both files. The check script fails if the two differ.
+
+**Edit `base44/functions/verifyRidePayment/entry.ts`** — find:
+
+```ts
+Deno.serve(async (req) => {
+```
+
+replace with:
+
+```ts
+// Which booking a Paystack transaction was made for, read from the metadata
+// the payment page attached to it: ride_booking_id for a ride, booking_id for
+// a stay. Without this a reference that paid for one booking could be handed
+// in again to mark another booking of the same price as paid. true: it names
+// this booking. false: it names another one. null: it names none, and the
+// caller must check the reference has not been used. Lockstep copy in
+// verifyRidePayment and verifyPaystackPayment.
+function paymentIsFor(metadata: unknown, kind: string, id: string) {
+    let meta = metadata;
+    if (typeof meta === 'string') {
+        try {
+            meta = JSON.parse(meta);
+        } catch (_err) {
+            meta = null;
+        }
+    }
+    const m = meta && typeof meta === 'object' ? meta : {};
+    const ride = String(m.ride_booking_id || '');
+    const stay = String(m.booking_id || '');
+    if (kind === 'ride') {
+        if (stay) return false;
+        return ride ? ride === id : null;
+    }
+    if (ride) return false;
+    return stay ? stay === id : null;
+}
+
+Deno.serve(async (req) => {
+```
+
+**Edit `base44/functions/verifyRidePayment/entry.ts`** — find:
+
+```ts
+        const expectedKobo = Math.round((Number(ride.total_price) || 0) * 100);
+```
+
+replace with:
+
+```ts
+        // The reference must be the one that paid for THIS booking, and must
+        // not already be on another one.
+        const madeFor = paymentIsFor(verifyData.data?.metadata, 'ride', ride.id);
+        const reused = madeFor === false ? [] : (await base44.asServiceRole.entities.RideBooking.filter({ transaction_hash: reference }))
+            .filter((row: any) => row.id !== ride.id);
+        if (madeFor === false || reused.length > 0) {
+            console.error(`Reference ${reference} was not paid for ride ${ride.id}`);
+            return json({ success: false, error: 'This payment was made for a different booking.', code: 'REFERENCE_MISMATCH' }, 400);
+        }
+
+        const expectedKobo = Math.round((Number(ride.total_price) || 0) * 100);
+```
+
+The same two edits for stays.
+
+**Edit `base44/functions/verifyPaystackPayment/entry.ts`** — find:
+
+```ts
+Deno.serve(async (req) => {
+```
+
+replace with:
+
+```ts
+// Which booking a Paystack transaction was made for, read from the metadata
+// the payment page attached to it: ride_booking_id for a ride, booking_id for
+// a stay. Without this a reference that paid for one booking could be handed
+// in again to mark another booking of the same price as paid. true: it names
+// this booking. false: it names another one. null: it names none, and the
+// caller must check the reference has not been used. Lockstep copy in
+// verifyRidePayment and verifyPaystackPayment.
+function paymentIsFor(metadata: unknown, kind: string, id: string) {
+    let meta = metadata;
+    if (typeof meta === 'string') {
+        try {
+            meta = JSON.parse(meta);
+        } catch (_err) {
+            meta = null;
+        }
+    }
+    const m = meta && typeof meta === 'object' ? meta : {};
+    const ride = String(m.ride_booking_id || '');
+    const stay = String(m.booking_id || '');
+    if (kind === 'ride') {
+        if (stay) return false;
+        return ride ? ride === id : null;
+    }
+    if (ride) return false;
+    return stay ? stay === id : null;
+}
+
+Deno.serve(async (req) => {
+```
+
+**Edit `base44/functions/verifyPaystackPayment/entry.ts`** — find:
+
+```ts
+        // Amount check (Paystack returns kobo)
+```
+
+replace with:
+
+```ts
+        // The reference must be the one that paid for THIS booking, and must
+        // not already be on another one.
+        const madeFor = paymentIsFor(verifyData.data?.metadata, 'stay', booking.id);
+        const reused = madeFor === false ? [] : (await base44.asServiceRole.entities.Booking.filter({ transaction_hash: reference }))
+            .filter((row: any) => row.id !== booking.id);
+        if (madeFor === false || reused.length > 0) {
+            console.error(`Reference ${reference} was not paid for stay ${booking.id}`);
+            return new Response(JSON.stringify({ success: false, error: 'This payment was made for a different booking.', code: 'REFERENCE_MISMATCH' }), { status: 400, headers });
+        }
+
+        // Amount check (Paystack returns kobo)
+```
+
+- [ ] **Step 4: A report photo is a plain image path, uploaded under a plain name**
+
+The two copies of the rule change together. `scripts/check-ride-reports.mjs` fails if they differ.
+
+**Edit `base44/functions/createRideReport/entry.ts`** — find:
+
+```ts
+const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/[A-Za-z0-9._~%\/-]+$/;
+```
+
+replace with:
+
+```ts
+const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:jpe?g|png|webp|gif|heic|heif)$/i;
+```
+
+**Edit `src/config/rides.js`** — find:
+
+```js
+export const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/[A-Za-z0-9._~%\/-]+$/;
+```
+
+replace with:
+
+```js
+export const UPLOAD_URL = /^https:\/\/base44\.app\/api\/apps\/[a-f0-9]{24}\/files\/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:jpe?g|png|webp|gif|heic|heif)$/i;
+```
+
+A file whose type is not one of the six is turned away before anything is uploaded. Neither of the two refusals here is thrown: they are not failures to reach the server, so each is shown as written.
+
+**Edit `src/components/rides/RideReportDialog.jsx`** — find:
+
+```jsx
+      const { file_url } = await UploadFile({ file });
+      if (!file_url) throw new Error('The upload did not return a link.');
+      // The server stores only links to this platform's own file store. Say
+      // so here, rather than refuse the whole report when it is sent.
+      if (!safePhotoUrl(file_url)) {
+        throw new Error('The upload returned a link this form cannot attach. Send the report without the photo and tell the team.');
+      }
+```
+
+replace with:
+
+```jsx
+      // Uploaded under a plain name. The server only stores a link whose path
+      // is letters, digits, dots and dashes and ends in an image extension,
+      // and a phone's own file name ("IMG (1).jpeg") would not pass.
+      const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif' }[file.type];
+      if (!ext) {
+        setError('Choose a JPG, PNG, WEBP or HEIC photo.');
+        return;
+      }
+      const { file_url } = await UploadFile({ file: new File([file], `report-photo.${ext}`, { type: file.type }) });
+      // Said directly, not thrown: these are not failures to reach the server.
+      if (!file_url || !safePhotoUrl(file_url)) {
+        setError('The upload returned a link this form cannot attach. Send the report without the photo and tell the team.');
+        return;
+      }
+```
+
+- [ ] **Step 5: A cancelled ride has nobody driving it**
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+    const out = { settled: false, superseded: false, current_driver_id: '', earning: null, reversed_ngn: 0, released_ngn: 0 };
+    // Rows this call reversed, and the ids of rows it created.
+    const taken = [];
+    const made = heldBefore ? [heldBefore.id] : [];
+    for (let pass = 0; pass < MAX_REALIGN_PASSES && !out.settled; pass += 1) {
+        const now = await sr.RideBooking.get(ride.id);
+        const currentId = (now && now.driver_id) || '';
+```
+
+replace with:
+
+```ts
+    const out = { settled: false, superseded: false, cancelled: false, current_driver_id: '', earning: null, reversed_ngn: 0, released_ngn: 0 };
+    // Rows this call reversed, and the ids of rows it created.
+    const taken = [];
+    const made = heldBefore ? [heldBefore.id] : [];
+    for (let pass = 0; pass < MAX_REALIGN_PASSES && !out.settled; pass += 1) {
+        const now = await sr.RideBooking.get(ride.id);
+        // A ride cancelled while this was running, or gone, has nobody
+        // driving it: every held row comes off and none goes on.
+        const cancelled = !now || now.status === 'cancelled';
+        const currentId = cancelled ? '' : (now.driver_id || '');
+        out.cancelled = cancelled;
+```
+
+The handler says so before it looks at `superseded`, which is also true for a cancelled ride.
+
+**Edit `base44/functions/assignRideDriver/entry.ts`** — find:
+
+```ts
+        if (written.superseded) {
+```
+
+replace with:
+
+```ts
+        if (written.cancelled) {
+            return json({
+                success: false,
+                error: 'This ride was cancelled while the driver was being assigned. Nobody has been notified.',
+                code: 'CANCELLED',
+            }, 409);
+        }
+        if (written.superseded) {
+```
+
+The lockstep copy of `reverseHeldEarnings` in this file is untouched. What changes is when it is called: always, and the driver is looked up only if the ride row named one.
+
+**Edit `base44/functions/cancelRideBooking/entry.ts`** — find:
+
+```ts
+        // Only a ride that ever had a driver can have pay on it.
+        let payLine = '';
+        if (ride.driver_id) {
+```
+
+replace with:
+
+```ts
+        // Asked of the ledger whatever the ride row said when it was read: an
+        // assignment may be writing a driver onto it at this very moment.
+        let payLine = '';
+        {
+```
+
+**Edit `base44/functions/cancelRideBooking/entry.ts`** — find:
+
+```ts
+                const driver = await sr.Driver.get(ride.driver_id);
+```
+
+replace with:
+
+```ts
+                const driver = ride.driver_id ? await sr.Driver.get(ride.driver_id) : null;
+```
+
+- [ ] **Step 6: Pay that was reversed counts as recorded**
+
+**Edit `base44/functions/getRideBookings/entry.ts`** — find:
+
+```ts
+        if (!e || e.status === 'reversed') continue;
+```
+
+replace with:
+
+```ts
+        // A reversed row counts as recorded: pay that admin reversed on
+        // purpose must not be offered as "never recorded".
+        if (!e) continue;
+```
+
+**Edit `base44/functions/getRideBookings/entry.ts`** — find:
+
+```ts
+                    const standing = await fetchAll(base44.asServiceRole.entities.DriverEarning, {
+                        status: { $in: ['held', 'released'] },
+                    });
+```
+
+replace with:
+
+```ts
+                    const standing = await fetchAll(base44.asServiceRole.entities.DriverEarning, {
+                    });
+```
+
+**Edit `src/components/admin/RidesAdmin.jsx`** — find:
+
+```jsx
+        setCurrentPaid(!!ride.driver_id && standing.some((e) => e.driver_id === ride.driver_id));
+```
+
+replace with:
+
+```jsx
+        // Any row counts, reversed ones too: pay that was reversed on purpose
+        // is not pay that was never recorded.
+        setCurrentPaid(!!ride.driver_id && (Array.isArray(ledger) ? ledger : []).some((e) => e.driver_id === ride.driver_id));
+```
+
+- [ ] **Step 7: Run the checks**
+
+Run: `npm run check`
+
+Expected: five `PASS` lines, with every line under `— payment reference —` ok, then `a driver assigned while the ride is cancelled (601 orders): no pay is left held`, and under `— what a report may contain —` the six new refusals.
+
+Run: `for f in verifyRidePayment verifyPaystackPayment createRideReport assignRideDriver cancelRideBooking getRideBookings; do node_modules/.bin/esbuild base44/functions/$f/entry.ts --format=esm --target=esnext --outfile=/dev/null || echo "PARSE FAIL $f"; done; npm run lint`
+
+Expected: no `PARSE FAIL` line, no lint output.
+
+- [ ] **Step 8: Sandbox checklist (after the next publish, Paystack test keys)**
+
+1. As a guest on a phone, report a ride with a photo from the camera roll. Expected: the photo attaches and shows in Admin → Rides → Reports. This is the first real test of the new rule. If the dialog says "The upload returned a link this form cannot attach", the link the file store returned does not fit the rule: read the link in the browser's network tab and look again at both copies of `UPLOAD_URL` before reports can carry photos.
+2. Copy that photo's link from the inbox. From the browser console as that guest, call `createRideReport` for that ride with a category, a description and `evidence_urls` set to the link with `/files/` changed to `/files/%2e%2e/`, then to the link with its ending changed to `.svg`. Expected, both times: "One of the photos is not a valid upload. Remove it and try again."
+3. As one guest, request two rides at the same price and have both approved. Pay for the first. From the browser console, call `verifyRidePayment` with the second ride's id and the first ride's `transaction_hash` as the reference. Expected: refused with `REFERENCE_MISMATCH`, and the second ride is still unpaid.
+4. In Rides → Earnings, reverse the held pay of the driver on an upcoming ride. Expected: the ride does not show "No pay recorded"; its button reads "Change driver"; in the dialog that driver's button reads "Assigned" and cannot be pressed.
+5. A real overlap cannot be forced by hand; the check script walks it. The nearest thing: open the Assign dialog for a paid ride in one tab, cancel that ride as admin from another (call `cancelRideBooking` from the console; the admin rides screen has no button for it), then press Assign in the first. Expected: "This ride was cancelled", no email to the guest, and no held row for that driver under Rides → Earnings.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add scripts/check-driver-wallet.mjs scripts/check-ride-reports.mjs base44/functions/verifyRidePayment/entry.ts base44/functions/verifyPaystackPayment/entry.ts base44/functions/createRideReport/entry.ts base44/functions/assignRideDriver/entry.ts base44/functions/cancelRideBooking/entry.ts base44/functions/getRideBookings/entry.ts src/config/rides.js src/components/rides/RideReportDialog.jsx src/components/admin/RidesAdmin.jsx
+git commit -m "fix(rides): a payment reference pays for one booking; report photos cannot climb out of the file store; no pay re-held on a cancelled ride" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```

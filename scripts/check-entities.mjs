@@ -228,8 +228,24 @@ for (const op of ['update', 'delete']) {
   check(`AvailabilityRequest ${op} is admin-only`, adminOnly(entities.AvailabilityRequest?.rls?.[op]));
 }
 check('Booking: only admin may update a row', adminOnly(entities.Booking?.rls?.update));
+// decideAvailabilityRequest and telegramWebhook find a request's booking by
+// this id. Without the field in the schema the write may be dropped.
+check('AvailabilityRequest.booking_id is a string', prop('AvailabilityRequest', 'booking_id')?.type === 'string');
 for (const f of ['loyalty_points', 'loyalty_tier', 'referral_balance_ngn', 'ride_blocked']) {
   check(`User.${f} is admin-write`, adminOnly(prop('User', f)?.rls?.write));
+}
+// Locked on the live database on 2026-10-12. Every admin-only rule in the app
+// rests on `role`, and nobody had tested whether the platform itself refuses
+// a user changing their own. `referred_by_code` named who a referral reward
+// was paid to; the reward no longer reads it, and this is the second lock.
+for (const f of ['role', 'referred_by_code']) {
+  check(`User.${f} is admin-write`, adminOnly(prop('User', f)?.rls?.write));
+}
+// The browser writes these with auth.updateMe. A write rule on one of them
+// would fail the whole call it travels in (Dashboard saves referral_code and
+// nft_tokens together), so they must stay open until that code has moved.
+for (const f of ['referral_code', 'nft_tokens', 'referral_prompt_seen', 'wishlist', 'phone_number', 'profile_picture']) {
+  check(`User.${f} is still written by the browser, so it carries no write rule`, prop('User', f)?.rls?.write === undefined);
 }
 
 // An "only the server may create" rule only works if nothing
@@ -241,14 +257,51 @@ const filesUnder = (dir, exts) => fs.readdirSync(dir, { withFileTypes: true }).f
   return exts.some((e) => d.name.endsWith(e)) ? [full] : [];
 });
 const functionFiles = filesUnder(path.join(ROOT, 'base44/functions'), ['.ts']);
-const browserFiles = filesUnder(path.join(ROOT, 'src'), ['.js', '.jsx']);
+const browserFiles = filesUnder(path.join(ROOT, 'src'), ['.js', '.jsx', '.ts', '.tsx']);
 const rel = (file) => path.relative(ROOT, file);
-for (const stem of ['WithdrawalRequest', 'RideBooking', 'LoyaltyTransaction', 'Booking', 'AvailabilityRequest']) {
-  const asCaller = new RegExp(`(?<!asServiceRole)\\.entities\\.${stem}\\.(create|bulkCreate)\\(`);
-  const inBrowser = new RegExp(`\\b${stem}\\.(create|bulkCreate)\\(`);
+
+// Every way a create can be spelled. The scan used to know one,
+// `.entities.Booking.create(`, so a bracket, a handle kept in a variable or a
+// destructured name would have walked past it.
+//   x.entities.Booking.create(             the plain call
+//   x.entities['Booking'].create(          bracket access
+//   const rows = x.entities.Booking;       a handle, then rows.create(
+//   const { Booking } = x.entities;        a destructured name, then Booking.create(
+// In a function, `x` being asServiceRole makes it the server's write; anything
+// else is the caller's. In the browser every one of them is the caller's.
+function createsAsCaller(source, stem, where) {
+  const make = '\\.(create|bulkCreate)\\(';
+  const server = where === 'function' ? '(?<!asServiceRole)' : '';
+  const direct = new RegExp(`${server}\\.entities(\\.${stem}|\\[\\s*['"\`]${stem}['"\`]\\s*\\])${make}`);
+  if (direct.test(source)) return true;
+  const handle = new RegExp(`(?:const|let|var)\\s+(\\w+)\\s*=\\s*[\\w.]*?${server}\\.entities(?:\\.${stem}|\\[\\s*['"\`]${stem}['"\`]\\s*\\])\\s*;`, 'g');
+  for (const m of source.matchAll(handle)) {
+    if (new RegExp(`\\b${m[1]}${make}`).test(source)) return true;
+  }
+  const destructured = new RegExp(`\\{[^}]*\\b${stem}\\b[^}]*\\}\\s*=\\s*[\\w.]*?${server}\\.entities\\s*;`);
+  if (destructured.test(source) && new RegExp(`\\b${stem}${make}`).test(source)) return true;
+  // The browser also has the legacy `import { Booking } from '@/entities/Booking'`.
+  return where === 'browser' && new RegExp(`\\b${stem}${make}`).test(source);
+}
+
+// The scan has to be able to fail, or a pass says nothing.
+const spelled = (source, where = 'function') => createsAsCaller(source, 'Booking', where);
+check('the scan sees a plain create as the caller', spelled('await base44.entities.Booking.create({})'));
+check('and bracket access', spelled(`await base44.entities['Booking'].create({})`) && spelled('await base44.entities["Booking"].bulkCreate([])'));
+check('and a handle kept in a variable', spelled('const rows = base44.entities.Booking;\nawait rows.create({});'));
+check('and a destructured name', spelled('const { Booking, Property } = base44.entities;\nawait Booking.create({});'));
+check('and a legacy import in the browser', spelled(`import { Booking } from '@/entities/Booking';\nawait Booking.create({});`, 'browser'));
+check('it lets the server\'s own writes through, however they are spelled',
+  !spelled('await base44.asServiceRole.entities.Booking.create({})')
+  && !spelled(`await sdk.asServiceRole.entities['Booking'].create({})`)
+  && !spelled('const rows = base44.asServiceRole.entities.Booking;\nawait rows.create({});')
+  && !spelled('const { Booking } = base44.asServiceRole.entities;\nawait Booking.create({});'));
+check('and a read as the caller is not a create', !spelled('const rows = base44.entities.Booking;\nawait rows.filter({});'));
+
+for (const stem of ['WithdrawalRequest', 'RideBooking', 'LoyaltyTransaction', 'Booking', 'AvailabilityRequest', 'Referral']) {
   const offenders = [
-    ...functionFiles.filter((f) => asCaller.test(fs.readFileSync(f, 'utf8'))),
-    ...browserFiles.filter((f) => inBrowser.test(fs.readFileSync(f, 'utf8'))),
+    ...functionFiles.filter((f) => createsAsCaller(fs.readFileSync(f, 'utf8'), stem, 'function')),
+    ...browserFiles.filter((f) => createsAsCaller(fs.readFileSync(f, 'utf8'), stem, 'browser')),
   ].map(rel);
   check(`nothing creates a ${stem} as the signed-in user`, offenders.length === 0, offenders.join(', '));
 }
@@ -295,7 +348,7 @@ check('the vehicle card shows the badge from isElectric', /\{isElectric\(vehicle
 check('the vehicle page shows the badge from isElectric and the fuel line from energyPolicy',
   /\{isElectric\(vehicle\) && \(/.test(source('src/pages/Vehicle.jsx')) && /const energy = energyPolicy\(vehicle\);/.test(source('src/pages/Vehicle.jsx')) && /\{energy\.label\}/.test(source('src/pages/Vehicle.jsx')));
 check('the admin form sends a powertrain only once one is chosen, never an empty one',
-  /\.\.\.\(form\.powertrain \? \{ powertrain: form\.powertrain \} : \{\}\)/.test(source('src/components/admin/VehiclesAdmin.jsx'))
+  /const built = buildVehiclePayload\(form, editingRow\);/.test(source('src/components/admin/VehiclesAdmin.jsx'))
   && !/^\s*powertrain: form\.powertrain,/m.test(source('src/components/admin/VehiclesAdmin.jsx')));
 check('Vehicle.powertrain is a string', powertrain?.type === 'string');
 

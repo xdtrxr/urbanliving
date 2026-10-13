@@ -91,7 +91,7 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
 
         <div className="absolute bottom-4 left-4 flex flex-col gap-2">
           <Badge className="bg-white/95 dark:bg-slate-900/95 text-slate-900 dark:text-white font-semibold px-3 py-1 rounded-full">
-            {shown.from ? 'From ' : ''}{currencySymbol}{shown.price.toLocaleString()}/night
+            {shown.option ? <>{shown.from ? 'From ' : ''}{currencySymbol}{shown.price.toLocaleString()}/night</> : 'Price on request'}
           </Badge>
           {property.caution_fee > 0 && (
             <Badge className="bg-amber-100/95 dark:bg-amber-900/60 text-amber-900 dark:text-amber-100 font-medium px-3 py-1 rounded-full flex items-center gap-1">
@@ -175,7 +175,9 @@ export default function PropertyCard({ property, onToggleWishlist, isWishlisted 
               </Button>
             </Link>
             
-            {isAuthenticated ? (
+            {/* No usable price, no way into Checkout: the server would refuse
+                the request (NO_PRICE). Only bad data gets a listing here. */}
+            {!shown.option ? null : isAuthenticated ? (
               <Link to={`${createPageUrl('Checkout')}?property=${property.id}${optionQuery}`}>
                 <Button className="w-full bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white font-semibold py-3 rounded-xl transition-all duration-300 hover:shadow-lg dark:from-white dark:to-slate-200 dark:text-slate-900">
                   Book Now

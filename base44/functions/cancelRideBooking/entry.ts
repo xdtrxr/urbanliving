@@ -92,6 +92,26 @@ async function notifyAdmin(ride: any, byAdmin: boolean, payLine = '') {
     }
 }
 
+// An id goes into the URL of the row it fetches ("../Booking/abc" would fetch
+// a row of another entity, and every check that follows would then be made on
+// the wrong kind of row), so only a plain id is ever used. Lockstep copy, see
+// createWithdrawalRequest.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there. Unguarded, a stale or
+// mistyped id is answered with a 500 instead of "not found".
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -113,7 +133,7 @@ Deno.serve(async (req) => {
         const { ride_booking_id, reason } = await req.json().catch(() => ({}));
         if (!ride_booking_id) return json({ success: false, error: 'ride_booking_id is required' }, 400);
 
-        const ride = await base44.asServiceRole.entities.RideBooking.get(ride_booking_id);
+        const ride = isId(ride_booking_id) ? await getOrNull(base44.asServiceRole.entities.RideBooking, ride_booking_id) : null;
         if (!ride) return json({ success: false, error: 'Ride booking not found' }, 404);
 
         const isAdmin = user.role === 'admin';

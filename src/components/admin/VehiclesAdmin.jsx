@@ -25,6 +25,7 @@ import {
 import {
   CITIES, CATEGORIES, categoryLabel, effectiveCategory, needsCategoryMigration,
   extraHourRate, markupFor, POWERTRAINS, powertrainLabel, energyPolicy,
+  vehicleFormFrom, buildVehiclePayload, noCategoryLine,
 } from '@/config/rides';
 
 const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024;
@@ -35,6 +36,11 @@ const FUEL_POLICIES = [
   { value: 'guest_pays_fuel', label: 'Guest pays for fuel' },
   { value: 'fuel_capped', label: 'Fuel capped (daily limit)' },
 ];
+
+// "Not set" in the Powertrain and fuel policy selects. Radix Select cannot
+// hold an item whose value is the empty string, which is what the form keeps
+// for a choice nobody has made, so the two selects swap this in and out.
+const NOT_SET = 'not_set';
 
 const AMENITY_OPTIONS = [
   { id: 'air_conditioning', label: 'Air conditioning' },
@@ -117,14 +123,6 @@ const uploadErrorText = (error) =>
   error?.message ||
   'Unknown error';
 
-const csvToArray = (raw) =>
-  (raw || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-const arrayToCsv = (arr) => (Array.isArray(arr) ? arr.join(', ') : '');
-
 export default function VehiclesAdmin() {
   const [innerTab, setInnerTab] = useState('add');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -133,7 +131,10 @@ export default function VehiclesAdmin() {
   // update rather than create a duplicate. Null on a fresh vehicle or when
   // no costing has been entered yet.
   const [costingRowId, setCostingRowId] = useState(null);
-  const [editingId, setEditingId] = useState(null);
+  // The row being edited, as last saved; null on a fresh vehicle. A save is
+  // compared with it, so that only what the admin changed is written.
+  const [editingRow, setEditingRow] = useState(null);
+  const editingId = editingRow?.id || null;
   const [vehicles, setVehicles] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -167,7 +168,7 @@ export default function VehiclesAdmin() {
     setForm(EMPTY_FORM);
     setCosting(EMPTY_COSTING);
     setCostingRowId(null);
-    setEditingId(null);
+    setEditingRow(null);
   };
 
   // Costing lives on its own entity, so it is fetched separately when a
@@ -194,35 +195,9 @@ export default function VehiclesAdmin() {
   };
 
   const startEdit = (vehicle) => {
-    setEditingId(vehicle.id);
+    setEditingRow(vehicle);
     loadCosting(vehicle.id);
-    setForm({
-      name: vehicle.name || '',
-      brand: vehicle.brand || '',
-      category: vehicle.category || 'comfort',
-      powertrain: vehicle.powertrain || '',
-      model_year: vehicle.model_year || new Date().getFullYear(),
-      description: vehicle.description || '',
-      images: Array.isArray(vehicle.images) ? vehicle.images : [],
-      videos: Array.isArray(vehicle.videos) ? vehicle.videos : [],
-      city: vehicle.city || CITIES[0],
-      registration_number: vehicle.registration_number || '',
-      price_per_hour_ngn: vehicle.price_per_hour_ngn ?? '',
-      price_extra_hour_ngn: vehicle.price_extra_hour_ngn ?? '',
-      price_12hr_ngn: vehicle.price_12hr_ngn ?? '',
-      price_24hr_ngn: vehicle.price_24hr_ngn ?? '',
-      price_per_extra_day_ngn: vehicle.price_per_extra_day_ngn ?? '',
-      max_passengers: vehicle.max_passengers ?? 4,
-      amenities: vehicle.amenities || [],
-      fuel_policy: vehicle.fuel_policy || 'fuel_included',
-      fuel_cap_daily_ngn: vehicle.fuel_cap_daily_ngn ?? '',
-      pickup_locations: arrayToCsv(vehicle.pickup_locations),
-      service_area: vehicle.service_area || '',
-      active: vehicle.active !== false,
-      admin_approved: vehicle.admin_approved !== false,
-      min_hours_per_booking: vehicle.min_hours_per_booking ?? 1,
-      turnaround_hours: vehicle.turnaround_hours ?? 1,
-    });
+    setForm(vehicleFormFrom(vehicle));
     setInnerTab('add');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -233,50 +208,13 @@ export default function VehiclesAdmin() {
     setIsSaving(true);
 
     try {
-      const images = Array.isArray(form.images) ? form.images : [];
-      if (images.length === 0) {
-        throw new Error('Add at least one image.');
+      const built = buildVehiclePayload(form, editingRow);
+      if (!built.ok) {
+        // The error area is at the top of the form, the button at the bottom.
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        throw new Error(built.message);
       }
-      if (!form.price_12hr_ngn || !form.price_24hr_ngn) {
-        throw new Error('Both 12-hour and 24-hour prices are required.');
-      }
-
-      // Shape matches Vehicle.jsonc — coerce numerics, drop empty strings.
-      const payload = {
-        name: form.name.trim(),
-        brand: form.brand.trim(),
-        category: form.category,
-        // Sent only once the admin has picked one, so a car nobody has
-        // classified stays unset rather than being guessed as petrol.
-        ...(form.powertrain ? { powertrain: form.powertrain } : {}),
-        model_year: Number(form.model_year) || null,
-        description: form.description.trim() || undefined,
-        images,
-        videos: Array.isArray(form.videos) ? form.videos : [],
-        city: form.city,
-        registration_number: form.registration_number.trim() || undefined,
-        price_per_hour_ngn: form.price_per_hour_ngn === '' ? undefined : Number(form.price_per_hour_ngn),
-        price_extra_hour_ngn: form.price_extra_hour_ngn === '' ? undefined : Number(form.price_extra_hour_ngn),
-        price_12hr_ngn: Number(form.price_12hr_ngn),
-        price_24hr_ngn: Number(form.price_24hr_ngn),
-        price_per_extra_day_ngn: form.price_per_extra_day_ngn
-          ? Number(form.price_per_extra_day_ngn)
-          : undefined,
-        max_passengers: Number(form.max_passengers) || 0,
-        amenities: form.amenities,
-        fuel_policy: form.fuel_policy,
-        fuel_cap_daily_ngn:
-          form.fuel_policy === 'fuel_capped' && form.fuel_cap_daily_ngn
-            ? Number(form.fuel_cap_daily_ngn)
-            : undefined,
-        pickup_locations: csvToArray(form.pickup_locations),
-        service_area: form.service_area.trim() || undefined,
-        active: form.active,
-        admin_approved: form.admin_approved,
-        min_hours_per_booking: Number(form.min_hours_per_booking) || 1,
-        turnaround_hours: form.turnaround_hours === '' ? 1 : Number(form.turnaround_hours),
-        driver_included: true, // V1 always includes a driver
-      };
+      const { payload } = built;
 
       let vehicleId = editingId;
       if (editingId) {
@@ -284,22 +222,28 @@ export default function VehiclesAdmin() {
       } else {
         const created = await base44.entities.Vehicle.create(payload);
         vehicleId = created?.id;
-        // If the costing write below fails, the retry must update this
-        // vehicle rather than create a second copy of it.
-        setEditingId(vehicleId || null);
       }
+      // The row as it now stands. If the costing write below fails, the retry
+      // must update this vehicle rather than create a second copy of it, and
+      // be compared with what was just saved rather than with what was loaded.
+      setEditingRow(vehicleId ? { ...editingRow, ...payload, id: vehicleId } : null);
 
       // Upsert the costing row. Only written when something was entered or a
       // row already exists, so vehicles with no internal costing never grow
       // an empty companion row.
-      const num = (v) => (v === '' || v == null ? undefined : Number(v));
+      // On a row that already exists an emptied box has to be sent as
+      // empty, or the old figure stays: an update only changes the fields
+      // it is given. An emptied driver cost went on feeding the pay that
+      // the Assign driver window proposes.
+      const emptied = costingRowId ? null : undefined;
+      const num = (v) => (v === '' || v == null ? emptied : Number(v));
       const costingPayload = {
         vehicle_id: vehicleId,
         partner_cost_per_hour_ngn: num(costing.partner_cost_per_hour_ngn),
         partner_cost_per_day_ngn: num(costing.partner_cost_per_day_ngn),
         driver_cost_per_hour_ngn: num(costing.driver_cost_per_hour_ngn),
         driver_cost_per_day_ngn: num(costing.driver_cost_per_day_ngn),
-        notes: costing.notes.trim() || undefined,
+        notes: costing.notes.trim() || (costingRowId ? '' : undefined),
       };
       const hasCosting = Object.entries(costingPayload)
         .some(([k, v]) => k !== 'vehicle_id' && v !== undefined);
@@ -427,6 +371,10 @@ export default function VehiclesAdmin() {
     }));
   };
 
+  // Set while the car being edited has no category of its own: the form does
+  // not pick one for it, and this is the line that says so.
+  const noCategory = noCategoryLine(editingRow);
+
   return (
     <div className="space-y-6">
       <Tabs value={innerTab} onValueChange={setInnerTab}>
@@ -499,25 +447,30 @@ export default function VehiclesAdmin() {
                         value={form.category}
                         onValueChange={(value) => setForm({ ...form, category: value })}
                       >
-                        <SelectTrigger id="v-type"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="v-type"><SelectValue placeholder="Choose a category" /></SelectTrigger>
                         <SelectContent>
                           {CATEGORIES.map((c) => (
                             <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Guests browse by this after picking a city.
-                      </p>
+                      {noCategory ? (
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">{noCategory}</p>
+                      ) : (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Guests browse by this after picking a city.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="v-powertrain">Powertrain</Label>
                       <Select
-                        value={form.powertrain}
-                        onValueChange={(value) => setForm({ ...form, powertrain: value })}
+                        value={form.powertrain || NOT_SET}
+                        onValueChange={(value) => setForm({ ...form, powertrain: value === NOT_SET ? '' : value })}
                       >
-                        <SelectTrigger id="v-powertrain"><SelectValue placeholder="Not set" /></SelectTrigger>
+                        <SelectTrigger id="v-powertrain"><SelectValue /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value={NOT_SET}>Not set</SelectItem>
                           {POWERTRAINS.map((p) => (
                             <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                           ))}
@@ -963,9 +916,13 @@ export default function VehiclesAdmin() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="v-fuel">Policy</Label>
-                      <Select value={form.fuel_policy} onValueChange={(v) => setForm({ ...form, fuel_policy: v })}>
+                      <Select
+                        value={form.fuel_policy || NOT_SET}
+                        onValueChange={(value) => setForm({ ...form, fuel_policy: value === NOT_SET ? '' : value })}
+                      >
                         <SelectTrigger id="v-fuel"><SelectValue /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value={NOT_SET}>Not set</SelectItem>
                           {FUEL_POLICIES.map((f) => (
                             <SelectItem key={f.value} value={f.value}>
                               {/* What the guest will read: charging, on an electric car. */}

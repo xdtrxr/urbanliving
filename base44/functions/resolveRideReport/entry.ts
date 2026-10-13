@@ -85,6 +85,18 @@ async function tryPush(sdk: any, opts: Record<string, unknown>) {
     }
 }
 
+// entity.get() rejects for a row that is not there. Unguarded, a stale or
+// mistyped id is answered with a 500 instead of "not found".
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -110,7 +122,7 @@ Deno.serve(async (req) => {
         }
 
         const sr = base44.asServiceRole.entities;
-        const report = await sr.RideReport.get(report_id);
+        const report = await getOrNull(sr.RideReport, report_id);
         if (!report || report.id !== report_id) {
             return json({ success: false, error: 'That report no longer exists.', code: 'NOT_FOUND' }, 404);
         }

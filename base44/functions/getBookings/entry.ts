@@ -18,6 +18,10 @@ function computeDeadlineMs(b: any): number | null {
 }
 
 function computeBucket(b: any, nowMs: number): Bucket {
+    // A payment on hold is still being decided by the admin, whatever the
+    // booking itself says (it may be cancelled: the money came late). The
+    // guest looks for it among what is waiting, not among the cancelled.
+    if (b.payment_status === 'pending_confirmation') return 'pending-approval';
     if (b.status === 'cancelled') return 'cancelled';
     if (b.status === 'completed') return 'past';
 

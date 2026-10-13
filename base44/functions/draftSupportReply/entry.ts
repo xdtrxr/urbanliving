@@ -117,6 +117,25 @@ _Tap a button below. Edit / Replace will prompt you to type the final reply._
     return { sent: true, message_id: String(data.result.message_id) };
 }
 
+// An id goes into the URL of the row it fetches ("../Booking/abc" would fetch
+// a row of another entity), so only a plain id is ever used. Lockstep copy,
+// see createWithdrawalRequest.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there. Unguarded, a stale or
+// mistyped id is answered with a 500 instead of "not found".
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -144,7 +163,7 @@ Deno.serve(async (req) => {
 
         // Read under service role — caller may be the user who just posted; we
         // need full ticket + sibling messages regardless.
-        const message = await base44.asServiceRole.entities.SupportMessage.get(messageId);
+        const message = isId(messageId) ? await getOrNull(base44.asServiceRole.entities.SupportMessage, messageId) : null;
         if (!message) {
             return new Response(JSON.stringify({ success: false, error: 'Message not found' }), { status: 404, headers });
         }
@@ -152,7 +171,7 @@ Deno.serve(async (req) => {
             return new Response(JSON.stringify({ success: false, error: 'Only user messages get drafted replies' }), { status: 400, headers });
         }
 
-        const ticket = await base44.asServiceRole.entities.SupportTicket.get(message.ticket_id);
+        const ticket = isId(message.ticket_id) ? await getOrNull(base44.asServiceRole.entities.SupportTicket, message.ticket_id) : null;
         if (!ticket) {
             return new Response(JSON.stringify({ success: false, error: 'Ticket not found' }), { status: 404, headers });
         }

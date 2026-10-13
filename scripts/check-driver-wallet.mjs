@@ -9,7 +9,8 @@
 //
 // This file does not re-implement what it tests. It reads the shipped
 // functions off disk and executes them, and where a helper has several
-// copies it also demands they are identical character for character.
+// copies it also demands they are identical character for character. The
+// last sections run whole handlers through scripts/lib/function-rig.mjs.
 //
 // On the new Function() below: the only input is this repo's own source, read
 // from paths this file computes itself. Nothing here is reachable from user
@@ -22,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import * as rides from '../src/config/rides.js';
 import { fromResponse, fromThrown } from '../src/lib/fnResult.js';
 import { withdrawalActions, showsUnderPending } from '../src/lib/withdrawalRow.js';
+import { createRig, loadFunction, call } from './lib/function-rig.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = (name) => path.join(ROOT, 'base44/functions', name, 'entry.ts');
@@ -760,8 +762,10 @@ console.log('\n— function results —');
 {
   // What the platform itself answers when the workspace plan has no functions.
   const r = fromThrown({ message: 'Request failed with status code 402', response: { status: 402, data: { message: 'Functions are blocked - app owner lacks backend functions capability' } } });
-  same('a platform refusal is shown as it was sent',
-    [r.error, r.status], ['Functions are blocked - app owner lacks backend functions capability', 402]);
+  // Worded for a guest: the platform's sentence is about the owner's plan.
+  // The status is kept, so a screen or a script can still tell it is the block.
+  same('a platform refusal is worded for a guest, and still carries its status',
+    [r.error, r.status], ['This part of the site is not available right now. Please try again later.', 402]);
 }
 check('no response at all reads as a connection problem',
   fromThrown({ message: 'Network Error' }).error, 'Could not reach the server. Check your connection and try again.');
@@ -1471,6 +1475,21 @@ same('a driver attached after the ride is over: the guest is not told someone is
   assignmentNotices(false, true, true), { guest: false, driver: 'pay' });
 same('…and with no pay recorded, nobody is told', assignmentNotices(false, true, false), { guest: false, driver: '' });
 
+// The Assign driver dialog says who it believed was on the ride when it was
+// opened. "Record pay" for that driver must not turn into a reassignment
+// because somebody changed the driver in the meantime.
+const driverChangedSince = make('driverChangedSince', ar('driverChangedSince', 'expectedDriverId, ride'));
+check('the dialog saw Ade and Ade is on the ride: nothing changed', driverChangedSince('drvA', { driver_id: 'drvA' }), false);
+check('the dialog saw Ade and the ride is now Bola\'s: changed', driverChangedSince('drvA', { driver_id: 'drvB' }), true);
+check('the dialog saw nobody and somebody has been assigned since: changed', driverChangedSince('', { driver_id: 'drvB' }), true);
+check('the dialog saw nobody and nobody is on the ride: nothing changed', driverChangedSince('', {}), false);
+check('…however "nobody" is stored on the ride', driverChangedSince('', { driver_id: null }), false);
+check('the dialog saw Ade and the ride has nobody: changed', driverChangedSince('drvA', { driver_id: '' }), true);
+// A page loaded before the dialog sent this keeps working: it is not checked.
+check('a request that does not say who it expected is not checked', driverChangedSince(undefined, { driver_id: 'drvB' }), false);
+check('…nor is one that sends null', driverChangedSince(null, { driver_id: 'drvB' }), false);
+check('…or anything else that is not text', driverChangedSince({ $ne: '' }, { driver_id: 'drvB' }), false);
+
 const ASSIGN = [
   PAY, FETCH_ALL, constLine(AR, 'MAX_REALIGN_PASSES'),
   ar('releaseAtFor', 'endAtIso'),
@@ -1637,6 +1656,21 @@ const B_PAY = ['drvB', { ...dayPay, amount: 20000, rate: 20000 }];
   const out = await randomSchedules(assignRace([A_PAY, B_PAY, ['drvC', dayPay]]), ledgerAgrees, 500, 20261010);
   check(`three drivers assigned at once, ${out.runs} random orders`, `${out.problem}${out.schedule}`, '');
 }
+{
+  // "Record pay" for the driver on the ride while the ride is handed to
+  // another. The same driver again still writes the ride row, to say whose
+  // pay figure it was given, but never who is driving. The ride must end with
+  // the new driver, holding one row, and the first driver with none.
+  const out = await everySchedule(() => {
+    const sr = rideWorld('drvA');
+    const recordPay = (gate) => writeAssignment(
+      gatedWorld(sr, gate), rideA, 'drvA', dayPay, END, { pay_answered_for: 'drvA' }, 'Reassigned to drvA', NOW);
+    return { world: { sr, calls: [A_PAY, B_PAY] }, actors: [recordPay, ...assignActors(sr, [B_PAY])] };
+  }, (world, results) => ledgerAgrees(world, results)
+    || (onRide(world.sr) === 'drvB' ? '' : `"Record pay" put ${onRide(world.sr)} on the ride`), 4);
+  check(`"Record pay" while the ride is handed to another driver (${out.runs} orders): the new driver holds one row, the first none`, `${out.problem}${out.schedule}`, '');
+  check('…and that was more than a handful of orders', out.runs > 500, true);
+}
 
 // ── What the rides list tells admin ────────────────────────────────────────
 console.log('\n— rides list flags —');
@@ -1648,6 +1682,20 @@ same('pay that still stands is keyed by ride and driver', livePayKeys([
   null,
 ]), ['r1:drvA', 'r2:drvB', 'r3:drvA']);
 same('no ledger, no keys', livePayKeys(undefined), []);
+
+// A figure of ₦0 holds nothing, so it leaves no pay row. The ride row says
+// which driver a figure was given for, and that counts as recorded too.
+const payRecorded = make('payRecorded', liftSrc('getRideBookings', 'payRecorded', 'payKeys, ride'));
+const onLedger = new Set(['r1:drvA']);
+check('a pay row for the driver on the ride: recorded', payRecorded(onLedger, { id: 'r1', driver_id: 'drvA' }), true);
+check('no pay row and no figure ever given: not recorded', payRecorded(onLedger, { id: 'r2', driver_id: 'drvA' }), false);
+check('no pay row, but a figure was given for this driver: recorded',
+  payRecorded(onLedger, { id: 'r2', driver_id: 'drvA', pay_answered_for: 'drvA' }), true);
+check('a figure given for the driver before this one says nothing about this one',
+  payRecorded(onLedger, { id: 'r2', driver_id: 'drvB', pay_answered_for: 'drvA' }), false);
+check('a pay row for the driver before this one says nothing either', payRecorded(onLedger, { id: 'r1', driver_id: 'drvB' }), false);
+check('a ride with no driver has nothing recorded', payRecorded(onLedger, { id: 'r2' }), false);
+check('…whatever the ride row says a figure was given for', payRecorded(onLedger, { id: 'r2', driver_id: '', pay_answered_for: '' }), false);
 
 const T0 = at('2026-08-10T12:00:00.000Z');
 const unpaidDriver = {
@@ -1677,6 +1725,35 @@ check('a driver with nothing on record may be deleted', rides.mayDeleteDriver([]
 check('a driver with an earning may not', rides.mayDeleteDriver([{ id: 'e1' }], []), false);
 check('a driver with a withdrawal may not', rides.mayDeleteDriver([], [{ id: 'w1' }]), false);
 check('a lookup that did not answer is not "nothing on record"', rides.mayDeleteDriver(undefined, []), false);
+
+// ── Who the Assign driver dialog lists ─────────────────────────────────────
+// "Record pay" is a button on the row of the driver already on the ride. A
+// driver who was switched off, blocked through a report or moved to another
+// city after the assignment used to drop out of the list and take the button
+// with them, leaving a flag on the rides list that nothing could clear.
+console.log('\n— who the assign dialog lists —');
+const abujaRide = { id: 'ride1', driver_id: 'drvA', pickup_location: { city: 'Abuja' } };
+const onRoster = (id, extra = {}) => ({ id, full_name: id, city: 'Abuja', active: true, admin_approved: true, ...extra });
+const listed = (drivers, ride = abujaRide) => rides.driversForRide(drivers, ride).map((d) => d.id);
+same('active, approved drivers in the pickup city, the one on the ride first',
+  listed([onRoster('drvB'), onRoster('drvA'), onRoster('drvC')]), ['drvA', 'drvB', 'drvC']);
+same('the driver on the ride is still listed after being switched to inactive',
+  listed([onRoster('drvB'), onRoster('drvA', { active: false })]), ['drvA', 'drvB']);
+same('…or when no longer approved', listed([onRoster('drvB'), onRoster('drvA', { admin_approved: false })]), ['drvA', 'drvB']);
+same('…or after moving to another city', listed([onRoster('drvB'), onRoster('drvA', { city: 'Lagos' })]), ['drvA', 'drvB']);
+same('…or all three at once', listed([onRoster('drvA', { active: false, admin_approved: false, city: 'Lagos' })]), ['drvA']);
+same('any other driver who is inactive, not approved or based elsewhere stays hidden',
+  listed([onRoster('drvA'), onRoster('off', { active: false }), onRoster('new', { admin_approved: false }), onRoster('far', { city: 'Lagos' })]), ['drvA']);
+same('a ride nobody is on yet lists only drivers who can be sent',
+  listed([onRoster('drvA', { active: false }), onRoster('drvB')], { ...abujaRide, driver_id: '' }), ['drvB']);
+same('a driver with no city on file is offered in every city', listed([onRoster('drvB', { city: '' })]), ['drvB']);
+same('a ride with no pickup city lists every driver who can be sent',
+  listed([onRoster('drvB'), onRoster('far', { city: 'Lagos' }), onRoster('off', { active: false })], { id: 'ride1' }), ['drvB', 'far']);
+// The profile of the driver on the ride was deleted: there is no row to list.
+same('a driver on the ride whose profile is gone does not break the list', listed([onRoster('drvB'), null]), ['drvB']);
+same('no roster, nobody listed', listed(undefined), []);
+const screen = (file) => fs.readFileSync(path.join(ROOT, 'src/components/admin', file), 'utf8');
+check('the dialog lists who driversForRide says', /const relevant = driversForRide\(drivers, ride\);/.test(screen('RidesAdmin.jsx')), true);
 
 // ── A reversal always wins ─────────────────────────────────────────────────
 console.log('\n— a reversal always wins —');
@@ -2184,6 +2261,172 @@ check('unreadable metadata says nothing either way', paymentIsFor('{oops', 'stay
     return heldBy(sr) ? `pay is still held on a cancelled ride (${heldBy(sr)})` : '';
   }, 5);
   check(`a driver assigned while the ride is cancelled (${out.runs} orders): no pay is left held`, `${out.problem}${out.schedule}`, '');
+}
+
+// ── The Assign driver dialog's requests, start to finish ───────────────────
+// Everything above lifts one function at a time. From here the shipped
+// assignRideDriver and getRideBookings run whole, bundled as they are by
+// scripts/lib/function-rig.mjs against tables in memory: the request the
+// dialog sends, what the server does with it, and what the rides list then
+// tells admin.
+const rig = createRig();
+const assignHandler = await loadFunction(rig, AR);
+// Emails and pushes leave through the SDK. They are recorded here, so that a
+// check can say nobody was told anything.
+let told = [];
+const sdk = rig.client;
+rig.client = () => ({
+  ...sdk(),
+  integrations: { Core: { SendEmail: async (mail) => { told.push(`email ${mail.to}`); } } },
+  functions: { invoke: async (_name, push) => { told.push(`push ${push.user_email}`); return { data: { success: true } }; } },
+});
+const BOSS = { id: 'u-admin', email: 'admin@urbanstays.io', role: 'admin' };
+const TUNDE = { id: 'u-tunde', email: 'tunde@mail.ng', role: 'user' };
+const hoursFromNow = (h) => new Date(Date.now() + h * 3600000).toISOString();
+// A paid three-hour ride in Abuja tomorrow, whose car costs ₦5,000 an hour in
+// driver pay. Ade and Bola have logins; Uche does not.
+const startOver = (ride = {}, drivers = {}) => {
+  told = [];
+  const driver = (id, extra) => ({ id, full_name: id, phone: '08010000000', city: 'Abuja', active: true, admin_approved: true, ...extra, ...drivers[id] });
+  rig.db = {
+    RideBooking: [{
+      id: 'ride1', booking_reference: 'UD-AAA111', vehicle_id: 'car1', vehicle_name: 'Prado',
+      duration_tier: 'hourly', duration_hours: 3, start_at: hoursFromNow(24), end_at: hoursFromNow(27),
+      pickup_location: { city: 'Abuja' }, guest_email: TUNDE.email, guest_name: 'Tunde Bello',
+      status: 'confirmed', payment_status: 'paid', ...ride,
+    }],
+    Vehicle: [{ id: 'car1', city: 'Abuja' }],
+    VehicleCosting: [{ id: 'cost1', vehicle_id: 'car1', driver_cost_per_hour_ngn: 5000, driver_cost_per_day_ngn: 15000 }],
+    Driver: [driver('ade', { user_email: 'ade@drivers.ng' }), driver('bola', { user_email: 'bola@drivers.ng' }), driver('uche')],
+    DriverEarning: [],
+  };
+};
+const pressAssign = (body) => call(rig, assignHandler, { ride_booking_id: 'ride1', ...body }, BOSS);
+const drivingNow = () => rig.db.RideBooking[0].driver_id || '';
+const payRows = () => rig.db.DriverEarning.map((e) => `${e.driver_id}:${e.status}:${e.amount_ngn}`).join(',');
+
+console.log('\n— record pay for a driver the dialog would not offer today —');
+// What the dialog relies on when it lists the driver already on the ride
+// whatever their state: none of "should this driver be sent?" is asked about
+// a driver who is already there.
+{
+  startOver({ driver_id: 'ade' }, { ade: { active: false, admin_approved: false } });
+  const r = await pressAssign({ driver_id: 'ade' });
+  same('"Record pay" for the driver on the ride is accepted after they were switched off',
+    [r.status, r.data?.already_assigned, r.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:15000']);
+  same('…the driver hears about the pay, and the guest is not told about a driver they already have', told, ['push ade@drivers.ng']);
+}
+{
+  startOver({ driver_id: 'ade' }, { ade: { city: 'Lagos' } });
+  const r = await pressAssign({ driver_id: 'ade' });
+  same('…and after they moved to another city',
+    [r.status, r.data?.already_assigned, r.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:15000']);
+}
+{
+  // The same driver, on a ride they are not already on, is still refused.
+  startOver({}, { ade: { active: false } });
+  const r = await pressAssign({ driver_id: 'ade' });
+  same('a driver who is switched off cannot be given a new ride',
+    [r.status, r.code, drivingNow(), payRows()], [409, 'DRIVER_UNAVAILABLE', '', '']);
+}
+
+// The server tells "record pay" from "a new assignment" by comparing the
+// driver submitted with whoever is on the ride at that moment. The dialog
+// works on the ride as it was when it was opened, so it also says who it
+// believed was on it, and the server refuses when that is no longer true.
+console.log('\n— a stale assign dialog —');
+{
+  // Admin 1 opens the dialog while Ade is on the ride with no pay: Ade's row
+  // says "Record pay". Admin 2 then changes the driver to Bola.
+  startOver({ driver_id: 'ade' });
+  const changed = await pressAssign({ driver_id: 'bola', expected_driver_id: 'ade', driver_payout_ngn: 18000 });
+  same('a change of driver from a dialog that is up to date goes through',
+    [changed.status, changed.data?.reassigned, drivingNow(), payRows()], [200, true, 'bola', 'bola:held:18000']);
+  // Admin 1 presses "Record pay" on Ade.
+  told = [];
+  const stale = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade' });
+  same('"Record pay" from a dialog opened before that change is refused', [stale.status, stale.code], [409, 'SUPERSEDED']);
+  check('…the ride stays with the driver it was handed to', drivingNow(), 'bola');
+  check('…whose held pay is not reversed, and nothing is held for the other', payRows(), 'bola:held:18000');
+  same('…and nobody is emailed or notified', told, []);
+  check('…the answer says nothing was saved', /nothing was saved/.test(stale.error || ''), true);
+  // The dialog was opened when nobody was on the ride at all.
+  const first = await pressAssign({ driver_id: 'ade', expected_driver_id: '' });
+  same('a first "Assign" from a dialog opened before somebody else assigned is refused too',
+    [first.status, first.code, drivingNow(), payRows(), told.length], [409, 'SUPERSEDED', 'bola', 'bola:held:18000', 0]);
+  // A page loaded before the dialog said who it expected sends nothing.
+  const older = await pressAssign({ driver_id: 'ade' });
+  same('a request that does not say who it expected is not checked, as before',
+    [older.status, older.data?.reassigned, drivingNow(), payRows()], [200, true, 'ade', 'bola:reversed:18000,ade:held:15000']);
+}
+{
+  startOver();
+  const r = await pressAssign({ driver_id: 'ade', expected_driver_id: '' });
+  same('a first assignment from a dialog that is up to date',
+    [r.status, r.data?.already_assigned, r.data?.guest_notified, drivingNow(), payRows()], [200, false, true, 'ade', 'ade:held:15000']);
+  const again = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade', driver_payout_ngn: 99999 });
+  same('…and the same driver again from one that is up to date changes nothing',
+    [again.status, again.data?.already_assigned, again.data?.pay_recorded, payRows()], [200, true, false, 'ade:held:15000']);
+}
+{
+  startOver({ driver_id: 'ade' });
+  const r = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade' });
+  same('"Record pay" from a dialog that is up to date',
+    [r.status, r.data?.already_assigned, r.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:15000']);
+}
+check('the dialog says who it believes is on the ride', /expected_driver_id: ride\.driver_id \|\| '',/.test(screen('RidesAdmin.jsx')), true);
+
+// ₦0 is a real answer ("paid inside the partner's rate") and holds nothing,
+// so it leaves no pay row. The list used to read that as pay nobody had
+// recorded, for as long as the ride was on it, and no button could say
+// otherwise. The ride row now remembers which driver a figure was given for.
+console.log('\n— a ₦0 assignment —');
+const listHandler = await loadFunction(rig, 'getRideBookings');
+const adminSees = async () => (await call(rig, listHandler, { scope: 'all' }, BOSS)).data[0];
+const guestSees = async () => (await call(rig, listHandler, {}, TUNDE)).data[0];
+// What the admin list says about the ride: has a login, pay recorded, flagged.
+const flags = async () => {
+  const row = await adminSees();
+  return [row.driver_linked, row.driver_pay_recorded, rides.payMissing(row, Date.now())];
+};
+{
+  startOver();
+  const r = await pressAssign({ driver_id: 'ade', expected_driver_id: '', driver_payout_ngn: 0 });
+  same('a driver assigned at ₦0 is on the ride with nothing held', [r.status, r.data?.driver_payout_ngn, drivingNow(), payRows()], [200, 0, 'ade', '']);
+  same('…and the list does not call that "No pay recorded"', await flags(), [true, true, false]);
+  check('…because the ride remembers who the figure was for', rig.db.RideBooking[0].pay_answered_for, 'ade');
+  const guest = await guestSees();
+  same('…which the guest\'s own list does not carry, any more than it carries the driver', [guest.id, 'pay_answered_for' in guest, 'driver_id' in guest], ['ride1', false, false]);
+  const later = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade', driver_payout_ngn: 20000 });
+  same('a real figure can still be added afterwards with "Record pay"',
+    [later.status, later.data?.already_assigned, later.data?.pay_recorded, payRows()], [200, true, true, 'ade:held:20000']);
+}
+{
+  // Assigned before pay was tracked: a driver, a login, and nothing else.
+  startOver({ driver_id: 'ade', driver_assigned_at: ASSIGNED_EARLIER });
+  same('a ride assigned before pay was tracked is still flagged', await flags(), [true, false, true]);
+  const r = await pressAssign({ driver_id: 'ade', expected_driver_id: 'ade', driver_payout_ngn: 0 });
+  same('…until "Record pay" answers it, with ₦0 if that is the answer', [r.status, payRows(), ...await flags()], [200, '', true, true, false]);
+  same('…which leaves who is driving, and since when, as they were',
+    [drivingNow(), rig.db.RideBooking[0].driver_assigned_at, told], ['ade', ASSIGNED_EARLIER, []]);
+}
+{
+  // The figure was given for Ade. The ride then goes to a driver with no
+  // login, who is given one afterwards: nobody has said what Uche is paid.
+  startOver();
+  await pressAssign({ driver_id: 'ade', expected_driver_id: '', driver_payout_ngn: 0 });
+  const r = await pressAssign({ driver_id: 'uche', expected_driver_id: 'ade' });
+  same('a driver with no login: nothing is tracked and nothing is flagged', [r.status, r.data?.pay_tracked, drivingNow(), ...await flags()], [200, false, 'uche', false, false, false]);
+  rig.db.Driver.find((d) => d.id === 'uche').user_email = 'uche@drivers.ng';
+  same('…given a login afterwards, the ride is flagged: a figure for the driver before says nothing about this one', await flags(), [true, false, true]);
+  await pressAssign({ driver_id: 'uche', expected_driver_id: 'uche', driver_payout_ngn: 0 });
+  same('…until a figure, or ₦0, is recorded for them', await flags(), [true, true, false]);
+}
+{
+  startOver();
+  await pressAssign({ driver_id: 'ade', expected_driver_id: '', driver_payout_ngn: 0 });
+  const r = await pressAssign({ driver_id: 'bola', expected_driver_id: 'ade', driver_payout_ngn: 0 });
+  same('a change of driver at ₦0 is answered for the new driver', [r.status, rig.db.RideBooking[0].pay_answered_for, ...await flags()], [200, 'bola', true, true, false]);
 }
 
 // ---- result ----

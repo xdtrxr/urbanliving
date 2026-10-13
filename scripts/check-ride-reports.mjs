@@ -9,11 +9,13 @@
 // The harness below is the same one scripts/check-driver-wallet.mjs uses. On
 // the new Function(): its only input is this repo's own source, read from
 // paths this file computes itself; nothing here is reachable from a request.
+// The last section runs whole handlers through scripts/lib/function-rig.mjs.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as rides from '../src/config/rides.js';
+import { createRig, loadFunction, call } from './lib/function-rig.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FN = (name) => path.join(ROOT, 'base44/functions', name, 'entry.ts');
@@ -191,7 +193,8 @@ for (const bad of [
 }
 check('photos that are not a list are refused', validateReportInput({ ...good, evidence_urls: uploaded('a.jpg') }).code, 'BAD_URL');
 
-// Filing: once per reporter per ride, always under the ride's own id.
+// Filing: once per reporter per ride (a guest, once per driver they had on
+// it), always under the ride's own id.
 console.log('\n— filing once —');
 const isId = make('isId', src('isId', 'value'));
 // Each of these fetched the same ride as "ride1" and, before this fix, each
@@ -219,6 +222,22 @@ const said = { category: 'rude', description: 'He shouted at me the whole trip.'
   const other = await fileRideReport(sr, reportedRide, asDriver, said);
   check('the other side of the ride still can', `${other.ok}/${sr.RideReport.rows.length}`, 'true/2');
   check('…a driver\'s report names the guest, not a driver', `${other.row.reported_email}/${other.row.reported_driver_id}`, 'ada@example.com/');
+  // Admin hands the ride to another driver, which is the natural answer to
+  // the guest's complaint. A guest's report is about one driver, so the
+  // driver who took over can be reported too, once.
+  const handedOver = { ...reportedRide, driver_id: 'drvB' };
+  const about = await fileRideReport(sr, handedOver, asGuest, { ...said, description: 'The second driver was no better.' });
+  check('after a handover the guest can report the driver who took over',
+    `${about.ok}/${about.row && about.row.reported_driver_id}/${sr.RideReport.rows.length}`, 'true/drvB/3');
+  const repeat = await fileRideReport(sr, handedOver, asGuest, said);
+  check('…once', `${repeat.ok}/${repeat.code}/${sr.RideReport.rows.length}`, 'false/ALREADY_REPORTED/3');
+  const back = await fileRideReport(sr, reportedRide, asGuest, said);
+  check('…and if the ride goes back to the first driver, they are not reported a second time',
+    `${back.ok}/${back.code}/${sr.RideReport.rows.length}`, 'false/ALREADY_REPORTED/3');
+  // A driver's report is about the guest, whoever else has driven the ride.
+  const driverAgain = await fileRideReport(sr, handedOver, asDriver, said);
+  check('a driver still reports a ride once, whoever is driving it now',
+    `${driverAgain.ok}/${driverAgain.code}/${sr.RideReport.rows.length}`, 'false/ALREADY_REPORTED/3');
 }
 {
   // Two taps on Submit both pass the "already" check. The second to write
@@ -348,6 +367,47 @@ check('a complaint about driver A does not hold driver B\'s pay', await hasOpenG
 check('…it still holds driver A\'s', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1', 'drvA'), true);
 check('an earning with no driver on it is held by nothing', await hasOpenGuestReport(reportsOf([filed('guest', 'open')]), 'ride1', ''), false);
 
+// The same rule from the inbox's side. The badge "Holding the driver's pay"
+// used to show on every open guest report. It is true only while the driver
+// the report names still has pay held on that ride.
+const aboutA = filed('guest', 'open');
+const payRow = (driver_id, extra = {}) => ({ id: `e-${driver_id}`, ride_booking_id: 'ride1', driver_id, amount_ngn: 15000, status: 'held', ...extra });
+check('the badge shows while the driver the report names has pay held on that ride', rides.reportHoldsPay(aboutA, [payRow('drvA')]), true);
+check('…and while the report is being reviewed', rides.reportHoldsPay(filed('guest', 'reviewing'), [payRow('drvA')]), true);
+check('…and while admin has paused that pay as well', rides.reportHoldsPay(aboutA, [payRow('drvA', { on_hold: true })]), true);
+// The ride was handed to drvB: drvA's held pay was reversed, drvB's is held.
+check('not after a handover: the report holds nobody\'s pay',
+  rides.reportHoldsPay(aboutA, [payRow('drvA', { status: 'reversed' }), payRow('drvB')]), false);
+check('…a report about the driver who took over holds theirs',
+  rides.reportHoldsPay(filed('guest', 'open', 'ride1', 'drvB'), [payRow('drvA', { status: 'reversed' }), payRow('drvB')]), true);
+// Reports are accepted for a week after the ride; pay is released after two hours.
+check('not when the pay had already been released', rides.reportHoldsPay(aboutA, [payRow('drvA', { status: 'released' })]), false);
+check('not when the driver has no pay row: no login, or assigned at ₦0', rides.reportHoldsPay(aboutA, []), false);
+check('not when the ledger could not be read: no claim is made', rides.reportHoldsPay(aboutA, null), false);
+check('…or has not been read yet', rides.reportHoldsPay(aboutA, undefined), false);
+check('held pay on another ride is not this report\'s', rides.reportHoldsPay(aboutA, [payRow('drvA', { ride_booking_id: 'other' })]), false);
+check('a held row that carries a reversal time counts nowhere', rides.reportHoldsPay(aboutA, [payRow('drvA', { reversed_at: '2026-08-10T12:00:00.000Z' })]), false);
+check('a report the driver filed holds nobody\'s pay', rides.reportHoldsPay(filed('driver', 'open'), [payRow('drvA')]), false);
+for (const closed of ['resolved', 'dismissed']) {
+  check(`a ${closed} report holds nothing`, rides.reportHoldsPay(filed('guest', closed), [payRow('drvA')]), false);
+}
+check('no report, no badge', rides.reportHoldsPay(null, [payRow('drvA')]), false);
+// The inbox and the sweep must agree about which reports can hold pay at all.
+for (const [role, status] of [['guest', 'open'], ['guest', 'reviewing'], ['guest', 'resolved'], ['guest', 'dismissed'], ['driver', 'open']]) {
+  check(`the ${role}'s ${status} report: the inbox says what the sweep does`,
+    rides.reportHoldsPay(filed(role, status), [payRow('drvA')]), await hasOpenGuestReport(reportsOf([filed(role, status)]), 'ride1', 'drvA'));
+}
+check('the inbox draws the badge from reportPayNote',
+  /\{reportPayNote\(r, heldPay\) === 'holding' && \(/.test(fs.readFileSync(path.join(ROOT, 'src/components/admin/RideReportsAdmin.jsx'), 'utf8')), true);
+// The server holds the pay whatever the screen manages to read. An inbox that
+// went quiet when the ledger could not be read would be saying "nothing is
+// held" about pay that is.
+same('with the ledger read, the note is "holding" or nothing', [rides.reportPayNote(aboutA, [payRow('drvA')]), rides.reportPayNote(aboutA, [])], ['holding', null]);
+same('with the ledger unread or unreadable, an open guest report says "unknown", not nothing', [rides.reportPayNote(aboutA, null), rides.reportPayNote(aboutA, undefined)], ['unknown', 'unknown']);
+same('a closed report, or one a driver filed, says nothing either way', [rides.reportPayNote(filed('guest', 'resolved'), null), rides.reportPayNote(filed('driver', 'open'), null)], [null, null]);
+check('the inbox shows the "may be holding" badge for it',
+  /\{reportPayNote\(r, heldPay\) === 'unknown' && \(/.test(fs.readFileSync(path.join(ROOT, 'src/components/admin/RideReportsAdmin.jsx'), 'utf8')), true);
+
 const settleDueEarning = make('settleDueEarning',
   liftSrc(SWEEP, 'isReleasable', 'earning, nowMs'), liftSrc(SWEEP, 'releaseDecision', 'earning, ride'),
   liftSrc(SWEEP, 'hasOpenGuestReport', 'sr, rideBookingId, driverId'), liftSrc(SWEEP, 'keepReversed', 'sr, earningId'),
@@ -458,6 +518,74 @@ for (const bad of [
   'https://example.com/a.jpg" onerror="x', '', null, undefined, 42, {},
 ]) {
   check(`${JSON.stringify(bad) ?? String(bad)} is not used as an image source`, rides.safePhotoUrl(bad), null);
+}
+
+// ── A ride handed to another driver, start to finish ───────────────────────
+// Everything above lifts one function at a time. Here the shipped
+// createRideReport, getRideBookings and assignRideDriver run whole, bundled
+// as they are by scripts/lib/function-rig.mjs against tables in memory.
+//
+// A guest on a three-day ride reports the driver. Admin hands the ride to
+// another driver, which is the natural answer to that complaint, and the
+// guest then has a problem with the second driver too.
+console.log('\n— a ride handed to another driver —');
+const rig = createRig();
+const reportHandler = await loadFunction(rig, HOME);
+const listHandler = await loadFunction(rig, 'getRideBookings');
+const assignHandler = await loadFunction(rig, 'assignRideDriver');
+const BOSS = { id: 'u-admin', email: 'admin@urbanstays.io', role: 'admin' };
+const ADA = { id: 'u-ada', email: 'ada@example.com', role: 'user', full_name: 'Ada Obi' };
+const hoursFromNow = (h) => new Date(Date.now() + h * 3600000).toISOString();
+const onRoster = (id, full_name) => ({ id, full_name, phone: '08010000000', city: 'Abuja', active: true, admin_approved: true, user_email: `${id}@drivers.ng` });
+// Paid, and an hour into its three days.
+rig.db = {
+  RideBooking: [{
+    id: 'ride1', booking_reference: 'UD-AAA111', vehicle_id: 'car1', vehicle_name: 'Prado',
+    duration_tier: 'multi_day', duration_days: 3, start_at: hoursFromNow(-1), end_at: hoursFromNow(71),
+    guest_email: ADA.email, guest_name: 'Ada Obi', status: 'confirmed', payment_status: 'paid',
+  }],
+  Vehicle: [{ id: 'car1', city: 'Abuja' }],
+  Driver: [onRoster('ade', 'Ade Bello'), onRoster('bola', 'Bola Musa')],
+};
+const assign = (driver_id, expected_driver_id, driver_payout_ngn) => call(rig, assignHandler, {
+  ride_booking_id: 'ride1', driver_id, expected_driver_id, driver_payout_ngn,
+}, BOSS);
+const complain = (description) => call(rig, reportHandler, { ride_booking_id: 'ride1', category: 'rude', description }, ADA);
+// What the guest's Bookings page is told: [report offered, already reported].
+const offered = async () => {
+  const row = (await call(rig, listHandler, {}, ADA)).data[0];
+  return [row.can_report, row.already_reported];
+};
+const onFile = () => (rig.db.RideReport || []).map((r) => `${r.reporter_role} about ${r.reported_driver_id} (${r.reported_name}): ${r.status}`);
+const payRows = () => (rig.db.DriverEarning || []).map((e) => `${e.driver_id}:${e.status}:${e.amount_ngn}`).join(',');
+{
+  let r = await assign('ade', '', 15000);
+  same('a driver is assigned to the ride in progress', [r.status, payRows()], [200, 'ade:held:15000']);
+  same('the guest is offered the report', await offered(), [true, false]);
+  r = await complain('He shouted at me the whole trip.');
+  same('…files it, and it names that driver', [r.status, onFile()], [200, ['guest about ade (Ade Bello): open']]);
+  same('…and is told it is with the team, not offered it again', await offered(), [false, true]);
+  r = await complain('And another thing entirely.');
+  same('…nor accepted if sent anyway', [r.status, r.code, onFile().length], [409, 'ALREADY_REPORTED', 1]);
+
+  r = await assign('bola', 'ade', 18000);
+  same('admin hands the ride to another driver', [r.status, r.data?.reassigned, payRows()], [200, true, 'ade:reversed:15000,bola:held:18000']);
+  same('the guest is offered the report again: it would be about the driver who took over', await offered(), [true, false]);
+  r = await complain('The second driver was late and rude about it.');
+  same('…files it, and it names the second driver', [r.status, onFile()],
+    [200, ['guest about ade (Ade Bello): open', 'guest about bola (Bola Musa): open']]);
+  same('…and is not offered a third', await offered(), [false, true]);
+  r = await complain('Once more, with feeling.');
+  same('…nor accepted if sent anyway', [r.status, r.code, onFile().length], [409, 'ALREADY_REPORTED', 2]);
+
+  // Both reports are open in the inbox. It reads, as admin, the pay still
+  // held on their ride: the first driver's was reversed at the handover.
+  rig.user = BOSS;
+  const held = await rig.client().entities.DriverEarning.filter(
+    { status: 'held', ride_booking_id: { $in: ['ride1'] } }, '-created_date', 500);
+  const [aboutAde, aboutBola] = rig.db.RideReport;
+  same('in the inbox, only the report about the driver who took over says "Holding the driver\'s pay"',
+    [rides.reportHoldsPay(aboutAde, held), rides.reportHoldsPay(aboutBola, held)], [false, true]);
 }
 
 // ---- result ----

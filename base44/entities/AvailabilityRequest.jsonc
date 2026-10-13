@@ -40,6 +40,10 @@
       "type": "number",
       "description": "The total in NGN the server worked out for this request, as shown to the admin. The Booking row holds the figure that is charged."
     },
+    "booking_id": {
+      "type": "string",
+      "description": "The Booking this request is about, written by checkAvailabilityWebhook right after both rows are created. Approving or rejecting acts on that booking. Requests from before 2026-10-12 lack it and are matched by property, dates and guest."
+    },
     "status": {
       "type": "string",
       "enum": [

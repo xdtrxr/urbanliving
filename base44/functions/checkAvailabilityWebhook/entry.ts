@@ -31,9 +31,10 @@ function detectConflict(existing: any[], requestedIn: Date, requestedOut: Date):
 // notification" the function logs are the only place we can see whether the
 // property was found, whether it had images, and which URL was attempted.
 // ── Stay pricing — derived from the Property row, never from the request ────
-// MIRRORED client-side by estimateStayPrice / nightsBetween in
-// src/config/stays.js, which draw the figure the guest sees before submitting.
-// Keep the two in lockstep; scripts/check-stay-price.mjs executes both.
+// MIRRORED client-side in src/config/stays.js (nightsBetween,
+// bookingOptionsOf, nightlyRate, priceStay), which draw the figure the guest
+// sees before submitting. Keep the two in lockstep;
+// scripts/check-stay-price.mjs executes both.
 //
 // Until this landed the request body carried total_price and it was stored
 // as-is, so a guest could request any apartment at ₦1, pay ₦1 (the payment
@@ -50,18 +51,6 @@ function nightsBetween(checkIn: string, checkOut: string): number {
     const b = Date.parse(`${checkOut}T00:00:00Z`);
     if (Number.isNaN(a) || Number.isNaN(b)) return 0;
     return Math.max(0, Math.round((b - a) / DAY_MS));
-}
-
-interface StayPrice { nights: number; subtotal: number; serviceFee: number; cautionFee: number; total: number }
-
-function priceForStay(property: any, nights: number): StayPrice | null {
-    const rate = Number(property?.price_per_night) || 0;
-    const n = Number(nights) || 0;
-    if (!rate || n < 1) return null;
-    const subtotal = rate * n;
-    const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
-    const cautionFee = Number(property?.caution_fee) || 0;
-    return { nights: n, subtotal, serviceFee, cautionFee, total: subtotal + serviceFee + cautionFee };
 }
 
 async function fetchPropertyImage(base44Client: any, propertyId: string): Promise<string | null> {
@@ -124,7 +113,7 @@ async function sendAdminTelegram(opts: {
         : 'Not provided';
 
     const conflictBlock = opts.hasConflict && opts.conflicting
-        ? `\n\n⚠️ *${conflictText}*\n• Conflicting Booking: \`${opts.conflicting.id}\`\n• Dates: ${opts.conflicting.check_in} → ${opts.conflicting.check_out}\n• Guest: ${opts.conflicting.guest_email}`
+        ? `\n\n⚠️ *${conflictText}*\n• Conflicting Booking: \`${opts.conflicting.id}\`\n• Dates: ${opts.conflicting.check_in} → ${opts.conflicting.check_out}\n• Guest: ${opts.conflicting.guest_email}${opts.conflicting.payment_status === 'pending_confirmation' ? '\n• That booking has a payment ON HOLD: settle it first' : ''}`
         : `\n\n✅ *${conflictText}*\nNo overlapping bookings.`;
 
     const specialRequestsBlock = opts.specialRequests && opts.specialRequests.trim()
@@ -328,7 +317,7 @@ Deno.serve(async (req) => {
         }
 
         const body = await req.json().catch(() => ({}));
-        // total_price is deliberately NOT read from the body — see priceForStay.
+        // total_price is deliberately NOT read from the body — see priceStay.
         // property_title / property_location are accepted only as fallbacks
         // for the Telegram card; the Property row wins when it has them.
         const {
@@ -420,6 +409,25 @@ Deno.serve(async (req) => {
         // unlocked once their prior booking is paid (status='confirmed'),
         // cancelled, or completed. Per product rule: paid/cancelled/current/past
         // are all re-bookable, only 'upcoming + unpaid' blocks.
+        // A payment of this guest's is on hold for this property. That booking
+        // may be cancelled (the money came after it ran out of time, and the
+        // guest was told to re-book), so the "still pending" test below does
+        // not see it. A new request would be answered "no conflicts",
+        // approved, and the guest asked to pay a second time for one stay.
+        const guestHeld = await base44.asServiceRole.entities.Booking.filter({
+            property_id,
+            guest_email: user.email,
+            payment_status: 'pending_confirmation',
+        }, '-created_date', 5);
+        if (guestHeld && guestHeld.length > 0) {
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'We are holding a payment for your earlier request for this property. Our team will confirm it or refund you. Please wait for that before booking it again.',
+                code: 'EXISTING_PAYMENT_HELD',
+                existing_booking_id: guestHeld[0].id,
+            }), { status: 409, headers });
+        }
+
         const userPending = await base44.asServiceRole.entities.Booking.filter({
             property_id,
             guest_email: user.email,
@@ -428,13 +436,18 @@ Deno.serve(async (req) => {
         if (userPending && userPending.length > 0) {
             const open = userPending[0];
             const awaitingPayment = !!open.approved_at;
-            const msg = awaitingPayment
-                ? 'You already have an approved booking for this property awaiting payment. Please complete payment (or let it expire) before booking it again.'
-                : 'You already have a pending request for this property awaiting admin approval. Please wait for the response before submitting another.';
+            // A payment already arrived for the earlier request and is on
+            // hold. "Complete payment" would send them to pay a second time.
+            const paymentHeld = open.payment_status === 'pending_confirmation';
+            const msg = paymentHeld
+                ? 'We are holding a payment for your earlier request for this property. Our team will confirm it or refund you. Please wait for that before booking it again.'
+                : awaitingPayment
+                    ? 'You already have an approved booking for this property awaiting payment. Please complete payment (or let it expire) before booking it again.'
+                    : 'You already have a pending request for this property awaiting admin approval. Please wait for the response before submitting another.';
             return new Response(JSON.stringify({
                 success: false,
                 error: msg,
-                code: awaitingPayment ? 'EXISTING_AWAITING_PAYMENT' : 'EXISTING_PENDING_APPROVAL',
+                code: paymentHeld ? 'EXISTING_PAYMENT_HELD' : awaitingPayment ? 'EXISTING_AWAITING_PAYMENT' : 'EXISTING_PENDING_APPROVAL',
                 existing_booking_id: open.id,
             }), { status: 409, headers });
         }
@@ -446,6 +459,17 @@ Deno.serve(async (req) => {
             property_id,
             status: { $in: ['confirmed', 'pending'] },
         }, '-check_out', 500);
+        // A booking that holds a payment still has a claim on its dates even
+        // when it is cancelled: the admin may yet confirm it. It is put in
+        // front of the admin as a conflict, so they do not approve a second
+        // guest for dates somebody has already paid for.
+        const held = await base44.asServiceRole.entities.Booking.filter({
+            property_id,
+            payment_status: 'pending_confirmation',
+        }, '-check_out', 100);
+        for (const row of held || []) {
+            if (!existing.some((e: any) => e.id === row.id)) existing.push(row);
+        }
         const { hasConflict, conflicting } = detectConflict(existing, checkInDate, checkOutDate);
         const conflictDetails: ConflictDetails | null = hasConflict && conflicting ? {
             booking_id: conflicting.id,
@@ -492,6 +516,19 @@ Deno.serve(async (req) => {
             status: 'pending',
             payment_status: 'unpaid',
         });
+
+        // The request names its booking, so that approving or rejecting it
+        // acts on this booking and no other. Before the card is sent: a
+        // button must not arrive before the link does. A failure here is not
+        // the guest's problem; the decision falls back to matching by
+        // property, dates and guest, as it did before the id existed.
+        try {
+            await base44.asServiceRole.entities.AvailabilityRequest.update(availabilityRequest.id, {
+                booking_id: pendingBooking.id,
+            });
+        } catch (linkErr) {
+            console.warn('Failed to write booking_id on the request (non-fatal):', linkErr);
+        }
 
         // Notify admin (with property photo if available)
         let telegramMessageId: string | null = null;

@@ -16,6 +16,26 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 const ID_TYPES = ['national_id', 'drivers_license', 'passport', 'voters_card', 'other'];
 const MAX_URL_LEN = 2048;
 
+// An id goes into the URL of the row it fetches ("../Booking/abc" would fetch
+// a row of another entity, and every check that follows would then be made on
+// the wrong kind of row), so only a plain id is ever used. Lockstep copy, see
+// createWithdrawalRequest.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there. Unguarded, a stale or
+// mistyped id is answered with a 500 instead of "not found".
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -37,7 +57,7 @@ Deno.serve(async (req) => {
         const bookingId = String(body.booking_id || '').trim();
         if (!bookingId) return json({ success: false, error: 'booking_id is required' }, 400);
 
-        const booking = await base44.asServiceRole.entities.Booking.get(bookingId);
+        const booking = isId(bookingId) ? await getOrNull(base44.asServiceRole.entities.Booking, bookingId) : null;
         if (!booking) return json({ success: false, error: 'Booking not found' }, 404);
         if (booking.guest_email !== user.email && user.role !== 'admin') {
             return json({ success: false, error: 'Not your booking' }, 403);
@@ -47,7 +67,8 @@ Deno.serve(async (req) => {
         let type = '';
 
         if (body.reuse_from_booking_id) {
-            const source = await base44.asServiceRole.entities.Booking.get(String(body.reuse_from_booking_id));
+            const sourceId = String(body.reuse_from_booking_id);
+            const source = isId(sourceId) ? await getOrNull(base44.asServiceRole.entities.Booking, sourceId) : null;
             if (!source || source.guest_email !== booking.guest_email) {
                 return json({ success: false, error: 'No prior ID found to reuse', code: 'NO_PRIOR_ID' }, 404);
             }

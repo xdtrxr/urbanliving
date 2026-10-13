@@ -17,6 +17,23 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 const HOUR_MS = 60 * 60 * 1000;
 const MIN_NOTICE_MS = 24 * HOUR_MS;
+
+// An id goes into the URL of the row it fetches, so only a plain id is ever
+// used. Lockstep copy, see createWithdrawalRequest.
+function isId(value: unknown) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value);
+}
+
+// entity.get() rejects for a row that is not there.
+async function getOrNull(entity: any, id: string) {
+    try {
+        return await entity.get(id);
+    } catch (err) {
+        const status = err && (err.status || (err.response && err.response.status));
+        if (status === 404) return null;
+        throw err;
+    }
+}
 // Nigeria is WAT (UTC+1) year-round. Check-in is treated as the start of the
 // calendar day in that zone, matching how the reminders cron reads it.
 const WAT_OFFSET = '+01:00';
@@ -31,7 +48,12 @@ async function notifyAdmin(booking: any, propertyTitle: string, byAdmin: boolean
         `• Guest: ${booking.guest_name || ''} (${booking.guest_email})\n` +
         `• Dates: ${booking.check_in} → ${booking.check_out}\n` +
         `• Value: ₦${(Number(booking.total_price) || 0).toLocaleString()}\n\n` +
-        `The dates are free again.`;
+        `The dates are free again.` +
+        // A payment was on hold for it (it arrived before the booking could
+        // be confirmed). Cancelling does not send it back.
+        (booking.payment_status === 'pending_confirmation'
+            ? `\n\n⚠️ A payment is ON HOLD for this booking. Refund it in Paystack, then mark it refunded under Admin, Payments on hold.`
+            : '');
     try {
         await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: 'POST',
@@ -64,7 +86,7 @@ Deno.serve(async (req) => {
         const { booking_id, reason } = await req.json().catch(() => ({}));
         if (!booking_id) return json({ success: false, error: 'booking_id is required' }, 400);
 
-        const booking = await base44.asServiceRole.entities.Booking.get(booking_id);
+        const booking = isId(booking_id) ? await getOrNull(base44.asServiceRole.entities.Booking, booking_id) : null;
         if (!booking) return json({ success: false, error: 'Booking not found' }, 404);
 
         const isAdmin = user.role === 'admin';
@@ -80,6 +102,16 @@ Deno.serve(async (req) => {
         }
 
         if (!isAdmin) {
+            // Money is waiting on this booking for the admin to confirm or
+            // send back. Cancelled, it would read "the dates are free again"
+            // and nobody would be reminded of the money.
+            if (booking.payment_status === 'pending_confirmation') {
+                return json({
+                    success: false,
+                    error: 'We are holding a payment for this booking. Contact support to cancel it and get your refund.',
+                    code: 'PAYMENT_HELD',
+                }, 409);
+            }
             if (booking.payment_status === 'paid') {
                 return json({
                     success: false,
@@ -107,7 +139,7 @@ Deno.serve(async (req) => {
 
         let propertyTitle = booking.property_id;
         try {
-            const property = await base44.asServiceRole.entities.Property.get(booking.property_id);
+            const property = await getOrNull(base44.asServiceRole.entities.Property, booking.property_id);
             propertyTitle = property?.title || propertyTitle;
         } catch (err) {
             console.warn('Could not read property for cancellation notice (non-fatal):', err);

@@ -435,6 +435,12 @@ async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number;
     let warned = 0;
 
     for (const b of pending) {
+        // Money has reached this booking: a payment on hold for the admin to
+        // decide, or one that confirmed it a moment ago. Either way it has
+        // not "run out of time to pay", and telling the guest so would be
+        // wrong. It waits for a person.
+        if (b.payment_status === 'pending_confirmation' || b.payment_status === 'paid') continue;
+
         const deadlineMs = computeDeadlineMs(b);
         if (deadlineMs === null) continue; // not approved yet
 
@@ -465,6 +471,12 @@ async function runSweep(sdk: any): Promise<{ scanned: number; cancelled: number;
 
         if (now <= deadlineMs) continue;
         try {
+            // The list was read at the top of the run, and a run takes a
+            // while. A payment that landed since then must not be written
+            // over with "cancelled": read this one booking again first.
+            const fresh = await sdk.asServiceRole.entities.Booking.get(b.id).catch(() => null);
+            if (!fresh || fresh.status !== 'pending' || fresh.payment_status === 'pending_confirmation' || fresh.payment_status === 'paid') continue;
+
             // Stamp cancel_reason so the Bookings UI can show "Payment Expired"
             // instead of plain "Cancelled". The property+dates are still free
             // to re-book because checkAvailabilityWebhook only blocks against

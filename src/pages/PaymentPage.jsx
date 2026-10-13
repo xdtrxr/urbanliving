@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { invokeFn } from '@/lib/invokeFn';
+import { heldPaymentFrom, ridePayDecision } from '@/config/payments';
 import { awardBookingMilestones } from '@/components/utils/loyaltyService';
 import IdUploadGate from '@/components/booking/IdUploadGate';
 
@@ -39,6 +40,10 @@ export default function PaymentPage() {
   const [isPageLoading, setIsPageLoading] = useState(true);
   const [bookingData, setBookingData] = useState(null);
   const [error, setError] = useState(null);
+  // A payment the server is holding: it has the money, but the booking was
+  // never approved or was already cancelled, so it is not confirmed. Neither
+  // an error nor a success, and it gets a screen of its own.
+  const [heldPayment, setHeldPayment] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -90,11 +95,14 @@ export default function PaymentPage() {
 
   // On expiry: alert user and redirect. Server-side getBookings will mark
   // the booking cancelled on its next read (single source of truth).
+  // Not once the money has moved: the clock keeps running behind the screens
+  // that follow a payment, and a guest who has paid, or whose payment is
+  // being held, must not be told the booking was cancelled for not paying.
   useEffect(() => {
-    if (!hasExpired || !bookingData?.id) return;
+    if (!hasExpired || !bookingData?.id || paymentComplete || heldPayment) return;
     alert('Your payment window has expired and the booking has been cancelled. Please request availability again.');
     navigate(createPageUrl('Bookings'));
-  }, [hasExpired, bookingData?.id, navigate]);
+  }, [hasExpired, bookingData?.id, paymentComplete, heldPayment, navigate]);
 
   const formatRemaining = (ms) => {
     if (ms == null) return '';
@@ -196,13 +204,20 @@ export default function PaymentPage() {
       // stored price and the deadline — the same shape as the ride branch
       // above. The URL's total is no longer what the guest sees: the figure
       // on screen is the one the verifiers will check Paystack against.
-      const stayRes = await base44.functions.invoke('startStayPayment', { booking_id: bookingId });
-      if (!stayRes?.data?.success) {
-        setError(stayRes?.data?.error || 'This booking is not ready for payment.');
+      // Through invokeFn, as the ride branch is: a refusal is a 409, which a
+      // bare invoke throws into the catch below, and the guest was told to
+      // restart the booking instead of being told why.
+      const stayStart = await invokeFn('startStayPayment', { booking_id: bookingId });
+      if (!stayStart.ok) {
+        // We already have this guest's money and the team is deciding. That
+        // is not an error to be shown in red, and there is nothing to pay.
+        const held = heldPaymentFrom(stayStart);
+        if (held) setHeldPayment(held);
+        else setError(stayStart.error || 'This booking is not ready for payment.');
         setIsPageLoading(false);
         return;
       }
-      const stay = stayRes.data.data;
+      const stay = stayStart.data || {};
       if (stay.already_paid) {
         setError('This booking has already been paid for.');
         setIsPageLoading(false);
@@ -271,17 +286,29 @@ export default function PaymentPage() {
       if (bookingData.id && !bookingData.id.startsWith('temp_')) {
         // Paystack is the only processor — server verifies the transaction
         // (authoritative), notifies admin, and triggers the referral reward.
+        // Through invokeFn, so a refusal arrives with its code and its
+        // sentence instead of as a thrown "status code 409".
         const result = isRide
-          ? await base44.functions.invoke('verifyRidePayment', {
+          ? await invokeFn('verifyRidePayment', {
               ride_booking_id: bookingData.id,
               reference: transactionRef,
             })
-          : await base44.functions.invoke('verifyPaystackPayment', {
+          : await invokeFn('verifyPaystackPayment', {
               booking_id: bookingData.id,
               reference: transactionRef,
             });
-        if (!result?.data?.success) {
-          throw new Error(result?.data?.error || 'Payment verification failed');
+        // The money arrived, but for a booking that was never approved or
+        // was already cancelled, so the server is holding it for the admin
+        // to confirm or refund. Not a success: no milestones, no "Payment
+        // Successful", no ID step. Not a failure either: the payment is
+        // safe and there is nothing for the guest to chase.
+        const held = heldPaymentFrom(result, transactionRef);
+        if (held) {
+          setHeldPayment({ ...held, justPaid: true });
+          return;
+        }
+        if (!result.ok) {
+          throw new Error(result.error || 'Payment verification failed');
         }
         dlog('✅ Payment verified server-side');
         // Award client-driven loyalty milestones (5% + first-booking + 3-in-month).
@@ -419,6 +446,20 @@ export default function PaymentPage() {
     dlog('✅ Validation passed, processing payment...');
     setIsProcessing(true);
 
+    // Rides: pressing Pay used to ask the server nothing, so a guest blocked
+    // from rides after this page loaded could still pay. Ask again now, and
+    // open Paystack only on a yes. Asking twice is safe: the server stamps
+    // payment_started_at only once.
+    if (isRide) {
+      const decision = ridePayDecision(await invokeFn('startRidePayment', { ride_booking_id: rideBookingId }));
+      if (!decision.open) {
+        if (decision.error) setError(decision.error);
+        else alert(decision.retry);
+        setIsProcessing(false);
+        return;
+      }
+    }
+
     try {
       await handlePaystackPayment();
     } catch (error) {
@@ -442,6 +483,41 @@ export default function PaymentPage() {
           <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-blue-600 dark:text-blue-400" />
           <p className="text-slate-600 dark:text-slate-300 font-medium">Loading payment details...</p>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">Please wait, do not refresh the page</p>
+        </Card>
+      </div>
+    );
+  }
+
+  // The server has this guest's money but has not confirmed the booking.
+  // Reached two ways: on load, when a guest comes back to pay for a booking
+  // whose payment is already held, and straight after paying. Calm on
+  // purpose, with no Pay button, and ahead of the error card: whatever else
+  // went wrong on this page, the guest is told their money is safe first.
+  if (heldPayment) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
+          <CardContent className="p-8 text-center">
+            <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              {heldPayment.justPaid ? 'Payment received, booking not confirmed yet' : 'We have your payment'}
+            </h2>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">{heldPayment.sentence}</p>
+            {heldPayment.reference && (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3 mb-6">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Payment reference</p>
+                <p className="font-mono text-sm text-slate-700 dark:text-slate-200 break-all">{heldPayment.reference}</p>
+              </div>
+            )}
+            <Button
+              onClick={() => navigate(createPageUrl('Bookings'))}
+              className="w-full rounded-xl"
+            >
+              View my bookings
+            </Button>
+          </CardContent>
         </Card>
       </div>
     );
