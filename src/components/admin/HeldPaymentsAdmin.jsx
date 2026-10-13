@@ -9,7 +9,7 @@ import { Loader2, RefreshCw, PauseCircle, AlertCircle, AlertTriangle } from 'luc
 import { base44 } from '@/api/base44Client';
 import { invokeFn } from '@/lib/invokeFn';
 import { useToast } from '@/components/ui/use-toast';
-import { isPaymentHeld, heldAmount, holdReason, HOLD_REASON_TEXT } from '@/config/payments';
+import { isPaymentHeld, heldAmount, holdReason, HOLD_REASON_TEXT, confirmedNote, refundedNote } from '@/config/payments';
 
 // HeldPaymentsAdmin — stay payments the server is holding.
 //
@@ -91,7 +91,8 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
   // One path for both buttons. invokeFn never throws: a refusal arrives as
   // r.error, the server's own sentence. Answers with that sentence when the
   // server refused, and with null when the payment has left the list.
-  const settle = async (booking, fn, body, done) => {
+  // `noteOf` words what the server said became of the email to the guest.
+  const settle = async (booking, fn, body, done, noteOf) => {
     setWorkingId(booking.id);
     const r = await invokeFn(fn, body);
     setWorkingId(null);
@@ -101,7 +102,7 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
     // of date and goes with the reload. A sentence shown on the row would go
     // with it, which is why this one refusal is a toast.
     toast(r.ok
-      ? { title: done, description: `${who(booking)} · ${titleOf(booking)}` }
+      ? { title: done, description: `${who(booking)} · ${titleOf(booking)}. ${noteOf(r.data)}` }
       : { title: 'Already settled', description: r.error, variant: 'destructive' });
     await load(true);
     onSettled?.();
@@ -111,7 +112,7 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
   const confirmBooking = async (booking) => {
     setRefusals((prev) => ({ ...prev, [booking.id]: null }));
     const refused = await settle(
-      booking, 'verifyPaystackPayment', { booking_id: booking.id, confirm_held: true }, 'Booking confirmed',
+      booking, 'verifyPaystackPayment', { booking_id: booking.id, confirm_held: true }, 'Booking confirmed', confirmedNote,
     );
     if (refused) setRefusals((prev) => ({ ...prev, [booking.id]: refused }));
   };
@@ -120,7 +121,7 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
     if (!toRefund) return;
     const { booking } = toRefund;
     const refused = await settle(
-      booking, 'markHeldPaymentRefunded', { booking_id: booking.id }, 'Marked refunded',
+      booking, 'markHeldPaymentRefunded', { booking_id: booking.id }, 'Marked refunded', refundedNote,
     );
     setToRefund(refused ? { booking, refused } : null);
   };

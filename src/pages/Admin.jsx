@@ -7,7 +7,7 @@ import { base44 } from "@/api/base44Client";
 import { invokeFn } from '@/lib/invokeFn';
 import StayPricingFields from '@/components/admin/StayPricingFields';
 import { EMPTY_STAY_PRICING, stayPricingFromProperty, stayPricingToSave } from '@/config/stays';
-import { heldBookingFor, heldBadgeLabel } from '@/config/payments';
+import { heldBookingFor, heldBadgeLabel, confirmedNote } from '@/config/payments';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -329,7 +329,7 @@ export default function AdminPage() {
       if (result.data?.refund_owed) {
         alert('Rejected. This request had a payment on hold, so a refund is owed: refund it in Paystack, then press "Mark refunded" under Payments on hold.');
       } else if (result.data?.confirmed_with_payment) {
-        alert('Approved, and the booking is confirmed with the payment that was on hold. The guest has been sent their arrival details.');
+        alert(`Approved, and the booking is confirmed with the payment that was on hold. ${confirmedNote({ arrival_email: result.data.arrival_email })}`);
       }
     } catch (err) {
       console.error('Decision failed:', err);

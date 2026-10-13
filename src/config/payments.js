@@ -183,6 +183,25 @@ export function heldBookingFor(request, heldBookings) {
     && b.guest_email === request.user_email) || null;
 }
 
+// ── What the admin is told after settling a held payment ────────────────────
+// Only what is known to have happened. The server answers what became of the
+// email to the guest: it can fail, or wait on host details the property does
+// not have, and "the guest has been told" over a guest who was not is how
+// nobody finds out. `data` is the function's answer.
+export function confirmedNote(data) {
+  const d = data || {};
+  if (d.already_paid) return 'It was already paid. Nothing was changed.';
+  if (d.arrival_email === 'sent') return 'The guest has been sent their arrival details.';
+  if (d.arrival_email === 'waiting_for_host_details') return 'The arrival email is waiting for the host details. Answer the prompt in Telegram.';
+  return 'The arrival email could not be sent. Contact the guest yourself.';
+}
+
+export function refundedNote(data) {
+  const d = data || {};
+  if (d.already) return 'It was already marked refunded.';
+  return d.guest_emailed ? 'The guest has been emailed.' : 'The email to the guest could not be sent. Tell them yourself.';
+}
+
 // The badge on that request in the admin's pending list.
 export const heldBadgeLabel = (booking) => {
   const amount = heldAmount(booking);

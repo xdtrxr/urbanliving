@@ -85,6 +85,16 @@ async function payReferralReward(db: any, paid: any, what: string) {
         return { skipped: 'already_awarded' };
     }
 
+    // The guest's rows once more, now that the claim is ours. Two bookings
+    // of one guest confirmed a moment apart (a stay and a ride, say) each win
+    // the claim for their own booking; the one that gets here second finds
+    // the first one's stamp, and stands down.
+    const rowsNow = await db.Referral.filter({ referred_email: paid.guest_email }, 'created_date', 50);
+    if (rowsNow.some((row: any) => row.status === 'booking_completed')) {
+        await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        return { skipped: 'already_awarded' };
+    }
+
     // Read right before the credit: the balance is a number a withdrawal may
     // have changed since the first read.
     let before: any = null;
@@ -112,10 +122,12 @@ async function payReferralReward(db: any, paid: any, what: string) {
             }
         }
         if (!moved) {
+            // Emptied with '' and 0, not null: what the platform does with a
+            // null in a text or number field has not been seen.
             await db.Referral.update(referral.id, {
                 status: referral.status || 'signed_up',
-                booking_id: null,
-                amount_earned_ngn: null,
+                booking_id: '',
+                amount_earned_ngn: 0,
             }).catch(() => {});
             await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
         }

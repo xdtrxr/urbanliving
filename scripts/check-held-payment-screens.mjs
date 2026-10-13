@@ -20,7 +20,7 @@ import {
   HELD_LABEL, REFUNDED_LABEL, HOLD_REASON_TEXT,
   isPaymentHeld, isPaymentRefunded, heldAmount, stayStatusLabel, pendingCardState, stayCanBePaid,
   paymentAllowsCancel, waitsOnTeam, heldNotice, heldPaymentFrom, ridePayDecision, holdReason,
-  heldBookingFor, heldBadgeLabel,
+  heldBookingFor, heldBadgeLabel, confirmedNote, refundedNote,
 } from '../src/config/payments.js';
 import { fromResponse, fromThrown } from '../src/lib/fnResult.js';
 
@@ -283,6 +283,18 @@ if (!verify.includes('PAYMENT_HELD')) {
   check('markHeldPaymentRefunded exists', fs.existsSync(FN('markHeldPaymentRefunded')), true);
   check('a held booking is written as pending_confirmation', verify.includes('pending_confirmation'), true);
 }
+
+console.log('\n— what the admin is told after settling one —');
+// The server says what became of the email to the guest. The screen repeats
+// that, and never says the guest was told when the server did not say so.
+check('confirmed, arrival email sent', confirmedNote({ confirmed: true, arrival_email: 'sent' }), 'The guest has been sent their arrival details.');
+check('confirmed, the property has no host details', /waiting for the host details/.test(confirmedNote({ arrival_email: 'waiting_for_host_details' })), true);
+check('confirmed, the email failed: the admin is told to contact the guest', /could not be sent/.test(confirmedNote({ arrival_email: 'not_sent' })), true);
+check('an answer that does not say: the same, never "has been sent"', [confirmedNote({}), confirmedNote(null), confirmedNote(undefined)].every((t) => /could not be sent/.test(t)), true);
+check('it was already paid', /already paid/.test(confirmedNote({ already_paid: true, arrival_email: 'sent' })), true);
+check('refunded, guest emailed', refundedNote({ refunded: true, guest_emailed: true }), 'The guest has been emailed.');
+check('refunded, the email failed', [refundedNote({ refunded: true, guest_emailed: false }), refundedNote({}), refundedNote(null)].every((t) => /could not be sent/.test(t)), true);
+check('already marked refunded', /already marked refunded/.test(refundedNote({ already: true })), true);
 
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

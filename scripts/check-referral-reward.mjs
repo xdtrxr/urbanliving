@@ -165,12 +165,35 @@ check('a call that finds an older claim stands down', [r.status, r.data && r.dat
 check('and takes its own claim back', claimsFor('ngozi-stay').map((x) => x.id), ['claim-of-the-other-writer']);
 check('without stamping the row the other writer is about to stamp', rig.db.Referral.find((x) => x.id === 'ref-ngozi').status, 'signed_up');
 
+console.log('\n— two bookings of one guest, confirmed a moment apart —');
+// A stay and a ride, or two stays, paid for within the same second. Each wins
+// the claim for its own booking. The second request starts `gap` steps after
+// the first; every gap must come out as one reward.
+{
+  const outcomes = [];
+  for (let gap = 0; gap <= 12; gap += 1) {
+    const g = { id: `twin${gap}`, email: `twin${gap}@example.com`, role: 'user' };
+    const payer = { id: `payer${gap}`, email: `payer${gap}@example.com`, role: 'user', referral_balance_ngn: 0, loyalty_points: 0 };
+    rig.db.User.push(g, payer);
+    rig.db.Referral.push({ id: `ref-twin${gap}`, referrer_email: payer.email, referred_email: g.email, status: 'signed_up' });
+    rig.db.Booking.push(booking(`twin${gap}-a`, g, { status: 'confirmed', payment_status: 'paid', total_price: 100000 }), booking(`twin${gap}-b`, g, { status: 'confirmed', payment_status: 'paid', total_price: 300000 }));
+    const first = ask(`twin${gap}-a`);
+    for (let i = 0; i < gap; i += 1) await null;
+    const second = ask(`twin${gap}-b`);
+    await Promise.all([first, second]);
+    outcomes.push(balanceOf(payer.id));
+  }
+  // One reward is 5% of one of the two bookings: 5,000 or 15,000, never both.
+  check('whatever the gap, the referrer is paid for one of them, never for both', outcomes.every((paid) => paid === 5000 || paid === 15000), true);
+  check('(what was paid at each gap)', outcomes.filter((paid) => paid !== 5000 && paid !== 15000), []);
+}
+
 console.log('\n— the money fails to move —');
 rig.failOn = (entity, op, id) => entity === 'User' && op === 'update' && id === 'lara';
 r = await ask('obi-stay');
 rig.failOn = null;
 check('the call fails and the balance is untouched', [r.status, balanceOf('lara')], [500, 120800]);
-check('the referral row is as it was', [rig.db.Referral.find((x) => x.id === 'ref-obi').status, rig.db.Referral.find((x) => x.id === 'ref-obi').booking_id], ['signed_up', null]);
+check('the referral row is back to not rewarded, with no booking on it', [rig.db.Referral.find((x) => x.id === 'ref-obi').status, rig.db.Referral.find((x) => x.id === 'ref-obi').booking_id || null, rig.db.Referral.find((x) => x.id === 'ref-obi').amount_earned_ngn || 0], ['signed_up', null, 0]);
 check('and no claim is left standing in the way', claimsFor('obi-stay').length, 0);
 r = await ask('obi-stay');
 check('so a retry pays', [r.status, r.data && r.data.amount_awarded_ngn, balanceOf('lara')], [200, 59900, 180700]);

@@ -39,6 +39,10 @@ const ada = { id: 'ada', email: 'ada@example.com', role: 'user', referral_code: 
 const hauwa = { id: 'hauwa', email: 'hauwa@example.com', role: 'user', referral_code: 'ADA1' };
 const lara = { id: 'lara', email: 'lara@example.com', role: 'user', referral_code: 'lara1' };
 const tunde = { id: 'tunde', email: 'tunde@example.com', role: 'user', referral_code: 'TUNDE1' };
+// Nkem's code is stored in lower case, as some early rows are. Obi has copied
+// it onto his own profile in upper case, the form a link is turned into.
+const nkem = { id: 'nkem', email: 'nkem@example.com', role: 'user', referral_code: 'nkem1' };
+const obi = { id: 'obi', email: 'obi@example.com', role: 'user', referral_code: 'NKEM1' };
 const guest = (id) => ({ id, email: `${id}@example.com`, role: 'user' });
 const bola = guest('bola');
 const chidi = guest('chidi');
@@ -46,7 +50,7 @@ const dayo = guest('dayo');
 const eze = guest('eze');
 const funke = guest('funke');
 const root = { id: 'root', email: 'root@example.com', role: 'admin' };
-rig.db.User = [ada, hauwa, lara, tunde, bola, chidi, dayo, eze, funke, root].map((u) => ({ ...u }));
+rig.db.User = [ada, hauwa, lara, tunde, obi, nkem, bola, chidi, dayo, eze, funke, root].map((u) => ({ ...u }));
 rig.db.Referral = [];
 
 const use = (ref_code, user) => call(rig, attribute, { ref_code }, user);
@@ -65,6 +69,9 @@ r = await use('TUNDE1', tunde);
 check('your own code is refused', [r.status, r.code, rowsFor(tunde).length], [400, 'SELF_REFERRAL', 0]);
 r = await use('lara1', dayo);
 check('a code stored in lower case is still found', [r.status, r.data && r.data.referrer_email], [200, lara.email]);
+
+r = await use('nkem1', chidi);
+check('a code copied in another letter case does not take the owner\'s referral: it attributes nobody', [r.status, r.code, rowsFor(chidi).length], [409, 'AMBIGUOUS_CODE', 0]);
 
 console.log('\n— the code is text, not a pattern —');
 r = await use('.*', chidi);

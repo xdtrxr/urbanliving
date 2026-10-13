@@ -44,16 +44,19 @@ Deno.serve(async (req) => {
         // it unique, so anyone can copy a friend's code onto their own
         // profile. Every holder is looked at, never just the first one found:
         // "the first" let a copier take the referrals meant for the owner.
-        // Try uppercase first (the canonical storage form), then any case,
-        // for legacy lowercase rows. The code is the caller's text, so it is
-        // escaped before it goes into a pattern: ".*" matched every account.
-        let holders = await db.User.filter({ referral_code: refCodeRaw }, 'created_date', 5);
-        if (holders.length === 0) {
-            const literal = refCodeRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            holders = await db.User.filter({
-                referral_code: { $regex: `^${literal}$`, $options: 'i' },
-            }, 'created_date', 5);
-        }
+        // The upper-case form is how codes are stored now; some early rows
+        // are lower case. The code is the caller's text, so it is escaped
+        // before it goes into a pattern: ".*" matched every account.
+        // Both lookups are always made. Asking for the other spellings only
+        // when the upper-case one found nobody meant that a copier holding
+        // "LARA1" hid an owner whose code is stored as "lara1", and took her
+        // referrals.
+        const literal = refCodeRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const exact = await db.User.filter({ referral_code: refCodeRaw }, 'created_date', 5);
+        const anyCase = await db.User.filter({
+            referral_code: { $regex: `^${literal}$`, $options: 'i' },
+        }, 'created_date', 5);
+        const holders = [...exact, ...anyCase.filter((u: any) => !exact.some((e: any) => e.id === u.id))];
         if (holders.length === 0) {
             return new Response(JSON.stringify({
                 success: false,
