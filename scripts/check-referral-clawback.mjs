@@ -127,6 +127,15 @@ check('the cancellation still stands', [r.status, stay('s4').status], [200, 'can
 check('and the admin is told to check the balance', cancelNote().includes('could NOT be taken back'), true);
 check('nothing was half done: the balance, the referral row and no reversal record', [user('rita').referral_balance_ngn, referral('ref-gina').status, reversals('s4').length], [REWARD, 'booking_completed', 0]);
 
+console.log('\n— the write lands but reports a failure, and the balance was already empty —');
+rig.db.Booking.push(paidStay('s5', gina, { check_in: '2027-07-01', check_out: '2027-07-03' }));
+Object.assign(referral('ref-gina'), { status: 'booking_completed', booking_id: 's5', amount_earned_ngn: REWARD });
+Object.assign(user('rita'), { referral_balance_ngn: 0, loyalty_points: 500 });
+rig.failAfter = (entity, op, id) => entity === 'User' && op === 'update' && id === 'rita';
+r = await call(rig, cancelStay, { booking_id: 's5' }, admin);
+rig.failAfter = null;
+check('the points did move, so the record of it is kept, and it can never be taken twice', [r.status, user('rita').loyalty_points, reversals('s5').length], [200, 250, 1]);
+
 console.log('\n— the shared block is word for word the same —');
 const src = (name) => fs.readFileSync(path.join(ROOT, 'base44', 'functions', name, 'entry.ts'), 'utf8');
 const block = (text) => {

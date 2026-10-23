@@ -110,8 +110,12 @@ async function takeBackReferralReward(db: any, booking: any, what: string) {
         let moved = false;
         if (before) {
             try {
+                // Both fields the write touches: with nothing left to take
+                // from the balance, only the points tell whether it landed.
                 const now = await findReferrer();
-                moved = !now || (Number(now.referral_balance_ngn) || 0) !== (Number(before.referral_balance_ngn) || 0);
+                moved = !now
+                    || (Number(now.referral_balance_ngn) || 0) !== (Number(before.referral_balance_ngn) || 0)
+                    || (Number(now.loyalty_points) || 0) !== (Number(before.loyalty_points) || 0);
             } catch {
                 moved = true;
             }
