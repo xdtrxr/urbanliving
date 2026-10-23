@@ -306,6 +306,37 @@ check('the Admin page has no delete-all handler or button', /DeleteAll|Delete Al
 check('it deletes a property in one place only: the single-listing dialog', count(ADMIN_PAGE, 'Property.delete('), 1);
 check('and that one deletes the property the dialog names', /await base44\.entities\.Property\.delete\(propertyToDelete\.id\);/.test(ADMIN_PAGE), true);
 
+// ── What the Admin page shows each role ───────────────────────────────────
+console.log('\n— what the Admin page shows each role —');
+{
+  const { adminAccess, ROLES } = await import(new URL('../src/config/adminAccess.js', import.meta.url));
+  const a = adminAccess('admin');
+  const h = adminAccess('listing_helper');
+  const u = adminAccess('user');
+  check('an admin sees every tab, Users included, and may delete, see costing', [a.allowed, a.full, a.tabs.includes('users'), a.canDelete, a.canSeeCosting], [true, true, true, true, true]);
+  check('a listings helper sees properties and vehicles only', [h.allowed, h.full, h.tabs], [true, false, ['add-manual', 'manage-properties', 'vehicles']]);
+  check('and may not delete or see costing', [h.canDelete, h.canSeeCosting, h.menuLabel], [false, false, 'Listings']);
+  check('a guest, or a row with no role, may not open the page', [u.allowed, adminAccess(undefined).allowed, adminAccess('Admin').allowed], [false, false, false]);
+  check('the three roles, in the order the selects list them', ROLES, ['user', 'listing_helper', 'admin']);
+
+  // The page asks adminAccess; it does not compare roles itself.
+  check('the Admin page decides access with adminAccess', /setIsAuthorized\(can\.allowed\)/.test(ADMIN_PAGE) && !/userData\.role === 'admin'/.test(ADMIN_PAGE), true);
+  {
+    const gate = ADMIN_PAGE.indexOf('if (!adminAccess(user?.role).full) return undefined;');
+    const props = ADMIN_PAGE.lastIndexOf('loadProperties();', gate);
+    const firstAdminLoad = ADMIN_PAGE.indexOf('loadSupportTickets();', gate);
+    check('a helper loads nothing but properties: the gate sits between them', [gate > 0, props > 0 && props < gate, firstAdminLoad > gate && firstAdminLoad - gate < 200], [true, true, true]);
+  }
+  check('the delete button is offered only where delete is allowed', /\{access\.canDelete && \(\s*<Button\s*onClick=\{\(\) => handleDeleteClick\(property\)\}/.test(ADMIN_PAGE), true);
+  check('the Users tab is shown only where the role has it', /access\.tabs\.includes\('users'\)/.test(ADMIN_PAGE) && /<UsersAdmin currentUser=\{user\} \/>/.test(ADMIN_PAGE), true);
+  const LAYOUT = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'Layout.jsx'), 'utf8');
+  check('the menu entry follows adminAccess too', /adminAccess\(user\?\.role\)\.menuLabel/.test(LAYOUT), true);
+  const VEHICLES = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'components', 'admin', 'VehiclesAdmin.jsx'), 'utf8');
+  check('a helper\'s vehicle save leaves the approval out', /if \(!canApprove\) delete payload\.admin_approved;/.test(VEHICLES), true);
+  const vehicleSchema = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'base44', 'entities', 'Vehicle.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, ''));
+  check('and only an admin may write Vehicle.admin_approved, which starts false', [vehicleSchema.properties.admin_approved.rls, vehicleSchema.properties.admin_approved.default], [{ write: { user_condition: { role: 'admin' } } }, false]);
+}
+
 // ── Result ─────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

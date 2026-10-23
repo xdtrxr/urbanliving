@@ -55,6 +55,8 @@ import LeadsAdmin from '@/components/admin/LeadsAdmin';
 import ConfirmedBookingsAdmin from '@/components/admin/ConfirmedBookingsAdmin';
 import HeldPaymentsAdmin from '@/components/admin/HeldPaymentsAdmin';
 import VehiclesAdmin from '@/components/admin/VehiclesAdmin';
+import UsersAdmin from '@/components/admin/UsersAdmin';
+import { adminAccess } from '@/config/adminAccess';
 import WithdrawalsAdmin from '@/components/admin/WithdrawalsAdmin';
 import PlatformStatsAdmin from '@/components/admin/PlatformStatsAdmin';
 import RidesAdmin from '@/components/admin/RidesAdmin';
@@ -238,14 +240,21 @@ export default function AdminPage() {
   const [heldBookings, setHeldBookings] = useState([]);
   const [heldReloadKey, setHeldReloadKey] = useState(0);
 
+  // What this account may see here: everything (admin), or properties and
+  // vehicles only (listings helper). See src/config/adminAccess.js.
+  const access = adminAccess(user?.role);
+
   useEffect(() => {
     checkAdminAccess();
   }, []);
 
   useEffect(() => {
     if (isAuthorized) {
-        loadSupportTickets();
         loadProperties();
+        // A listings helper works on properties and vehicles only; nothing
+        // else is fetched for them (the access rules would refuse it anyway).
+        if (!adminAccess(user?.role).full) return undefined;
+        loadSupportTickets();
         loadPlatformStats();
         loadPendingRequests();
         loadInFlightBookings();
@@ -364,12 +373,10 @@ export default function AdminPage() {
       const userData = await User.me();
       setUser(userData);
 
-      // Check if user has admin role
-      if (userData.role === 'admin') {
-        setIsAuthorized(true);
-      } else {
-        setIsAuthorized(false);
-      }
+      // An admin, or a listings helper (properties and vehicles only).
+      const can = adminAccess(userData.role);
+      setIsAuthorized(can.allowed);
+      if (can.allowed) setActiveAdminTab(can.defaultTab);
     } catch (error) {
       console.error('Error checking admin access:', error);
       setIsAuthorized(false);
@@ -797,6 +804,7 @@ export default function AdminPage() {
           <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-lg">Manage property data via manual entry or live data fetch</p>
         </div>
 
+        {access.full && (<>
         {/* Platform Overview */}
         <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-6 sm:mb-8">
           <CardHeader>
@@ -1140,61 +1148,89 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
+        </>)}
+
         {/* NEW: Tabs for Manual Entry, Property Management, Vehicles, and Leads */}
         {/* The mobile grid wraps the tab strip onto two rows; default
             space-y-6 is then too tight against the panel underneath, so
             mobile gets an explicit pt on each TabsContent for breathing
             room. */}
         <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 sm:space-y-8 mb-8">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-1 h-auto p-1">
-            <TabsTrigger value="overview">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="add-manual">
-              <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">{editingPropertyId ? 'Edit Property' : 'Add Property'}</span>
-              <span className="sm:hidden">Property</span>
-            </TabsTrigger>
-            <TabsTrigger value="manage-properties">
-              <List className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Manage Properties</span>
-              <span className="sm:hidden">Manage</span>
-            </TabsTrigger>
-            <TabsTrigger value="vehicles">
-              <Car className="w-4 h-4 mr-2" />
-              Vehicles
-            </TabsTrigger>
-            <TabsTrigger value="rides">
-              <Car className="w-4 h-4 mr-2" />
-              Rides
-            </TabsTrigger>
-            <TabsTrigger value="leads">
-              <Users className="w-4 h-4 mr-2" />
-              Leads
-            </TabsTrigger>
-            <TabsTrigger value="withdrawals">
-              <Wallet className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Withdrawals</span>
-              <span className="sm:hidden">Payouts</span>
-            </TabsTrigger>
+          <TabsList className={`grid w-full gap-2 sm:gap-1 h-auto p-1 ${access.full ? 'grid-cols-2 md:grid-cols-4 lg:grid-cols-8' : 'grid-cols-3'}`}>
+            {access.tabs.includes('overview') && (
+              <TabsTrigger value="overview">
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Overview
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('add-manual') && (
+              <TabsTrigger value="add-manual">
+                <Plus className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">{editingPropertyId ? 'Edit Property' : 'Add Property'}</span>
+                <span className="sm:hidden">Property</span>
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('manage-properties') && (
+              <TabsTrigger value="manage-properties">
+                <List className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Manage Properties</span>
+                <span className="sm:hidden">Manage</span>
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('vehicles') && (
+              <TabsTrigger value="vehicles">
+                <Car className="w-4 h-4 mr-2" />
+                Vehicles
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('rides') && (
+              <TabsTrigger value="rides">
+                <Car className="w-4 h-4 mr-2" />
+                Rides
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('leads') && (
+              <TabsTrigger value="leads">
+                <Users className="w-4 h-4 mr-2" />
+                Leads
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('users') && (
+              <TabsTrigger value="users">
+                <Shield className="w-4 h-4 mr-2" />
+                Users
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('withdrawals') && (
+              <TabsTrigger value="withdrawals">
+                <Wallet className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Withdrawals</span>
+                <span className="sm:hidden">Payouts</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
+          {access.tabs.includes('overview') && (
           <TabsContent value="overview" className="mt-6 sm:mt-4">
             <PlatformStatsAdmin />
           </TabsContent>
+          )}
 
+          {access.tabs.includes('rides') && (
           <TabsContent value="rides" className="mt-6 sm:mt-4">
             <RidesAdmin />
           </TabsContent>
+          )}
 
           <TabsContent value="vehicles" className="mt-6 sm:mt-4">
-            <VehiclesAdmin />
+            <VehiclesAdmin canDelete={access.canDelete} canSeeCosting={access.canSeeCosting} canApprove={access.full} />
           </TabsContent>
 
+          {access.tabs.includes('withdrawals') && (
           <TabsContent value="withdrawals" className="mt-6 sm:mt-4">
             <WithdrawalsAdmin />
           </TabsContent>
+          )}
 
           <TabsContent value="add-manual" className="mt-6 sm:mt-4">
             <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
@@ -1678,6 +1714,7 @@ export default function AdminPage() {
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
+                                {access.canDelete && (
                                 <Button
                                   onClick={() => handleDeleteClick(property)}
                                   variant="outline"
@@ -1693,6 +1730,7 @@ export default function AdminPage() {
                                     </>
                                   )}
                                 </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1705,9 +1743,16 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
 
+          {access.tabs.includes('leads') && (
           <TabsContent value="leads" className="mt-6 sm:mt-4">
             <LeadsAdmin />
           </TabsContent>
+          )}
+          {access.tabs.includes('users') && (
+          <TabsContent value="users" className="mt-6 sm:mt-4">
+            <UsersAdmin currentUser={user} />
+          </TabsContent>
+          )}
         </Tabs>
 
         {/* Delete Confirmation Dialog */}
@@ -1747,6 +1792,7 @@ export default function AdminPage() {
           </AlertDialogContent>
         </AlertDialog>
 
+        {access.full && (<>
         {/* Support Inbox Section */}
         <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
           <CardHeader>
@@ -1841,6 +1887,8 @@ export default function AdminPage() {
             </div>
           </CardContent>
         </Card>
+
+        </>)}
 
         {/* Removed File Upload, Sample CSV, Data Preview, Import Results */}
         {/* The global isProcessing modal is also removed */}

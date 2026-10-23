@@ -138,7 +138,14 @@
     "admin_approved": {
       "type": "boolean",
       "default": false,
-      "description": "Admin must explicitly approve a vehicle before it appears in the browse list"
+      "description": "Admin must explicitly approve a vehicle before it appears in the browse list. Only an admin may write it: a listings helper can add and edit vehicles (the create and update rules let them), and a vehicle a helper adds waits here, unapproved, for an admin.",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "rating": {
       "type": "number",
