@@ -14,6 +14,9 @@ import {
 import RideReportDialog from '@/components/rides/RideReportDialog';
 import { base44 } from '@/api/base44Client';
 import { durationLabel } from '@/config/rides';
+import {
+  isPaymentHeld, heldNotice, ridePaymentBadge, rideAwaitsPayment, rideCanBeCancelled, rideWaitsOnTeam,
+} from '@/config/payments';
 import { createPageUrl } from '@/utils';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -25,8 +28,40 @@ import { useToast } from '@/components/ui/use-toast';
 //
 // Buckets come from getRideBookings — the client never derives them, so this
 // cannot drift from what the server and admin believe.
+//
+// A ride whose payment the server is holding (paid for before it was
+// approved, after it was cancelled or its time ran out, or after the guest
+// was blocked from rides) keeps whatever bucket its status gives it. What the
+// card says about money, and whether it offers Pay or Cancel, is decided in
+// src/config/payments.js, as it is for a stay.
 
 const ngn = (n) => `₦${(Number(n) || 0).toLocaleString()}`;
+
+// The money badge, by ridePaymentBadge's key. Held is blue, as on a stay:
+// the money is safe and the team has it, which is neither good news (green)
+// nor a warning.
+const MONEY_BADGE_STYLE = {
+  paid: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-0',
+  payment_held: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900',
+  refunded: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700',
+};
+
+// What a guest reads on a ride whose payment is being held. The same box and
+// the same promise as a stay's, in ride words.
+function HeldRideNotice({ ride }) {
+  const notice = heldNotice(ride, 'ride');
+  return (
+    <div className="mt-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl p-3">
+      <div className="flex items-start gap-2">
+        <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">{notice.title}</p>
+          <p className="text-xs text-blue-700 dark:text-blue-300">{notice.body}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const fmtWhen = (iso) => {
   try {
@@ -195,7 +230,11 @@ const SuggestedVehicles = React.memo(function SuggestedVehicles({ ids }) {
 // Module scope so the 30s refresh does not remount these and reset the
 // countdown — the same reason the stay cards live at module scope.
 const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling, onReport }) {
-  const awaitingPayment = ride.bucket !== 'cancelled' && !!ride.approved_at && ride.payment_status !== 'paid';
+  // Not for a held ride: an approved ride is held when its guest was blocked
+  // after the approval, and its guest must never be offered a second payment.
+  const awaitingPayment = rideAwaitsPayment(ride);
+  const held = isPaymentHeld(ride);
+  const moneyBadge = ridePaymentBadge(ride);
 
   const [deadlineMs] = useState(() => {
     const t = Date.parse(ride.payment_deadline || '');
@@ -235,10 +274,8 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling, onRe
               {ride.booking_reference && (
                 <Badge variant="outline" className="text-xs font-mono">{ride.booking_reference}</Badge>
               )}
-              {ride.payment_status === 'paid' && (
-                <Badge className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 border-0">
-                  ✓ Paid
-                </Badge>
+              {moneyBadge && (
+                <Badge className={MONEY_BADGE_STYLE[moneyBadge.key]}>{moneyBadge.label}</Badge>
               )}
               {ride.linked_property_booking_id && (
                 <Badge variant="outline" className="text-xs">Added to your stay</Badge>
@@ -301,6 +338,8 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling, onRe
             </p>
           ) : null}
 
+          {held && <HeldRideNotice ride={ride} />}
+
           {awaitingPayment && (
             <div className="mt-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl p-3">
               <p className="text-sm font-semibold text-amber-900 dark:text-amber-200 mb-2">
@@ -326,7 +365,8 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling, onRe
             />
           )}
 
-          {ride.bucket === 'pending-approval' && (
+          {/* "Nothing has been charged" is untrue once a payment is held. */}
+          {ride.bucket === 'pending-approval' && !held && (
             <div className="mt-3 flex items-start gap-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
               <Loader2 className="w-4 h-4 text-amber-500 dark:text-amber-400 animate-spin flex-shrink-0 mt-0.5" />
               <p className="text-xs text-slate-600 dark:text-slate-300">
@@ -346,7 +386,9 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling, onRe
             </p>
           )}
 
-          {ride.payment_status !== 'paid' && ride.bucket !== 'cancelled' && ride.bucket !== 'past' && (
+          {/* Only while no money has moved. A held payment is already with
+              the team, and cancelRideBooking refuses it. */}
+          {rideCanBeCancelled(ride) && (
             <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-800">
               <Button
                 variant="outline" size="sm" disabled={cancelling}
@@ -364,9 +406,12 @@ const RideCard = React.memo(function RideCard({ ride, onCancel, cancelling, onRe
   );
 });
 
+// A held ride is filed under "Awaiting confirmation" whatever its bucket: the
+// guest has paid and the team is deciding. Left to its bucket it would read
+// as "Needs your attention", or sit folded away under Past & cancelled.
 const GROUPS = [
-  { key: 'action', label: 'Needs your attention', match: (r) => r.bucket !== 'cancelled' && r.approved_at && r.payment_status !== 'paid' },
-  { key: 'pending-approval', label: 'Awaiting confirmation', match: (r) => r.bucket === 'pending-approval' },
+  { key: 'action', label: 'Needs your attention', match: rideAwaitsPayment },
+  { key: 'pending-approval', label: 'Awaiting confirmation', match: rideWaitsOnTeam },
   { key: 'current', label: 'Happening now', match: (r) => r.bucket === 'current' },
   { key: 'upcoming', label: 'Upcoming', match: (r) => r.bucket === 'upcoming' && r.payment_status === 'paid' },
 ];
@@ -397,10 +442,10 @@ export default function RideBookingsSection() {
 
   useEffect(() => {
     load();
-    // Refresh while anything is still awaiting a decision. Self-terminating
-    // so an idle tab is not polling forever.
+    // Refresh while anything is still awaiting a decision: a request, or a
+    // payment on hold. Self-terminating so an idle tab is not polling forever.
     const id = setInterval(() => {
-      const live = ridesRef.current.some((r) => r.bucket === 'pending-approval');
+      const live = ridesRef.current.some(rideWaitsOnTeam);
       if (live) load(true);
     }, 30000);
     return () => clearInterval(id);

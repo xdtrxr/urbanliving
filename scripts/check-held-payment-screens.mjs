@@ -285,6 +285,29 @@ check('the notice is heldNotice\'s words', /const notice = heldNotice\(booking\)
 check('Cancel is refused first by paymentAllowsCancel', /if \(!paymentAllowsCancel\(booking\)\) return false;/.test(BOOKINGS), true);
 check('the page keeps polling by waitsOnTeam', /bookingsRef\.current\.some\(waitsOnTeam\)/.test(BOOKINGS), true);
 
+console.log('\n— My Bookings, rides (source) —');
+const RIDES = read('src/components/booking/RideBookingsSection.jsx');
+check('Pay on a ride hangs on rideAwaitsPayment', /const awaitingPayment = rideAwaitsPayment\(ride\);/.test(RIDES), true);
+check('and is the one link to the payment page, inside that block',
+  RIDES.split("createPageUrl('PaymentPage')").length - 1 === 1
+  && /\{awaitingPayment && \(\s*<div[^>]*>[\s\S]{0,300}?createPageUrl\('PaymentPage'\)/.test(RIDES), true);
+check('the money badge is ridePaymentBadge\'s, and no card decides "Paid" for itself',
+  /const moneyBadge = ridePaymentBadge\(ride\);/.test(RIDES) && /\{moneyBadge\.label\}/.test(RIDES) && !RIDES.includes('✓ Paid'), true);
+const rideBadgeStyles = (sliceOf(RIDES, 'const MONEY_BADGE_STYLE = {', '\n};').match(/^ {2}(\w+):/gm) || []).map((k) => k.trim().replace(':', ''));
+check('every money badge it can ask for has a colour',
+  ['pending_confirmation', 'refunded', 'paid'].map((s) => ridePaymentBadge({ id: `r-badge-${s}`, payment_status: s }).key).filter((k) => !rideBadgeStyles.includes(k)), []);
+check('a held ride shows the notice, in ride words', /\{held && <HeldRideNotice ride=\{ride\} \/>\}/.test(RIDES) && /const notice = heldNotice\(ride, 'ride'\);/.test(RIDES), true);
+check('"Nothing has been charged" is never said over a held ride', /\{ride\.bucket === 'pending-approval' && !held && \(/.test(RIDES), true);
+check('Cancel hangs on rideCanBeCancelled, and there is one Cancel button',
+  /\{rideCanBeCancelled\(ride\) && \(\s*<div[^>]*>\s*<Button[\s\S]{0,700}?Cancel ride\s*<\/Button>/.test(RIDES) && RIDES.split('Cancel ride').length - 1 === 1, true);
+const groupsSrc = sliceOf(RIDES, 'const GROUPS = [', '];');
+check('a ride that needs paying is filed by rideAwaitsPayment, one waiting on the team by rideWaitsOnTeam',
+  /key: 'action',[^\n]*match: rideAwaitsPayment \}/.test(groupsSrc) && /key: 'pending-approval',[^\n]*match: rideWaitsOnTeam \}/.test(groupsSrc), true);
+check('a held ride is filed before Happening now and Upcoming can take it',
+  groupsSrc.indexOf("key: 'pending-approval'") !== -1 && groupsSrc.indexOf("key: 'pending-approval'") < groupsSrc.indexOf("key: 'current'")
+  && groupsSrc.indexOf("key: 'pending-approval'") < groupsSrc.indexOf("key: 'upcoming'"), true);
+check('the list keeps asking while a ride waits on the team', /ridesRef\.current\.some\(rideWaitsOnTeam\)/.test(RIDES), true);
+
 console.log('\n— admin (source) —');
 const CARD = read('src/components/admin/HeldPaymentsAdmin.jsx');
 check('the list is read with an explicit sort and limit',
