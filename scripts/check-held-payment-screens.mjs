@@ -222,12 +222,48 @@ check('a held payment leaves before milestones are awarded and before "Payment S
   heldAt !== -1 && /if \(held\) \{[\s\S]*?return;/.test(onSuccess.slice(heldAt))
   && heldAt < onSuccess.indexOf('awardBookingMilestones(') && heldAt < onSuccess.indexOf('setPaymentComplete(true)'), true);
 check('the "received but could not verify" message is still there for the rest', /could not verify it automatically/.test(onSuccess), true);
-const heldScreen = sliceOf(PAGE, 'if (heldPayment) {', 'if (error) {');
+const heldScreen = sliceOf(PAGE, 'if (heldPayment) {', 'if (refundedPayment) {');
 check('the held screen has both headings, the sentence, the reference and one way out',
   ['Payment received, booking not confirmed yet', 'We have your payment', '{heldPayment.sentence}', '{heldPayment.reference}', 'View my bookings'].filter((t) => !heldScreen.includes(t)), []);
 check('and nothing to pay with, no "Payment Successful", no ID step', /handlePayment|Payment Successful|IdUploadGate/.test(heldScreen), false);
 check('it comes ahead of the error card', PAGE.indexOf('if (heldPayment) {') !== -1 && PAGE.indexOf('if (heldPayment) {') < PAGE.indexOf('if (error) {'), true);
-check('the expiry alert does not fire over a payment that was made or is held', /if \(!hasExpired \|\| !bookingData\?\.id \|\| paymentComplete \|\| heldPayment\) return;/.test(PAGE), true);
+check('the expiry alert does not fire over a payment that was made, is held or was refunded',
+  /if \(!hasExpired \|\| !bookingData\?\.id \|\| paymentComplete \|\| heldPayment \|\| refundedPayment\) return;/.test(PAGE), true);
+
+console.log('\n— the payment page, rides (source) —');
+const rideLoad = sliceOf(PAGE, "const start = await invokeFn('startRidePayment'", 'setBookingData({');
+const loadRefusal = sliceOf(rideLoad, 'if (!start.ok) {', 'return;');
+check('opening the page for a held ride: the held screen, read in ride words',
+  loadRefusal.includes("heldPaymentFrom(start, '', 'ride')") && /if \(held\) setHeldPayment\(held\);/.test(loadRefusal), true);
+check('for a refunded one: the refunded screen',
+  loadRefusal.includes("refundedPaymentFrom(start, '', 'ride')") && /else if \(refunded\) setRefundedPayment\(refunded\);/.test(loadRefusal), true);
+check('both are looked for before the error card is',
+  loadRefusal.indexOf('setHeldPayment(') !== -1 && loadRefusal.indexOf('setRefundedPayment(') !== -1
+  && loadRefusal.indexOf('setHeldPayment(') < loadRefusal.indexOf('setError(') && loadRefusal.indexOf('setRefundedPayment(') < loadRefusal.indexOf('setError('), true);
+const payRefusal = sliceOf(onPay, 'if (!decision.open) {', 'return;');
+check('pressing Pay on a ride held since the page loaded: the held screen, not Paystack',
+  /if \(decision\.held\) setHeldPayment\(decision\.held\);/.test(payRefusal), true);
+check('on one refunded since: the refunded screen',
+  /else if \(decision\.refunded\) setRefundedPayment\(decision\.refunded\);/.test(payRefusal), true);
+check('ahead of the error card and the retry', payRefusal.indexOf('decision.held') !== -1 && payRefusal.indexOf('decision.held') < payRefusal.indexOf('decision.error')
+  && payRefusal.indexOf('decision.refunded') < payRefusal.indexOf('decision.error'), true);
+check('after paying, a ride\'s hold is read in ride words', onSuccess.includes("heldPaymentFrom(result, transactionRef, isRide ? 'ride' : 'stay')"), true);
+const refundedAt = onSuccess.indexOf("isRide ? refundedPaymentFrom(result, transactionRef, 'ride') : null");
+check('and a ride\'s refunded reference leaves before milestones and before "Payment Successful"',
+  refundedAt !== -1 && /if \(refunded\) \{\s*setRefundedPayment\(refunded\);\s*return;/.test(onSuccess.slice(refundedAt))
+  && refundedAt < onSuccess.indexOf('awardBookingMilestones(') && refundedAt < onSuccess.indexOf('setPaymentComplete(true)'), true);
+check('a stay\'s refunded reference is left as it was: the "could not verify" message',
+  /isRide \? refundedPaymentFrom/.test(onSuccess) && !/:\s*refundedPaymentFrom\(/.test(onSuccess), true);
+check('only the ride paths ever show the refunded screen',
+  PAGE.split('setRefundedPayment(').length - 1 === 3 && !sliceOf(PAGE, 'const stayStart = await', 'const bookingInfo').includes('refunded'), true);
+check('the held screen names a ride a ride', heldScreen.includes("isRide ? 'Payment received, ride not confirmed yet' : 'Payment received, booking not confirmed yet'"), true);
+const refundedScreen = sliceOf(PAGE, 'if (refundedPayment) {', 'if (error) {');
+check('the refunded screen has the sentence, the reference, and a way to book again or see the bookings',
+  ['Payment refunded', '{refundedPayment.sentence}', '{refundedPayment.reference}', "createPageUrl('PlanTrip')", "createPageUrl('Bookings')"].filter((t) => !refundedScreen.includes(t)), []);
+check('and nothing to pay with, no "Payment Successful", no ID step', /handlePayment|Payment Successful|IdUploadGate|Pay ₦/.test(refundedScreen), false);
+const order = ['if (heldPayment) {', 'if (refundedPayment) {', 'if (error) {', 'if (!bookingData) {', 'if (paymentComplete) {'].map((t) => PAGE.indexOf(t));
+check('held, then refunded, ahead of the error card, the missing booking, success and the Pay button',
+  order.every((at) => at !== -1) && order.every((at, i) => i === 0 || order[i - 1] < at), true);
 
 console.log('\n— My Bookings (source) —');
 const BOOKINGS = read('src/pages/Bookings.jsx');
