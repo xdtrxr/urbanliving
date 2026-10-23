@@ -11,7 +11,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 
-SITE="https://urbanstays.io"
+SITE="${SITE:-https://urbanstays.io}"  # SITE=<a checkpoint preview url> to check a build before publishing
 API="$VITE_BASE44_BACKEND_URL/api/apps/$VITE_BASE44_APP_ID"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 pass=0; fail=0

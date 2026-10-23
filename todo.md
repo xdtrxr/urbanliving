@@ -5,9 +5,9 @@ The numbered items 1 to 6 further down date from 2026-07-29 and have not been re
 
 ---
 
-# Built on 2026-10-23, waiting to go live
+# Live since 2026-10-23
 
-Branch `fix/finish-line`, local, not pushed. The owner's "lets finish and complete this project" (2026-10-23), with the four decisions below taken as recommended. `npm run check` runs 17 scripts (about 2,350 assertions) and passes; the build passes; the changed screens pass the linter. Not yet opened in a browser.
+Published on 2026-10-23 at 17:25 WAT on the owner's "make it live": commit `f4d423d` (the merge of `fix/finish-line`, with Base44's own package bump from `40b240e` merged in), checkpoint `6adb89df6304811fa2418031`. The preview and the live site passed `scripts/check-deploy.sh` 89 of 89, and the entity changes below were read back live. Built on the owner's "lets finish and complete this project" (2026-10-23), with the four decisions below taken as recommended. `npm run check` runs 17 scripts (about 2,350 assertions) and passes; the build passes; the changed screens pass the linter. Not yet opened in a browser.
 
 **Backend functions run again.** They were blocked (HTTP 402) from at least 2026-10-10 until between 10-17 and 10-21. On 2026-10-23 `scripts/check-deploy.sh` passed 82 of 82, and real guests made eight stay requests that morning (all approved, none paid: six never opened the payment page, two opened it and stopped). Uploads work again too.
 
@@ -19,10 +19,10 @@ Branch `fix/finish-line`, local, not pushed. The owner's "lets finish and comple
 - **"Delete ALL properties" is gone.**
 - **A signed-out caller is refused, not answered with a 500**, in all 47 functions that ask who is calling (the platform's `auth.me()` throws when there is no session).
 
-**To go live**
-1. Merge into `main` and push. The pull applies these entity changes by itself: `RideBooking.payment_status` gains `pending_confirmation`, `RideBooking.payment_extra_refs` (new), `User.role` gains `listing_helper`, Property and Vehicle create/update allow `listing_helper`, and `Vehicle.admin_approved` becomes admin-only to write. None of them is stricter for anything the live client does today (only admins write vehicles now).
-2. Smoke-test the preview, publish, `scripts/check-deploy.sh`.
-3. One real payment of each kind (see "Not yet tried on the live platform").
+**What going live did**
+1. Merged and pushed. The pull applied these entity changes by itself: `RideBooking.payment_status` gains `pending_confirmation`, `RideBooking.payment_extra_refs` (new), `User.role` gains `listing_helper`, Property and Vehicle create/update allow `listing_helper`, and `Vehicle.admin_approved` becomes admin-only to write. None of them is stricter for anything the live client does today (only admins write vehicles now).
+2. **The pull also deployed the function code**, before the publish: the new `manageUsers` answered on the live backend while the old screens were still published. So server and screens are out of step for the minutes between pull and publish; publish straight after the pull.
+3. **Still to do: one real payment of each kind** (see "Not yet tried on the live platform").
 
 ---
 
