@@ -38,7 +38,83 @@ async function getOrNull(entity: any, id: string) {
 // calendar day in that zone, matching how the reminders cron reads it.
 const WAT_OFFSET = '+01:00';
 
-async function notifyAdmin(booking: any, propertyTitle: string, byAdmin: boolean) {
+// ── Taking a referral reward back ────────────────────────────────────────────
+// LOCKSTEP: from this line to "end of taking a referral reward back" the text
+// is the same in cancelBooking and cancelRideBooking;
+// scripts/check-referral-clawback.mjs fails if the two copies differ.
+//
+// A referral reward is paid the moment a referred guest pays
+// (payReferralReward, in the payment functions). Decided on 2026-10-23: when
+// an admin cancels a paid stay or ride, which is how a refund starts, the
+// reward that booking earned is taken back. The referrer's balance goes down
+// by it, but never below zero: what they have already withdrawn is a
+// shortfall, written on the record and told to the admin, for a person to
+// settle. The guest's referral row goes back to 'signed_up', so a later
+// booking that is kept can still earn the one reward.
+//
+// Claim first, as the reward does: the reversal's own loyalty row (negative
+// points, same booking id) is written, and only the oldest such row goes on.
+// The reward's own row is left in place, so the cancelled booking can never
+// earn again (payReferralReward lets only the oldest claim pay).
+//
+// Answers { skipped } or { amount_ngn, taken_ngn, shortfall_ngn }. Throws if
+// a write fails part-way; the caller tells the admin to check the balance.
+const REFERRER_LOYALTY_BONUS = 250;
+
+async function takeBackReferralReward(db: any, booking: any, what: string) {
+    const oldestFirst = (a: any, b: any) => String(a.created_date || '').localeCompare(String(b.created_date || ''))
+        || String(a.id).localeCompare(String(b.id));
+    const rows = await db.Referral.filter({ booking_id: booking.id }, 'created_date', 5);
+    const referral = rows.find((row: any) => row.status === 'booking_completed');
+    if (!referral) return { skipped: 'no_reward' };
+    const amountNGN = Math.max(0, Math.round(Number(referral.amount_earned_ngn) || 0));
+
+    const claim = await db.LoyaltyTransaction.create({
+        user_email: referral.referrer_email,
+        points_earned: -REFERRER_LOYALTY_BONUS,
+        transaction_type: 'referral',
+        booking_id: booking.id,
+        description: `REFERRAL_REVERSED — ${booking.guest_email}'s ${what} was cancelled by an admin`,
+    });
+    const reversals = (await db.LoyaltyTransaction.filter({ transaction_type: 'referral', booking_id: booking.id }, 'created_date', 50))
+        .filter((row: any) => (Number(row.points_earned) || 0) < 0);
+    if (reversals.slice().sort(oldestFirst)[0].id !== claim.id) {
+        await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        return { skipped: 'already_taken_back' };
+    }
+
+    // The row that says the reward stands, then the money.
+    await db.Referral.update(referral.id, { status: 'signed_up', booking_id: '', amount_earned_ngn: 0 });
+    let taken = 0;
+    const referrer = (await db.User.filter({ email: referral.referrer_email }, 'created_date', 1))[0];
+    if (referrer) {
+        const balance = Math.max(0, Number(referrer.referral_balance_ngn) || 0);
+        taken = Math.min(balance, amountNGN);
+        await db.User.update(referrer.id, {
+            referral_balance_ngn: balance - taken,
+            loyalty_points: Math.max(0, (Number(referrer.loyalty_points) || 0) - REFERRER_LOYALTY_BONUS),
+        });
+    }
+    const shortfall = amountNGN - taken;
+    if (shortfall > 0) {
+        await db.LoyaltyTransaction.update(claim.id, {
+            description: `${claim.description || 'REFERRAL_REVERSED'}; ₦${shortfall.toLocaleString()} could not be taken back (already withdrawn)`,
+        }).catch(() => {});
+    }
+    return { amount_ngn: amountNGN, taken_ngn: taken, shortfall_ngn: shortfall };
+}
+
+// One line for the admin's cancellation message.
+function rewardLine(result: any, failed: boolean) {
+    if (failed) return '\n• Referral reward: could NOT be taken back. Check the referrer\'s balance in Admin.';
+    if (!result || result.skipped) return '';
+    return result.shortfall_ngn > 0
+        ? `\n• Referral reward: ₦${result.taken_ngn.toLocaleString()} taken back; ₦${result.shortfall_ngn.toLocaleString()} was already withdrawn and could not be`
+        : `\n• Referral reward taken back: ₦${result.taken_ngn.toLocaleString()}`;
+}
+// ── end of taking a referral reward back ─────────────────────────────────────
+
+async function notifyAdmin(booking: any, propertyTitle: string, byAdmin: boolean, extraLine = '') {
     const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
     const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
     if (!token || !chatId) return;
@@ -53,7 +129,8 @@ async function notifyAdmin(booking: any, propertyTitle: string, byAdmin: boolean
         // be confirmed). Cancelling does not send it back.
         (booking.payment_status === 'pending_confirmation'
             ? `\n\n⚠️ A payment is ON HOLD for this booking. Refund it in Paystack, then mark it refunded under Admin, Payments on hold.`
-            : '');
+            : '') +
+        extraLine;
     try {
         await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: 'POST',
@@ -137,6 +214,19 @@ Deno.serve(async (req) => {
             cancel_reason: isAdmin && booking.guest_email !== user.email ? 'other' : 'user_cancelled',
         });
 
+        // A paid stay cancelled by an admin is on its way to a refund: the
+        // referral reward it earned is taken back. Only an admin can get here
+        // with a paid stay. A failure must not undo the cancellation.
+        let extraLine = '';
+        if (booking.payment_status === 'paid') {
+            try {
+                extraLine = rewardLine(await takeBackReferralReward(base44.asServiceRole.entities, booking, 'stay'), false);
+            } catch (err) {
+                console.error(`Referral reward for stay ${booking_id} could not be taken back:`, err);
+                extraLine = rewardLine(null, true);
+            }
+        }
+
         let propertyTitle = booking.property_id;
         try {
             const property = await getOrNull(base44.asServiceRole.entities.Property, booking.property_id);
@@ -148,6 +238,7 @@ Deno.serve(async (req) => {
             { ...booking, ...(typeof reason === 'string' && reason.trim() ? { reason: reason.trim() } : {}) },
             propertyTitle,
             isAdmin && booking.guest_email !== user.email,
+            extraLine,
         );
 
         return json({ success: true, data: { booking_id, status: 'cancelled' } });

@@ -158,10 +158,12 @@
       "type": "string",
       "enum": [
         "unpaid",
+        "pending_confirmation",
         "paid",
         "refunded"
       ],
-      "default": "unpaid"
+      "default": "unpaid",
+      "description": "pending_confirmation: a payment arrived for a ride it may not confirm (never approved, cancelled, expired, or the guest is blocked from rides) and waits for the admin to confirm the ride with it or refund it. See ridePaymentVerdict in verifyRidePayment."
     },
     "approved_at": {
       "type": "string",
@@ -212,6 +214,13 @@
     "transaction_hash": {
       "type": "string",
       "description": "Paystack transaction reference for idempotency"
+    },
+    "payment_extra_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Paystack references of further payments that arrived while this ride already held one (payment_status pending_confirmation). The first reference stays in transaction_hash. Kept so each extra payment is announced to the admin once, and so they can all be found and refunded."
     },
     "driver_id": {
       "type": "string",

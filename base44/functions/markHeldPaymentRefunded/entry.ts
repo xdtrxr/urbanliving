@@ -8,7 +8,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 // records the second: the admin has refunded it by hand, and says so here.
 // Nothing in the app moves money back by itself.
 //
-// Body: { booking_id }
+// Body: { booking_id } for a stay, { ride_booking_id } for a ride (rides are
+// held the same way since 2026-10-23, see ridePaymentVerdict in
+// verifyRidePayment).
 // Who may: an admin session, or another function carrying
 // INTERNAL_FUNCTION_SECRET (the Telegram button has no session). Refused when
 // the secret is not configured.
@@ -18,6 +20,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
 const APP_BASE_URL = Deno.env.get('APP_BASE_URL') || 'https://urbanstays.io';
 const bookingLink = (bookingId: string) => `${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(bookingId)}#booking-${encodeURIComponent(bookingId)}`;
+const rideLink = (rideId: string) => `${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(rideId)}#ride-${encodeURIComponent(rideId)}`;
 
 // An id goes into the URL of the row it fetches, so only a plain id is ever
 // used. Lockstep copy, see createWithdrawalRequest.
@@ -52,6 +55,64 @@ async function tryPush(sdk: any, opts: Record<string, unknown>) {
     }
 }
 
+// The ride twin of the stay path in the handler below. A ride has no request
+// row to close: the decision lives on the ride itself.
+async function refundHeldRide(base44: any, rideId: string, who: string, respond: (status: number, payload: Record<string, unknown>) => Response) {
+    const db = base44.asServiceRole.entities;
+    const ride = isId(rideId) ? await getOrNull(db.RideBooking, rideId) : null;
+    if (!ride) return respond(404, { success: false, error: 'Ride booking not found' });
+    if (ride.payment_status === 'refunded') {
+        return respond(200, { success: true, data: { ride_booking_id: ride.id, refunded: true, already: true } });
+    }
+    if (ride.payment_status !== 'pending_confirmation') {
+        return respond(409, {
+            success: false,
+            error: ride.payment_status === 'paid'
+                ? 'This ride is confirmed and paid, so there is no payment on hold to mark refunded.'
+                : 'Nothing is on hold for this ride.',
+            code: 'NOT_HELD',
+        });
+    }
+
+    const amountNGN = Number(ride.total_price) || 0;
+    const reference = String(ride.transaction_hash || '');
+    // A ride still waiting to be decided is closed with it: its payment has
+    // gone back, so it must stop holding its car.
+    await db.RideBooking.update(ride.id, ride.status === 'pending'
+        ? { payment_status: 'refunded', status: 'cancelled', cancel_reason: 'admin_rejected' }
+        : { payment_status: 'refunded' });
+
+    let pickup = String(ride.start_at || '');
+    try {
+        pickup = new Date(ride.start_at).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' });
+    } catch { /* the stored value is used */ }
+    let guestEmailed = false;
+    try {
+        await base44.integrations.Core.SendEmail({
+            to: ride.guest_email,
+            subject: 'Your payment has been refunded',
+            body: `Hi ${ride.guest_name || 'there'},\n\n`
+                + `We have refunded your payment of ₦${amountNGN.toLocaleString()} (reference ${reference}) for the ${ride.vehicle_name || 'ride'} on ${pickup}. `
+                + 'The ride was not confirmed. It can take a few working days for the money to show in your account.\n\n'
+                + `Your ride: ${rideLink(ride.id)}\n\n— Urban Stays`,
+            from_name: 'Urban Stays',
+        });
+        guestEmailed = true;
+    } catch (err) {
+        console.warn('Ride refund email to the guest failed (non-fatal):', err);
+    }
+    await tryPush(base44, {
+        user_email: ride.guest_email,
+        title: 'Payment refunded',
+        body: `₦${amountNGN.toLocaleString()} is on its way back to you. It can take a few working days.`,
+        url: `/Bookings#ride-${ride.id}`,
+        tag: `ride-held-${ride.id}`,
+    });
+
+    console.log(`Payment ${reference} for ride ${ride.id} marked refunded by ${who}`);
+    return respond(200, { success: true, data: { ride_booking_id: ride.id, refunded: true, reference, amount_ngn: amountNGN, guest_emailed: guestEmailed } });
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -83,6 +144,10 @@ Deno.serve(async (req) => {
         }
         if (!allowed) {
             return respond(403, { success: false, error: 'Only an admin can mark a payment refunded.', code: 'ADMIN_ONLY' });
+        }
+
+        if (body.ride_booking_id !== undefined) {
+            return await refundHeldRide(base44, String(body.ride_booking_id || '').trim(), who, respond);
         }
 
         const db = base44.asServiceRole.entities;

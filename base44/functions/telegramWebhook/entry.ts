@@ -341,6 +341,20 @@ Deno.serve(async (req) => {
         // Branch 2d: the two buttons on a "payment on hold" alert.
         // MUST sit before the generic split('_') below, like the ride branch:
         // that split would read "held_confirm_<id>" as action="held".
+        // The same two buttons on a held RIDE payment carry "held_ride_".
+        const heldRideMatch = callbackData.match(/^held_ride_(confirm|refund)_(.+)$/);
+        if (heldRideMatch) {
+            return await handleHeldPayment({
+                base44,
+                confirm: heldRideMatch[1] === 'confirm',
+                bookingId: heldRideMatch[2],
+                ride: true,
+                callbackQueryId: callbackQuery.id,
+                chatId,
+                messageId,
+                originalText: callbackQuery.message.text || '',
+            });
+        }
         const heldMatch = callbackData.match(/^held_(confirm|refund)_(.+)$/);
         if (heldMatch) {
             return await handleHeldPayment({
@@ -593,6 +607,8 @@ interface HeldPaymentParams {
     base44: any;
     confirm: boolean;
     bookingId: string;
+    // A ride rather than a stay: bookingId is then the ride's id.
+    ride?: boolean;
     callbackQueryId: string;
     chatId: number;
     messageId: number;
@@ -604,9 +620,13 @@ async function handleHeldPayment(p: HeldPaymentParams): Promise<Response> {
     const internal_secret = Deno.env.get('INTERNAL_FUNCTION_SECRET') || '';
     let said: any = {};
     try {
-        const answer = p.confirm
-            ? await p.base44.functions.invoke('verifyPaystackPayment', { booking_id: p.bookingId, confirm_held: true, internal_secret })
-            : await p.base44.functions.invoke('markHeldPaymentRefunded', { booking_id: p.bookingId, internal_secret });
+        const answer = p.ride
+            ? (p.confirm
+                ? await p.base44.functions.invoke('verifyRidePayment', { ride_booking_id: p.bookingId, confirm_held: true, internal_secret })
+                : await p.base44.functions.invoke('markHeldPaymentRefunded', { ride_booking_id: p.bookingId, internal_secret }))
+            : (p.confirm
+                ? await p.base44.functions.invoke('verifyPaystackPayment', { booking_id: p.bookingId, confirm_held: true, internal_secret })
+                : await p.base44.functions.invoke('markHeldPaymentRefunded', { booking_id: p.bookingId, internal_secret }));
         said = (answer && answer.data && answer.data.data) || {};
     } catch (err) {
         const said = (err as any)?.response?.data;
@@ -622,7 +642,13 @@ async function handleHeldPayment(p: HeldPaymentParams): Promise<Response> {
     // or wait on host details the property does not have, and "the guest has
     // been told" over a guest who was not is how nobody finds out.
     let note: string;
-    if (p.confirm) {
+    if (p.confirm && p.ride) {
+        note = said.already_paid
+            ? 'This ride was already paid. Nothing was changed.'
+            : said.guest_emailed
+                ? 'CONFIRMED with this payment. The guest has been emailed. Assign a driver next.'
+                : 'CONFIRMED with this payment. The email to the guest could NOT be sent: contact the guest yourself. Assign a driver next.';
+    } else if (p.confirm) {
         note = said.already_paid
             ? 'This booking was already paid. Nothing was changed.'
             : said.arrival_email === 'sent'
@@ -639,7 +665,9 @@ async function handleHeldPayment(p: HeldPaymentParams): Promise<Response> {
     }
     // Editing the text also takes the two buttons off, so it cannot be pressed twice.
     await telegramPlain('editMessageText', { chat_id: p.chatId, message_id: p.messageId, text: `${p.originalText}\n\n${note}` });
-    await answerCallbackQuery(p.callbackQueryId, p.confirm ? (said.already_paid ? 'Already paid.' : 'Booking confirmed.') : 'Marked refunded.');
+    await answerCallbackQuery(p.callbackQueryId, p.confirm
+        ? (said.already_paid ? 'Already paid.' : (p.ride ? 'Ride confirmed.' : 'Booking confirmed.'))
+        : 'Marked refunded.');
     return done();
 }
 
@@ -1001,6 +1029,76 @@ Have a smooth trip — see you soon.
 }
 
 
+// ── Held ride decisions ──────────────────────────────────────────────────────
+// LOCKSTEP: from this line to "end of held ride decisions" the text is the
+// same in decideRideBooking and telegramWebhook; scripts/check-ride-payment.mjs
+// fails if the two copies differ.
+//
+// A guest can pay before anyone has approved the ride; the payment is then
+// held (see ridePaymentVerdict in verifyRidePayment). Approving such a ride
+// confirms it with that payment, through verifyRidePayment's confirm path,
+// the one way a held payment becomes a confirmed ride, and at the price that
+// was paid. Declining it cancels the ride and leaves a refund owed, which the
+// admin is reminded of here.
+
+function rideHasHeldPayment(ride: any) {
+    return !!ride && ride.payment_status === 'pending_confirmation' && !!ride.transaction_hash;
+}
+
+// { ok: true, guestEmailed } or { ok: false, code, error }.
+async function confirmRideWithHeldPayment(sdk: any, rideId: string) {
+    try {
+        const answer = await sdk.functions.invoke('verifyRidePayment', {
+            ride_booking_id: rideId,
+            confirm_held: true,
+            internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '',
+        });
+        const data = (answer && answer.data && answer.data.data) || {};
+        return { ok: true, guestEmailed: !!data.guest_emailed };
+    } catch (err) {
+        const said = (err as any)?.response?.data;
+        if (said && said.code === 'ADMIN_ONLY') {
+            return {
+                ok: false,
+                code: 'ADMIN_ONLY',
+                error: 'The payment on hold could not be confirmed from here. Open Admin and press "Confirm" on the Payments on hold card.',
+            };
+        }
+        return {
+            ok: false,
+            code: (said && said.code) || 'HELD_NOT_CONFIRMED',
+            error: (said && said.error) || 'The payment on hold could not be confirmed. Nothing was changed.',
+        };
+    }
+}
+
+// Plain text, with the button that records the refund once it has been made.
+async function tellAdminRideRefundOwed(ride: any) {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
+    if (!token || !chatId) {
+        console.error(`Ride ${ride.id} was declined with a payment on hold and Telegram is not configured: nobody was reminded of the refund.`);
+        return;
+    }
+    const amountNGN = Number(ride.total_price) || 0;
+    try {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: `REFUND OWED. Ride ${ride.id} was declined, and the guest's payment of ₦${amountNGN.toLocaleString()} (ref ${ride.transaction_hash}) is still on hold.\n`
+                    + `Guest: ${ride.guest_name || 'no name'} (${ride.guest_email})\n\n`
+                    + 'Refund it in Paystack, then press Mark refunded.',
+                reply_markup: { inline_keyboard: [[{ text: 'Mark refunded', callback_data: `held_ride_refund_${ride.id}` }]] },
+            }),
+        });
+    } catch (err) {
+        console.error(`Refund-owed reminder failed for ride ${ride.id}:`, err);
+    }
+}
+// ── end of held ride decisions ───────────────────────────────────────────────
+
 // === Ride decision handling ===
 // Twin of base44/functions/decideRideBooking/entry.ts, which serves the
 // in-app Admin panel. Base44 function dirs are isolated and cannot share a
@@ -1045,6 +1143,25 @@ async function handleRideDecision(p: RideDecisionParams): Promise<Response> {
     }
     if (ride.status !== 'pending' || ride.approved_at) {
         await answerCallbackQuery(p.callbackQueryId, 'This ride has already been actioned.');
+        return jsonResp({ ok: true });
+    }
+
+    // The guest paid before this decision (see the held ride decisions
+    // block). Approving confirms the ride with that money, which also tells
+    // the guest; declining goes on below and leaves a refund owed.
+    const heldPayment = rideHasHeldPayment(ride);
+    if (heldPayment && p.approve) {
+        const confirmed: any = await confirmRideWithHeldPayment(p.base44, ride.id);
+        if (!confirmed.ok) {
+            await answerCallbackQuery(p.callbackQueryId, 'Not done. See the message below.');
+            await telegramPlain('sendMessage', { chat_id: p.chatId, text: `Not done: ${confirmed.error}` });
+            return jsonResp({ ok: true });
+        }
+        const note = confirmed.guestEmailed
+            ? 'APPROVED and CONFIRMED with the payment that was on hold. The guest has been emailed.'
+            : 'APPROVED and CONFIRMED with the payment that was on hold. The email to the guest could NOT be sent: tell them yourself.';
+        await telegramPlain('sendMessage', { chat_id: p.chatId, text: `Ride ${ride.id}: ${note}` });
+        await answerCallbackQuery(p.callbackQueryId, 'Ride confirmed with the payment on hold.');
         return jsonResp({ ok: true });
     }
 
@@ -1111,6 +1228,8 @@ async function handleRideDecision(p: RideDecisionParams): Promise<Response> {
             : `Hi ${ride.guest_name || 'there'},\n\n` +
               `Unfortunately ${ride.vehicle_name} isn't available for ${when}.\n\n` +
               `🔖 Status: CANCELLED\n` +
+              // The guest paid before the decision; the money goes back.
+              (heldPayment ? `💸 Your payment of ₦${(Number(ride.total_price) || 0).toLocaleString()} will be refunded in full. It can take a few working days to reach you once it is sent.\n` : '') +
               `🔎 Browse other vehicles: ${APP_BASE_URL}/PlanTrip\n\n` +
               `— Urban Stays`;
         await p.base44.integrations.Core.SendEmail({
@@ -1125,12 +1244,15 @@ async function handleRideDecision(p: RideDecisionParams): Promise<Response> {
         console.warn('Ride decision email failed (non-fatal):', err);
     }
 
+    if (heldPayment && !p.approve) await tellAdminRideRefundOwed(ride);
     await tryPush(p.base44, {
         user_email: ride.guest_email,
         title: p.approve ? '✅ Ride approved' : '❌ Ride unavailable',
         body: p.approve
             ? `${ride.vehicle_name} is held for you — tap to pay and lock it in.`
-            : `${ride.vehicle_name} isn't free for that window. Tap to try another.`,
+            : heldPayment
+                ? `${ride.vehicle_name} isn't free for that window. Your payment will be refunded in full.`
+                : `${ride.vehicle_name} isn't free for that window. Tap to try another.`,
         url: p.approve ? `/Bookings#ride-${ride.id}` : '/PlanTrip',
         tag: `ride-decision-${ride.id}`,
     });

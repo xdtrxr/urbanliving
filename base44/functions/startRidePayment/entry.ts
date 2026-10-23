@@ -86,6 +86,25 @@ Deno.serve(async (req) => {
         if (ride.payment_status === 'paid') {
             return json({ success: true, data: { already_paid: true, ride_booking_id } });
         }
+        // A payment is already on hold for this ride (it arrived before the
+        // ride could be confirmed). Asked before anything else: once the
+        // admin approves, nothing below would stop a second payment.
+        if (ride.payment_status === 'pending_confirmation') {
+            const amountNGN = Number(ride.total_price) || 0;
+            return json({
+                success: false,
+                error: `We already have your payment of ₦${amountNGN.toLocaleString()} for this ride. It is waiting for our team to confirm it. Please do not pay again.`,
+                code: 'PAYMENT_HELD',
+                data: { ride_booking_id, amount_ngn: amountNGN, hold_reason: 'holding' },
+            }, 409);
+        }
+        if (ride.payment_status === 'refunded') {
+            return json({
+                success: false,
+                error: 'The payment for this ride was refunded. Please make a new request if you still want a car.',
+                code: 'PAYMENT_REFUNDED',
+            }, 409);
+        }
         // Blocked since this ride was requested. Read fresh under the service
         // role, not from the session, so a block takes effect at once. Admin
         // opening the page on a guest's behalf is not stopped.
