@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import DriversAdmin from '@/components/admin/DriversAdmin';
 import DriverEarningsAdmin from '@/components/admin/DriverEarningsAdmin';
 import RideReportsAdmin from '@/components/admin/RideReportsAdmin';
+import { isPaymentHeld, heldBadgeLabel, rideHeldDecisionNote } from '@/config/payments';
 
 // RidesAdmin — the in-app twin of the Telegram approve/reject keyboard.
 //
@@ -615,7 +616,12 @@ function RideRequestsPanel() {
         price_adjustment_reason,
         suggested_vehicle_ids,
       });
-      if (res?.data?.success) {
+      // A ride the guest had already paid for (the payment was held): the
+      // decision confirmed it with that money, or left a refund owed.
+      const heldNote = res?.data?.success ? rideHeldDecisionNote(res.data.data) : null;
+      if (heldNote) {
+        toast(heldNote);
+      } else if (res?.data?.success) {
         toast({
           title: approve ? 'Availability confirmed' : 'Marked unavailable',
           description: approve
@@ -751,6 +757,11 @@ function RideRequestsPanel() {
                             Paid
                           </Badge>
                         )}
+                        {isPaymentHeld(r) && (
+                          <Badge className="bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-0">
+                            {heldBadgeLabel(r)}
+                          </Badge>
+                        )}
                         {r.booking_reference && (
                           <Badge variant="outline" className="text-xs font-mono">{r.booking_reference}</Badge>
                         )}
@@ -862,7 +873,7 @@ function RideRequestsPanel() {
                           className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
                         >
                           {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
-                          Approve
+                          {isPaymentHeld(r) ? 'Approve and confirm payment' : 'Approve'}
                         </Button>
                         <Button
                           size="sm" variant="outline" disabled={busy}

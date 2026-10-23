@@ -300,7 +300,8 @@ export function ridePaymentBadge(ride) {
 // no payment taken, held or refunded for it. A held ride can be approved and
 // standing (its guest was blocked after the approval), and must not be
 // offered a second payment.
-export const rideAwaitsPayment = (ride) => !!ride && ride.bucket !== 'cancelled' && !!ride.approved_at && !moneyMoved(ride);
+export const rideAwaitsPayment = (ride) => !!ride && ride.bucket !== 'cancelled' && ride.bucket !== 'past'
+  && ride.status !== 'cancelled' && !!ride.approved_at && !moneyMoved(ride);
 
 // Whether the guest is offered Cancel on a ride: no money has moved for it,
 // and it is neither over nor cancelled already. cancelRideBooking refuses a

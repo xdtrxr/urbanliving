@@ -314,13 +314,15 @@ check('the list is read with an explicit sort and limit',
   /entities\.Booking\.filter\(\{ payment_status: 'pending_confirmation' \}, SORT, LIMIT\)/.test(CARD)
   && /const SORT = '-created_date';/.test(CARD) && /const LIMIT = \d+;/.test(CARD), true);
 check('Confirm booking is verifyPaystackPayment with confirm_held', /'verifyPaystackPayment', \{ booking_id: booking\.id, confirm_held: true \}/.test(CARD), true);
-check('Mark refunded is markHeldPaymentRefunded', /'markHeldPaymentRefunded', \{ booking_id: booking\.id \}/.test(CARD), true);
+check('Mark refunded is markHeldPaymentRefunded, for a stay and for a ride', /'markHeldPaymentRefunded', ride \? \{ ride_booking_id: booking\.id \} : \{ booking_id: booking\.id \}/.test(CARD), true);
+check('Confirm ride is verifyRidePayment with confirm_held', /'verifyRidePayment', \{ ride_booking_id: ride\.id, confirm_held: true \}/.test(CARD), true);
+check('the card lists held rides as well as stays', /base44\.entities\.RideBooking\.filter\(\{ payment_status: 'pending_confirmation' \}/.test(CARD), true);
 check('both go through invokeFn, so a refusal is the server\'s sentence', /const r = await invokeFn\(fn, body\);/.test(CARD) && !/functions\.invoke\(/.test(CARD), true);
 check('the second step says when it may be pressed', CARD.includes('Only after you have refunded it in Paystack.'), true);
 check('the Mark refunded button on a row only opens that step', /onClick=\{\(\) => setToRefund\(\{ booking: b, refused: null \}\)\}/.test(CARD), true);
 check('the refund is recorded from inside the dialog and nowhere else',
   CARD.split('onClick={markRefunded}').length - 1 === 1 && CARD.indexOf('onClick={markRefunded}') > CARD.indexOf('<Dialog open='), true);
-check('the card shows nothing at all when nothing is held', /if \(bookings\.length === 0 && !toRefund\) return null;/.test(CARD), true);
+check('the card shows nothing at all when nothing is held', /const count = bookings\.length \+ rides\.length;/.test(CARD) && /if \(count === 0 && !toRefund\) return null;/.test(CARD), true);
 check('why it is held comes from holdReason', /HOLD_REASON_TEXT\[holdReason\(b\)\]/.test(CARD), true);
 const ADMIN = read('src/pages/Admin.jsx');
 check('the card is mounted on the admin page, with the properties it has loaded', /<HeldPaymentsAdmin\s+properties=\{properties\}/.test(ADMIN), true);
