@@ -23,6 +23,7 @@ import { useDriverProfile } from "@/lib/useDriverProfile";
 import { LogIn } from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import BrandMark from "@/components/brand/BrandMark";
+import { adminAccess } from '@/config/adminAccess';
 
 // The two things UrbanStays is for come first, so the menu says what the app
 // does before anything else: a place to stay, and a car with a driver. The
@@ -140,14 +141,16 @@ export default function Layout({ children, currentPageName }) {
     },
   ] : [];
 
-  // Add admin link if user is admin
+  // The Admin page for an admin, or for a listings helper as "Listings"
+  // (properties and vehicles only). See src/config/adminAccess.js.
   const menuItems = [...driverItems, ...navigationItems];
-  if (user?.role === 'admin') {
+  const adminMenu = adminAccess(user?.role).menuLabel;
+  if (adminMenu) {
     menuItems.push({
-      title: "Admin Panel",
+      title: adminMenu,
       url: createPageUrl("Admin"),
       icon: Settings,
-      description: "Manage property data"
+      description: user?.role === 'admin' ? "Manage property data" : "Add and edit properties and vehicles"
     });
   }
 

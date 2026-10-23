@@ -36,7 +36,7 @@ async function internalOrAdmin(sdk: any, body: any): Promise<{ ok: true } | { ok
     const presented = typeof body?.internal_secret === 'string' ? body.internal_secret : '';
     if (presented && safeEqual(presented, INTERNAL_SECRET)) return { ok: true };
     try {
-        const user = await sdk.auth.me();
+        const user = await sdk.auth.me().catch(() => null);
         if (user?.role === 'admin') return { ok: true };
     } catch { /* no session on this request */ }
     return { ok: false, status: 401, error: 'Unauthorized' };

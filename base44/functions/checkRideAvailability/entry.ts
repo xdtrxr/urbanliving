@@ -312,7 +312,7 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
+        const user = await base44.auth.me().catch(() => null);
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
 
         // Read the account fresh under the service role rather than trusting
@@ -430,6 +430,15 @@ Deno.serve(async (req) => {
         const held = await fetchAll(base44.asServiceRole.entities.RideBooking, {
             vehicle_id, status: { $in: ['pending', 'confirmed', 'completed'] },
         });
+        // A ride whose payment is on hold for the admin keeps its window too,
+        // even one cancelled or expired: the admin may still confirm it with
+        // that money, and that must not land on top of a newer booking.
+        const onHold = await fetchAll(base44.asServiceRole.entities.RideBooking, {
+            vehicle_id, payment_status: 'pending_confirmation',
+        });
+        for (const extra of onHold) {
+            if (!held.some((row: any) => row.id === extra.id)) held.push(extra);
+        }
         for (const other of held) {
             const ow = busyWindow(other, rideWindow(other));
             if (!ow) continue;

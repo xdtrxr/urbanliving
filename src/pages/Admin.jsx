@@ -55,6 +55,8 @@ import LeadsAdmin from '@/components/admin/LeadsAdmin';
 import ConfirmedBookingsAdmin from '@/components/admin/ConfirmedBookingsAdmin';
 import HeldPaymentsAdmin from '@/components/admin/HeldPaymentsAdmin';
 import VehiclesAdmin from '@/components/admin/VehiclesAdmin';
+import UsersAdmin from '@/components/admin/UsersAdmin';
+import { adminAccess } from '@/config/adminAccess';
 import WithdrawalsAdmin from '@/components/admin/WithdrawalsAdmin';
 import PlatformStatsAdmin from '@/components/admin/PlatformStatsAdmin';
 import RidesAdmin from '@/components/admin/RidesAdmin';
@@ -202,9 +204,6 @@ export default function AdminPage() {
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [isUploadingVideos, setIsUploadingVideos] = useState(false);
 
-  // New state for "Delete All Properties"
-  const [isDeleting, setIsDeleting] = useState(false);
-  
   // Removed old activeTab for data ingestion
   // const [activeTab, setActiveTab] = useState('data-ingestion');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -241,14 +240,21 @@ export default function AdminPage() {
   const [heldBookings, setHeldBookings] = useState([]);
   const [heldReloadKey, setHeldReloadKey] = useState(0);
 
+  // What this account may see here: everything (admin), or properties and
+  // vehicles only (listings helper). See src/config/adminAccess.js.
+  const access = adminAccess(user?.role);
+
   useEffect(() => {
     checkAdminAccess();
   }, []);
 
   useEffect(() => {
     if (isAuthorized) {
-        loadSupportTickets();
         loadProperties();
+        // A listings helper works on properties and vehicles only; nothing
+        // else is fetched for them (the access rules would refuse it anyway).
+        if (!adminAccess(user?.role).full) return undefined;
+        loadSupportTickets();
         loadPlatformStats();
         loadPendingRequests();
         loadInFlightBookings();
@@ -367,12 +373,10 @@ export default function AdminPage() {
       const userData = await User.me();
       setUser(userData);
 
-      // Check if user has admin role
-      if (userData.role === 'admin') {
-        setIsAuthorized(true);
-      } else {
-        setIsAuthorized(false);
-      }
+      // An admin, or a listings helper (properties and vehicles only).
+      const can = adminAccess(userData.role);
+      setIsAuthorized(can.allowed);
+      if (can.allowed) setActiveAdminTab(can.defaultTab);
     } catch (error) {
       console.error('Error checking admin access:', error);
       setIsAuthorized(false);
@@ -699,40 +703,6 @@ export default function AdminPage() {
     }));
   };
 
-  const handleDeleteAllProperties = async () => {
-    const confirmation = window.confirm(
-      'DANGER: Are you sure you want to permanently delete ALL properties from the database? This action cannot be undone.'
-    );
-
-    if (confirmation) {
-      setIsDeleting(true);
-      try {
-        // Fetch all properties from the frontend
-        const allProperties = await base44.entities.Property.list();
-        const count = allProperties.length;
-
-        if (count === 0) {
-          alert("There are no properties to delete.");
-          setIsDeleting(false);
-          return;
-        }
-
-        // Loop through and delete each property one by one
-        for (const prop of allProperties) {
-          await base44.entities.Property.delete(prop.id);
-        }
-
-        alert(`Success! ${count} properties have been deleted.`);
-        await loadProperties(); // Refresh the property list
-      } catch (error) {
-        console.error('Failed to delete properties:', error);
-        alert(`Error: ${error.message}`);
-      } finally {
-        setIsDeleting(false);
-      }
-    }
-  };
-
   // NEW: MCP Data Fetch Function
   const handleMCPFetch = async () => {
     if (!mcpCity.trim()) {
@@ -834,6 +804,7 @@ export default function AdminPage() {
           <p className="text-slate-600 dark:text-slate-300 text-sm sm:text-lg">Manage property data via manual entry or live data fetch</p>
         </div>
 
+        {access.full && (<>
         {/* Platform Overview */}
         <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-6 sm:mb-8">
           <CardHeader>
@@ -1177,61 +1148,89 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
+        </>)}
+
         {/* NEW: Tabs for Manual Entry, Property Management, Vehicles, and Leads */}
         {/* The mobile grid wraps the tab strip onto two rows; default
             space-y-6 is then too tight against the panel underneath, so
             mobile gets an explicit pt on each TabsContent for breathing
             room. */}
         <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="space-y-6 sm:space-y-8 mb-8">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-1 h-auto p-1">
-            <TabsTrigger value="overview">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="add-manual">
-              <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">{editingPropertyId ? 'Edit Property' : 'Add Property'}</span>
-              <span className="sm:hidden">Property</span>
-            </TabsTrigger>
-            <TabsTrigger value="manage-properties">
-              <List className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Manage Properties</span>
-              <span className="sm:hidden">Manage</span>
-            </TabsTrigger>
-            <TabsTrigger value="vehicles">
-              <Car className="w-4 h-4 mr-2" />
-              Vehicles
-            </TabsTrigger>
-            <TabsTrigger value="rides">
-              <Car className="w-4 h-4 mr-2" />
-              Rides
-            </TabsTrigger>
-            <TabsTrigger value="leads">
-              <Users className="w-4 h-4 mr-2" />
-              Leads
-            </TabsTrigger>
-            <TabsTrigger value="withdrawals">
-              <Wallet className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Withdrawals</span>
-              <span className="sm:hidden">Payouts</span>
-            </TabsTrigger>
+          <TabsList className={`grid w-full gap-2 sm:gap-1 h-auto p-1 ${access.full ? 'grid-cols-2 md:grid-cols-4 lg:grid-cols-8' : 'grid-cols-3'}`}>
+            {access.tabs.includes('overview') && (
+              <TabsTrigger value="overview">
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Overview
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('add-manual') && (
+              <TabsTrigger value="add-manual">
+                <Plus className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">{editingPropertyId ? 'Edit Property' : 'Add Property'}</span>
+                <span className="sm:hidden">Property</span>
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('manage-properties') && (
+              <TabsTrigger value="manage-properties">
+                <List className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Manage Properties</span>
+                <span className="sm:hidden">Manage</span>
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('vehicles') && (
+              <TabsTrigger value="vehicles">
+                <Car className="w-4 h-4 mr-2" />
+                Vehicles
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('rides') && (
+              <TabsTrigger value="rides">
+                <Car className="w-4 h-4 mr-2" />
+                Rides
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('leads') && (
+              <TabsTrigger value="leads">
+                <Users className="w-4 h-4 mr-2" />
+                Leads
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('users') && (
+              <TabsTrigger value="users">
+                <Shield className="w-4 h-4 mr-2" />
+                Users
+              </TabsTrigger>
+            )}
+            {access.tabs.includes('withdrawals') && (
+              <TabsTrigger value="withdrawals">
+                <Wallet className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Withdrawals</span>
+                <span className="sm:hidden">Payouts</span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
+          {access.tabs.includes('overview') && (
           <TabsContent value="overview" className="mt-6 sm:mt-4">
             <PlatformStatsAdmin />
           </TabsContent>
+          )}
 
+          {access.tabs.includes('rides') && (
           <TabsContent value="rides" className="mt-6 sm:mt-4">
             <RidesAdmin />
           </TabsContent>
+          )}
 
           <TabsContent value="vehicles" className="mt-6 sm:mt-4">
-            <VehiclesAdmin />
+            <VehiclesAdmin canDelete={access.canDelete} canSeeCosting={access.canSeeCosting} canApprove={access.full} />
           </TabsContent>
 
+          {access.tabs.includes('withdrawals') && (
           <TabsContent value="withdrawals" className="mt-6 sm:mt-4">
             <WithdrawalsAdmin />
           </TabsContent>
+          )}
 
           <TabsContent value="add-manual" className="mt-6 sm:mt-4">
             <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg">
@@ -1715,6 +1714,7 @@ export default function AdminPage() {
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
+                                {access.canDelete && (
                                 <Button
                                   onClick={() => handleDeleteClick(property)}
                                   variant="outline"
@@ -1730,6 +1730,7 @@ export default function AdminPage() {
                                     </>
                                   )}
                                 </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1742,9 +1743,16 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
 
+          {access.tabs.includes('leads') && (
           <TabsContent value="leads" className="mt-6 sm:mt-4">
             <LeadsAdmin />
           </TabsContent>
+          )}
+          {access.tabs.includes('users') && (
+          <TabsContent value="users" className="mt-6 sm:mt-4">
+            <UsersAdmin currentUser={user} />
+          </TabsContent>
+          )}
         </Tabs>
 
         {/* Delete Confirmation Dialog */}
@@ -1784,6 +1792,7 @@ export default function AdminPage() {
           </AlertDialogContent>
         </AlertDialog>
 
+        {access.full && (<>
         {/* Support Inbox Section */}
         <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
           <CardHeader>
@@ -1879,38 +1888,7 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        {/* Danger Zone Card */}
-        <Card className="bg-red-50/90 dark:bg-red-950/30 border-red-200 dark:border-red-900 rounded-3xl shadow-lg mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-800 dark:text-red-200">
-              <AlertTriangle className="w-5 h-5" />
-              Danger Zone
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-red-700 dark:text-red-300 mb-4">
-              This is a high-risk area. Actions performed here are permanent and can result in data loss. Proceed with extreme caution.
-            </p>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteAllProperties}
-              disabled={isDeleting}
-              className="w-full bg-red-600 hover:bg-red-700"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete All Properties
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+        </>)}
 
         {/* Removed File Upload, Sample CSV, Data Preview, Import Results */}
         {/* The global isProcessing modal is also removed */}

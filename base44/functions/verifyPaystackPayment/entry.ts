@@ -601,7 +601,7 @@ async function confirmHeldPayment(base44: any, body: any, secretKey: string | un
     let allowed = !!secret && typeof body.internal_secret === 'string' && sameSecret(body.internal_secret, secret);
     if (!allowed) {
         try {
-            const who = await base44.auth.me();
+            const who = await base44.auth.me().catch(() => null);
             allowed = !!who && who.role === 'admin';
         } catch {
             allowed = false;
@@ -740,7 +740,7 @@ Deno.serve(async (req) => {
             return await confirmHeldPayment(base44, body, secretKey, respond);
         }
 
-        const user = await base44.auth.me();
+        const user = await base44.auth.me().catch(() => null);
         if (!user) {
             return respond(401, { success: false, error: 'Unauthorized' });
         }

@@ -291,6 +291,9 @@ async function runRideSweep(sdk: any): Promise<Record<string, number>> {
     const pending = await fetchAll(sdk.asServiceRole.entities.RideBooking, { status: 'pending' });
     for (const r of pending) {
         if (!r.approved_at || !r.payment_deadline) continue;
+        // Money has arrived for it: paid, or on hold for the admin (see
+        // ridePaymentVerdict in verifyRidePayment). Neither is released.
+        if (r.payment_status === 'pending_confirmation' || r.payment_status === 'paid') continue;
         const deadlineMs = Date.parse(r.payment_deadline);
         if (Number.isNaN(deadlineMs)) continue;
         const remaining = deadlineMs - now;
@@ -319,6 +322,11 @@ async function runRideSweep(sdk: any): Promise<Record<string, number>> {
         if (remaining > 0) continue;
 
         try {
+            // Read again just before: a payment may have landed, or been put
+            // on hold, since the list was read.
+            const fresh = await sdk.asServiceRole.entities.RideBooking.get(r.id).catch(() => null);
+            if (!fresh || fresh.status !== 'pending'
+                || fresh.payment_status === 'pending_confirmation' || fresh.payment_status === 'paid') continue;
             await sdk.asServiceRole.entities.RideBooking.update(r.id, {
                 status: 'cancelled',
                 cancel_reason: 'payment_expired',
@@ -554,7 +562,7 @@ Deno.serve(async (req) => {
     let sdk: any;
     try {
         sdk = createClientFromRequest(req);
-        const user = await sdk.auth.me();
+        const user = await sdk.auth.me().catch(() => null);
         if (!user) {
             return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
         }

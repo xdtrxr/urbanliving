@@ -102,6 +102,11 @@ Nova reads booked dates from the server|getBookedRanges
 stale assign-driver window refused|expected_driver_id
 reports inbox follows the pay ledger|May be holding the driver
 points via function|awardPoints
+held rides on the admin card|Also paid again under
+held ride approve button|Approve and confirm payment
+listings helper role|Listings helper
+manage users function|manageUsers
+referral asks a signed-in visitor first|Your friend earns their reward when you make your first booking.
 MARKERS
 
 echo; echo "── stale markers (must all be GONE) ──"
@@ -109,7 +114,7 @@ echo; echo "── stale markers (must all be GONE) ──"
 # never there would report "gone" and read as a false pass. "Check availability"
 # (lower-case a) was the ride CTA; the stays flow uses "Check Availability" and
 # grep -F is case-sensitive, so the stays string does not trip this.
-for m in "Plan a Trip" "Check availability" "/ full day" "Book a Ride"; do
+for m in "Plan a Trip" "Check availability" "/ full day" "Book a Ride" "permanently delete ALL properties"; do
   grep -qF -- "$m" "$TMP/all.js" && no "stale string still live: $m" || ok "gone: $m"
 done
 
@@ -123,14 +128,14 @@ for e in VehicleCosting DriverEarning RideReport WithdrawalLedger; do
   [ "$code" = "404" ] && no "$e schema NOT DEPLOYED" || ok "$e (HTTP $code)"
 done
 
-echo; echo "── functions reachable (500=exists+needs auth, 404=NOT DEPLOYED) ──"
+echo; echo "── functions reachable (401/403/400=exists and refuses a stranger, 404=NOT DEPLOYED) ──"
 for f in checkRideAvailability decideRideBooking assignRideDriver getRideDriverContact \
          startRidePayment verifyRidePayment cancelRideBooking getRideBookings \
          cancelBooking startStayPayment submitBookingId awardPoints checkAvailabilityWebhook \
          getDriverProfile getDriverRides getDriverWallet getDriverEarningsAdmin \
          settleDriverEarning completeRide createRideReport resolveRideReport \
          createWithdrawalRequest processWithdrawal \
-         verifyPaystackPayment markHeldPaymentRefunded getBookedRanges; do
+         verifyPaystackPayment markHeldPaymentRefunded getBookedRanges manageUsers; do
   code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -X POST \
          -H 'Content-Type: application/json' -d '{}' "$API/functions/$f")
   # 402 is the platform refusing to run ANY function for this workspace (the

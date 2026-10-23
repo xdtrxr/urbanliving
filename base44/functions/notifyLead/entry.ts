@@ -28,7 +28,7 @@ async function isInternalOrAdmin(sdk: any, body: any): Promise<boolean> {
     const presented = typeof body?.internal_secret === 'string' ? body.internal_secret : '';
     if (INTERNAL_SECRET && presented && safeEqual(presented, INTERNAL_SECRET)) return true;
     try {
-        const user = await sdk.auth.me();
+        const user = await sdk.auth.me().catch(() => null);
         if (user?.role === 'admin') return true;
     } catch { /* no session on this request */ }
     return false;

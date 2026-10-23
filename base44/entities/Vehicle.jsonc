@@ -1,7 +1,7 @@
 {
   "name": "Vehicle",
   "type": "object",
-  "description": "A vehicle available for hire on UrbanStays. Vehicles are inventory; drivers are a separate pool (Driver entity) that gets assigned per booking by the admin. One driver can pilot many vehicles over time \u2014 admin doesn't need to onboard a driver for every car.",
+  "description": "A vehicle available for hire on UrbanStays. Vehicles are inventory; drivers are a separate pool (Driver entity) that gets assigned per booking by the admin. One driver can pilot many vehicles over time \u2014 admin doesn't need to onboard a driver for every car. Public read. An admin or a listings helper (User.role listing_helper) may create and update a vehicle; only an admin may delete one. What a car costs UrbanStays is on VehicleCosting, which stays admin-only.",
   "properties": {
     "name": {
       "type": "string",
@@ -138,7 +138,14 @@
     "admin_approved": {
       "type": "boolean",
       "default": false,
-      "description": "Admin must explicitly approve a vehicle before it appears in the browse list"
+      "description": "Admin must explicitly approve a vehicle before it appears in the browse list. Only an admin may write it: a listings helper can add and edit vehicles (the create and update rules let them), and a vehicle a helper adds waits here, unapproved, for an admin.",
+      "rls": {
+        "write": {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      }
     },
     "rating": {
       "type": "number",
@@ -171,15 +178,33 @@
   ],
   "rls": {
     "create": {
-      "user_condition": {
-        "role": "admin"
-      }
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "listing_helper"
+          }
+        }
+      ]
     },
     "read": {},
     "update": {
-      "user_condition": {
-        "role": "admin"
-      }
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "listing_helper"
+          }
+        }
+      ]
     },
     "delete": {
       "user_condition": {

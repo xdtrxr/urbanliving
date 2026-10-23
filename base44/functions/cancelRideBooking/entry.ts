@@ -63,6 +63,112 @@ async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string
     return out;
 }
 
+// ── Taking a referral reward back ────────────────────────────────────────────
+// LOCKSTEP: from this line to "end of taking a referral reward back" the text
+// is the same in cancelBooking and cancelRideBooking;
+// scripts/check-referral-clawback.mjs fails if the two copies differ.
+//
+// A referral reward is paid the moment a referred guest pays
+// (payReferralReward, in the payment functions). Decided on 2026-10-23: when
+// an admin cancels a paid stay or ride, which is how a refund starts, the
+// reward that booking earned is taken back. The referrer's balance goes down
+// by it, but never below zero: what they have already withdrawn is a
+// shortfall, written on the record and told to the admin, for a person to
+// settle. Only when all of it came back does the guest's referral row go back
+// to 'signed_up', so a later booking that is kept can earn the one reward;
+// with a shortfall the row keeps saying the reward was used, or the referrer
+// would be paid a second time on top of money never returned.
+//
+// Claim first, as the reward does: the reversal's own loyalty row (negative
+// points, same booking id) is written, and only the oldest such row goes on.
+// The reward's own row is left in place, so the cancelled booking can never
+// earn again (payReferralReward lets only the oldest claim pay). The money is
+// moved before the referral row is touched: if the money write fails, the
+// claim is removed and nothing else has changed.
+//
+// Answers { skipped } or { amount_ngn, taken_ngn, shortfall_ngn }. Throws if
+// a write fails; the caller tells the admin to check the balance.
+const REFERRER_LOYALTY_BONUS = 250;
+
+async function takeBackReferralReward(db: any, booking: any, what: string) {
+    const oldestFirst = (a: any, b: any) => String(a.created_date || '').localeCompare(String(b.created_date || ''))
+        || String(a.id).localeCompare(String(b.id));
+    const rows = await db.Referral.filter({ booking_id: booking.id }, 'created_date', 5);
+    const referral = rows.find((row: any) => row.status === 'booking_completed');
+    if (!referral) return { skipped: 'no_reward' };
+    const amountNGN = Math.max(0, Math.round(Number(referral.amount_earned_ngn) || 0));
+
+    const claim = await db.LoyaltyTransaction.create({
+        user_email: referral.referrer_email,
+        points_earned: -REFERRER_LOYALTY_BONUS,
+        transaction_type: 'referral',
+        booking_id: booking.id,
+        description: `REFERRAL_REVERSED — ${booking.guest_email}'s ${what} was cancelled by an admin`,
+    });
+    const reversals = (await db.LoyaltyTransaction.filter({ transaction_type: 'referral', booking_id: booking.id }, 'created_date', 50))
+        .filter((row: any) => (Number(row.points_earned) || 0) < 0);
+    const first = reversals.slice().sort(oldestFirst)[0];
+    if (!first || first.id !== claim.id) {
+        await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        if (!first) throw new Error(`The reversal claim for booking ${booking.id} could not be read back`);
+        return { skipped: 'already_taken_back' };
+    }
+
+    // The money first, read right before it is written. A write can fail
+    // after it has landed: the claim is removed only when the balance reads
+    // as it did before, so the money is never taken twice. If it did move,
+    // the claim stays, and the error still reaches the admin.
+    let taken = 0;
+    const findReferrer = async () => (await db.User.filter({ email: referral.referrer_email }, 'created_date', 1))[0];
+    let before: any = null;
+    try {
+        before = await findReferrer();
+        if (before) {
+            const balance = Math.max(0, Number(before.referral_balance_ngn) || 0);
+            taken = Math.min(balance, amountNGN);
+            await db.User.update(before.id, {
+                referral_balance_ngn: balance - taken,
+                loyalty_points: Math.max(0, (Number(before.loyalty_points) || 0) - REFERRER_LOYALTY_BONUS),
+            });
+        }
+    } catch (err) {
+        let moved = false;
+        if (before) {
+            try {
+                // Both fields the write touches: with nothing left to take
+                // from the balance, only the points tell whether it landed.
+                const now = await findReferrer();
+                moved = !now
+                    || (Number(now.referral_balance_ngn) || 0) !== (Number(before.referral_balance_ngn) || 0)
+                    || (Number(now.loyalty_points) || 0) !== (Number(before.loyalty_points) || 0);
+            } catch {
+                moved = true;
+            }
+        }
+        if (!moved) await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        throw err;
+    }
+    const shortfall = amountNGN - taken;
+    if (shortfall > 0) {
+        await db.LoyaltyTransaction.update(claim.id, {
+            description: `${claim.description || 'REFERRAL_REVERSED'}; ₦${shortfall.toLocaleString()} could not be taken back (already withdrawn)`,
+        }).catch(() => {});
+    } else {
+        await db.Referral.update(referral.id, { status: 'signed_up', booking_id: '', amount_earned_ngn: 0 });
+    }
+    return { amount_ngn: amountNGN, taken_ngn: taken, shortfall_ngn: shortfall };
+}
+
+// One line for the admin's cancellation message.
+function rewardLine(result: any, failed: boolean) {
+    if (failed) return '\n• Referral reward: could NOT be taken back. Check the referrer\'s balance in Admin.';
+    if (!result || result.skipped) return '';
+    return result.shortfall_ngn > 0
+        ? `\n• Referral reward: ₦${result.taken_ngn.toLocaleString()} taken back; ₦${result.shortfall_ngn.toLocaleString()} was already withdrawn and could not be`
+        : `\n• Referral reward taken back: ₦${result.taken_ngn.toLocaleString()}`;
+}
+// ── end of taking a referral reward back ─────────────────────────────────────
+
 async function notifyAdmin(ride: any, byAdmin: boolean, payLine = '') {
     const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
     const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
@@ -127,7 +233,7 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
+        const user = await base44.auth.me().catch(() => null);
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
 
         const { ride_booking_id, reason } = await req.json().catch(() => ({}));
@@ -146,6 +252,18 @@ Deno.serve(async (req) => {
         }
         if (ride.status === 'completed') {
             return json({ success: false, error: 'This ride has already been completed', code: 'ALREADY_COMPLETED' }, 409);
+        }
+
+        // Money is waiting on this ride for the admin to confirm or send back
+        // (see ridePaymentVerdict in verifyRidePayment). Cancelled by the
+        // guest, it would read "the vehicle is free again" and nobody would
+        // be reminded of the money.
+        if (ride.payment_status === 'pending_confirmation' && !isAdmin) {
+            return json({
+                success: false,
+                error: 'We are holding a payment for this ride. Contact support to cancel it and get your refund.',
+                code: 'PAYMENT_HELD',
+            }, 409);
         }
 
         // Paid rides need a refund decision, so they go through support —
@@ -204,6 +322,21 @@ Deno.serve(async (req) => {
                 console.error('Driver pay reversal on cancel failed (the sweep will retry):', err);
                 payLine = '\n• Driver pay could not be reversed just now; the next sweep will do it';
             }
+        }
+
+        // A paid ride cancelled by an admin is on its way to a refund: the
+        // referral reward it earned is taken back. A failure must not undo
+        // the cancellation.
+        if (ride.payment_status === 'paid') {
+            try {
+                payLine += rewardLine(await takeBackReferralReward(base44.asServiceRole.entities, ride, 'ride'), false);
+            } catch (err) {
+                console.error(`Referral reward for ride ${ride_booking_id} could not be taken back:`, err);
+                payLine += rewardLine(null, true);
+            }
+        }
+        if (ride.payment_status === 'pending_confirmation') {
+            payLine += '\n\n⚠️ A payment is ON HOLD for this ride. Refund it in Paystack, then mark it refunded under Admin, Payments on hold.';
         }
 
         await notifyAdmin(ride, isAdmin && ride.guest_email !== user.email, payLine);

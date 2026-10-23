@@ -123,7 +123,11 @@ const uploadErrorText = (error) =>
   error?.message ||
   'Unknown error';
 
-export default function VehiclesAdmin() {
+// canDelete, canSeeCosting, canApprove: false for a listings helper (see
+// src/config/adminAccess.js). Delete, VehicleCosting and Vehicle.admin_approved
+// are admin-only in the access rules, so the form neither offers them nor
+// sends them. A helper's new vehicle waits, unapproved, for an admin.
+export default function VehiclesAdmin({ canDelete = true, canSeeCosting = true, canApprove = true } = {}) {
   const [innerTab, setInnerTab] = useState('add');
   const [form, setForm] = useState(EMPTY_FORM);
   const [costing, setCosting] = useState(EMPTY_COSTING);
@@ -177,6 +181,7 @@ export default function VehiclesAdmin() {
   const loadCosting = async (vehicleId) => {
     setCosting(EMPTY_COSTING);
     setCostingRowId(null);
+    if (!canSeeCosting) return;
     try {
       const rows = await base44.entities.VehicleCosting.filter({ vehicle_id: vehicleId }, undefined, 1);
       const row = Array.isArray(rows) ? rows[0] : null;
@@ -215,6 +220,10 @@ export default function VehiclesAdmin() {
         throw new Error(built.message);
       }
       const { payload } = built;
+      // Only an admin may write the approval (a field rule refuses anyone
+      // else): a helper's payload leaves it out, so a new vehicle starts
+      // unapproved and an edit keeps whatever an admin set.
+      if (!canApprove) delete payload.admin_approved;
 
       let vehicleId = editingId;
       if (editingId) {
@@ -247,7 +256,7 @@ export default function VehiclesAdmin() {
       };
       const hasCosting = Object.entries(costingPayload)
         .some(([k, v]) => k !== 'vehicle_id' && v !== undefined);
-      if (vehicleId && (hasCosting || costingRowId)) {
+      if (canSeeCosting && vehicleId && (hasCosting || costingRowId)) {
         try {
           if (costingRowId) {
             await base44.entities.VehicleCosting.update(costingRowId, costingPayload);
@@ -811,6 +820,7 @@ export default function VehiclesAdmin() {
                 </section>
 
                 {/* INTERNAL COSTING — admin-only entity, never shown to guests */}
+                {canSeeCosting && (
                 <section>
                   <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Internal costing (₦ NGN)
@@ -884,6 +894,7 @@ export default function VehiclesAdmin() {
                     />
                   </div>
                 </section>
+                )}
 
                 {/* AMENITIES */}
                 <section>
@@ -964,6 +975,7 @@ export default function VehiclesAdmin() {
                         onCheckedChange={(checked) => setForm({ ...form, active: checked })}
                       />
                     </div>
+                    {canApprove && (
                     <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800">
                       <div>
                         <p className="font-medium text-slate-900 dark:text-white text-sm">Admin approved</p>
@@ -974,6 +986,7 @@ export default function VehiclesAdmin() {
                         onCheckedChange={(checked) => setForm({ ...form, admin_approved: checked })}
                       />
                     </div>
+                    )}
                   </div>
                 </section>
 
@@ -1124,6 +1137,7 @@ export default function VehiclesAdmin() {
                             <Eye className="w-3.5 h-3.5 mr-1" />
                             View
                           </Button>
+                          {canDelete && (
                           <Button
                             type="button"
                             variant="outline"
@@ -1135,6 +1149,7 @@ export default function VehiclesAdmin() {
                             <Trash2 className="w-3.5 h-3.5 mr-1" />
                             Delete
                           </Button>
+                          )}
                         </div>
                       </div>
                     );

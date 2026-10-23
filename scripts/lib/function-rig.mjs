@@ -151,7 +151,17 @@ export function createRig({ serverOnlyCreate = [], userReads = {} } = {}) {
   // Email leaves through the Core integration; here it is kept in rig.emails.
   const integrations = { Core: { SendEmail: async (mail) => { rig.emails.push(clone(mail)); return { success: true }; } } };
   rig.client = () => ({
-    auth: { me: async () => caller() },
+    // As the platform does (seen on 2026-10-23): no session is an error,
+    // not an empty answer. A function that waits for null gets a 500.
+    auth: {
+      me: async () => {
+        const who = caller();
+        if (who) return who;
+        const err = new Error('Authentication required to view users');
+        err.status = 401;
+        throw err;
+      },
+    },
     entities: tables('user'),
     functions,
     integrations,

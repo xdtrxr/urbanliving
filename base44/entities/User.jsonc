@@ -6,10 +6,11 @@
       "type": "string",
       "enum": [
         "admin",
-        "user"
+        "user",
+        "listing_helper"
       ],
       "default": "user",
-      "description": "Who is an admin. Every admin-only rule in the app rests on this field, so only an admin (or the server) may change it; the field-level write rule keeps auth.updateMe from setting it from the browser.",
+      "description": "What this account may do. 'user' is every guest. 'listing_helper' may add and edit properties and vehicles (the Property and Vehicle create and update rules name it) and nothing else: no deleting, no vehicle costs or driver pay, no guest bookings, payments, payouts or users. 'admin' may do everything. Every admin-only rule in the app rests on this field, so only an admin (or the server, through manageUsers) may change it; the field-level write rule keeps auth.updateMe from setting it from the browser.",
       "rls": {
         "write": {
           "user_condition": {

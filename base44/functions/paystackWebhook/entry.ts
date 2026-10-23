@@ -350,6 +350,158 @@ async function holdStayPayment(sdk: any, booking: any, reference: string, why: s
 }
 // ── end of stay payment rules ────────────────────────────────────────────────
 
+// ── Ride payment rules ───────────────────────────────────────────────────────
+// LOCKSTEP: from this line to "end of ride payment rules" the text is the same
+// in verifyRidePayment and paystackWebhook. Functions cannot share code;
+// scripts/check-ride-payment.mjs fails if the two copies differ. It leans on
+// isId, getOrNull, tryPush and APP_BASE_URL, which both files define.
+
+// May a payment that has arrived confirm this ride by itself? The stay rule
+// (stayPaymentVerdict), plus one thing only rides have: a guest can be blocked
+// from rides after a report. Until 2026-10-23 any correct payment confirmed
+// any ride: one the admin never approved, one cancelled or expired whose car
+// may since have gone to someone else, or one whose guest had been blocked.
+// Now such a payment is held for a person to decide:
+//   held:not_approved   the request was never approved
+//   held:expired        it ran out of time to pay and was cancelled for that
+//   held:cancelled      it was cancelled, or is otherwise closed
+//   held:blocked        the guest has been blocked from rides since asking
+// and, decided by the caller rather than here, 'price_changed': the payment
+// is for the price the ride had when the guest started paying, and an admin
+// changed it while Paystack was being asked.
+// An approved ride stays payable for as long as it is still 'pending', even a
+// little past its deadline: it is still holding its car.
+function ridePaymentVerdict(ride: any, guestBlocked: boolean) {
+    if (ride.status === 'confirmed') return 'payable';
+    if (ride.status !== 'pending') return ride.cancel_reason === 'payment_expired' ? 'held:expired' : 'held:cancelled';
+    if (!ride.approved_at) return 'held:not_approved';
+    return guestBlocked ? 'held:blocked' : 'payable';
+}
+
+// Read fresh under the service role, as checkRideAvailability does, so a
+// block takes effect at once.
+async function rideGuestBlocked(db: any, email: string) {
+    if (!email) return false;
+    const accounts = await db.User.filter({ email }, 'created_date', 5);
+    return accounts.some((account: any) => account && account.ride_blocked === true);
+}
+
+// Reads as "this ride ..." for the guest and "a ride that ..." for the admin.
+const RIDE_HELD_BECAUSE: Record<string, string> = {
+    not_approved: 'has not been approved yet',
+    expired: 'had run out of time to pay and was cancelled',
+    cancelled: 'was cancelled',
+    blocked: 'cannot be confirmed on this account',
+    holding: 'already has a payment on hold',
+    price_changed: 'had its price changed while you were paying',
+};
+
+function rideHeldSentence(amountNGN: number, why: string, reference: string) {
+    return `We received your payment of ₦${amountNGN.toLocaleString()}, but this ride ${RIDE_HELD_BECAUSE[why] || RIDE_HELD_BECAUSE.cancelled}, so it is not confirmed. `
+        + `Our team has been told and will confirm it or refund you in full. Please do not pay again. Reference: ${reference}.`;
+}
+
+// Money has arrived for a ride it may not confirm. Nothing a paid ride gets
+// happens here: no confirmation, no points, no referral reward, and no driver
+// can be assigned (assignRideDriver asks for 'paid'). The row is marked, the
+// admin is told, with the two buttons telegramWebhook answers, and the guest
+// is told what happens next.
+//
+// The row is read again first: the other path for the same payment (the
+// payment page, or the webhook) may have held it in the meantime, and the
+// admin must get one alert, not two. Answers, as holdStayPayment's:
+//   'held'    this payment is now on hold
+//   'second'  the ride already held a different payment; that first reference
+//             stays on the row, this one is kept beside it and the admin is
+//             told there are two
+//   'again'   this payment was already on hold, or already announced as a
+//             second one: nothing is written and nobody is told twice
+//   'paid'    the ride was confirmed with this very payment while we looked
+async function holdRidePayment(sdk: any, ride: any, reference: string, why: string) {
+    const db = sdk.asServiceRole.entities;
+    ride = (await getOrNull(db.RideBooking, ride.id).catch(() => null)) || ride;
+    if (ride.payment_status === 'paid' && ride.transaction_hash === reference) return 'paid';
+    const alreadyHolding = ride.payment_status === 'pending_confirmation' && !!ride.transaction_hash;
+    const extras: string[] = Array.isArray(ride.payment_extra_refs) ? ride.payment_extra_refs : [];
+    if (alreadyHolding && (ride.transaction_hash === reference || extras.includes(reference))) return 'again';
+    if (!alreadyHolding) {
+        await db.RideBooking.update(ride.id, {
+            payment_status: 'pending_confirmation',
+            payment_method: 'paystack',
+            transaction_hash: reference,
+        });
+    } else {
+        await db.RideBooking.update(ride.id, { payment_extra_refs: [...extras, reference] });
+    }
+
+    const amountNGN = Number(ride.total_price) || 0;
+    let pickup = String(ride.start_at || 'no pickup time');
+    try {
+        pickup = new Date(ride.start_at).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' });
+    } catch { /* the stored value is shown instead */ }
+    const lines = [
+        alreadyHolding ? 'SECOND PAYMENT for a ride that already has one on hold' : 'RIDE PAYMENT ON HOLD. The ride is NOT confirmed.',
+        '',
+        `₦${amountNGN.toLocaleString()} arrived for a ride that ${RIDE_HELD_BECAUSE[why] || RIDE_HELD_BECAUSE.cancelled}.`,
+        `Ride: ${ride.id}`,
+        `Vehicle: ${ride.vehicle_name || ride.vehicle_id || 'unknown'}`,
+        `Guest: ${ride.guest_name || 'no name'} (${ride.guest_email}), ${ride.guest_phone || 'no phone on file'}`,
+        `Pickup: ${pickup}`,
+        `Paystack ref: ${reference}`,
+        '',
+        alreadyHolding
+            ? `The first payment (ref ${ride.transaction_hash}) is still on hold. Refund this second one in Paystack.`
+            : 'The guest has NOT been sent a confirmation, and no driver can be assigned. Confirm the ride with this payment, or refund it in Paystack and then mark it refunded.',
+    ];
+    const message: any = { chat_id: Deno.env.get('TELEGRAM_ADMIN_CHAT_ID'), text: lines.join('\n') };
+    if (!alreadyHolding) {
+        message.reply_markup = { inline_keyboard: [[
+            { text: 'Confirm ride', callback_data: `held_ride_confirm_${ride.id}` },
+            { text: 'Mark refunded', callback_data: `held_ride_refund_${ride.id}` },
+        ]] };
+    }
+    // Plain text, and the answer is read: Telegram drops a message it cannot
+    // parse, and this one is the only word that money is waiting.
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    if (!token || !message.chat_id) {
+        console.error(`Payment on hold for ride ${ride.id} and Telegram is not configured: nobody was told.`);
+    } else {
+        try {
+            const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(message),
+            });
+            const answer = await res.json().catch(() => null);
+            if (!answer || !answer.ok) console.error(`Telegram did not take the payment-on-hold alert for ride ${ride.id}:`, answer);
+        } catch (err) {
+            console.error(`Payment-on-hold alert failed for ride ${ride.id}:`, err);
+        }
+    }
+
+    const link = `${APP_BASE_URL}/Bookings?focus=${encodeURIComponent(ride.id)}#ride-${encodeURIComponent(ride.id)}`;
+    try {
+        await sdk.integrations.Core.SendEmail({
+            to: ride.guest_email,
+            subject: 'We have your payment. Your ride is not confirmed yet',
+            body: `Hi ${ride.guest_name || 'there'},\n\n${rideHeldSentence(amountNGN, why, reference)}\n\n`
+                + `You can follow it here: ${link}\n\n— Urban Stays`,
+            from_name: 'Urban Stays',
+        });
+    } catch (err) {
+        console.warn('Payment-on-hold email to the guest failed (non-fatal):', err);
+    }
+    await tryPush(sdk, {
+        user_email: ride.guest_email,
+        title: 'Payment received',
+        body: 'Your ride is not confirmed yet. We will confirm it or refund you in full.',
+        url: `/Bookings#ride-${ride.id}`,
+        tag: `ride-held-${ride.id}`,
+    });
+    return alreadyHolding ? 'second' : 'held';
+}
+// ── end of ride payment rules ────────────────────────────────────────────────
+
 // Referral reward. This function is word for word the same in
 // processReferralReward, verifyPaystackPayment, verifyRidePayment and
 // paystackWebhook: functions cannot share code, and
@@ -699,11 +851,35 @@ async function handleRidePayment(
     if (rideAlreadyPaid(ride)) {
         return ack({ skipped: 'already_paid' });
     }
+    if (ride.payment_status === 'refunded' && ride.transaction_hash === reference) {
+        return ack({ skipped: 'refunded' });
+    }
 
     const expectedKobo = Math.round((Number(ride.total_price) || 0) * 100);
     if (amountKobo !== expectedKobo) {
         console.error(`Ride webhook amount mismatch: expected ${expectedKobo}, got ${amountKobo}`);
         return ack({ skipped: 'amount_mismatch' });
+    }
+
+    // One reference pays for one ride.
+    const reused = (await sdk.asServiceRole.entities.RideBooking.filter({ transaction_hash: reference }, '-created_date', 5))
+        .filter((row: any) => row.id !== ride.id);
+    if (reused.length > 0) {
+        console.error(`Ride webhook reference ${reference} is already on ride ${reused[0].id}`);
+        return ack({ skipped: 'reference_reused' });
+    }
+
+    // The money is real and it is for this ride. Whether it may confirm the
+    // ride is a separate question (ridePaymentVerdict). A ride that already
+    // holds a different payment takes no second one.
+    const verdict = ridePaymentVerdict(ride, await rideGuestBlocked(sdk.asServiceRole.entities, ride.guest_email));
+    const holdsAnother = ride.payment_status === 'pending_confirmation'
+        && !!ride.transaction_hash && ride.transaction_hash !== reference;
+    if (verdict !== 'payable' || holdsAnother) {
+        const why = holdsAnother ? 'holding' : verdict.slice('held:'.length);
+        const outcome = await holdRidePayment(sdk, ride, reference, why);
+        if (outcome === 'paid') return ack({ skipped: 'already_paid' });
+        return ack({ held: true, reason: why, outcome, ride_booking_id: ride.id });
     }
 
     const nowIso = new Date().toISOString();

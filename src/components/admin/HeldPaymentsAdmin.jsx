@@ -9,7 +9,10 @@ import { Loader2, RefreshCw, PauseCircle, AlertCircle, AlertTriangle } from 'luc
 import { base44 } from '@/api/base44Client';
 import { invokeFn } from '@/lib/invokeFn';
 import { useToast } from '@/components/ui/use-toast';
-import { isPaymentHeld, heldAmount, holdReason, HOLD_REASON_TEXT, confirmedNote, refundedNote } from '@/config/payments';
+import {
+  isPaymentHeld, heldAmount, holdReason, HOLD_REASON_TEXT, confirmedNote, refundedNote,
+  rideHoldReason, RIDE_HOLD_REASON_TEXT, rideConfirmedNote,
+} from '@/config/payments';
 
 // HeldPaymentsAdmin — stay payments the server is holding.
 //
@@ -42,6 +45,9 @@ const POLL_MS = 15000;
 export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLoaded, onSettled }) {
   const { toast } = useToast();
   const [bookings, setBookings] = useState([]);
+  // Rides are held the same way since 2026-10-23 (ridePaymentVerdict in
+  // verifyRidePayment) and settled from the same card.
+  const [rides, setRides] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [workingId, setWorkingId] = useState(null);
   // The server's sentence for a refused "Confirm booking", by booking id.
@@ -61,13 +67,17 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
     const mine = latest.current;
     if (!silent) setRefreshing(true);
     try {
-      const rows = await base44.entities.Booking.filter({ payment_status: 'pending_confirmation' }, SORT, LIMIT);
+      const [rows, rideRows] = await Promise.all([
+        base44.entities.Booking.filter({ payment_status: 'pending_confirmation' }, SORT, LIMIT),
+        base44.entities.RideBooking.filter({ payment_status: 'pending_confirmation' }, SORT, LIMIT),
+      ]);
       // Two loads can be in the air at once: the poll, and the one asked for
       // straight after an action. Only the newest may write. The older
       // answer would put a payment that was just settled back on screen.
       if (mine !== latest.current) return;
       const held = (Array.isArray(rows) ? rows : []).filter(isPaymentHeld);
       setBookings(held);
+      setRides((Array.isArray(rideRows) ? rideRows : []).filter(isPaymentHeld));
       onLoadedRef.current?.(held);
     } catch (err) {
       console.error('Failed to load held payments:', err);
@@ -86,7 +96,13 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
   }, [load, reloadKey]);
 
   const who = (b) => b.guest_name || b.guest_email;
-  const titleOf = (b) => properties.find((p) => p.id === b.property_id)?.title || b.property_id;
+  const titleOf = (b) => (b.vehicle_id
+    ? `Ride · ${b.vehicle_name || b.vehicle_id}`
+    : properties.find((p) => p.id === b.property_id)?.title || b.property_id);
+  const pickupOf = (r) => {
+    const t = Date.parse(r.start_at || '');
+    return Number.isNaN(t) ? 'no pickup time' : new Date(t).toLocaleString('en-GB', { timeZone: 'Africa/Lagos', dateStyle: 'medium', timeStyle: 'short' });
+  };
 
   // One path for both buttons. invokeFn never throws: a refusal arrives as
   // r.error, the server's own sentence. Answers with that sentence when the
@@ -117,18 +133,27 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
     if (refused) setRefusals((prev) => ({ ...prev, [booking.id]: refused }));
   };
 
-  const markRefunded = async () => {
-    if (!toRefund) return;
-    const { booking } = toRefund;
+  const confirmRide = async (ride) => {
+    setRefusals((prev) => ({ ...prev, [ride.id]: null }));
     const refused = await settle(
-      booking, 'markHeldPaymentRefunded', { booking_id: booking.id }, 'Marked refunded', refundedNote,
+      ride, 'verifyRidePayment', { ride_booking_id: ride.id, confirm_held: true }, 'Ride confirmed', rideConfirmedNote,
     );
-    setToRefund(refused ? { booking, refused } : null);
+    if (refused) setRefusals((prev) => ({ ...prev, [ride.id]: refused }));
   };
 
+  const markRefunded = async () => {
+    if (!toRefund) return;
+    const { booking, ride } = toRefund;
+    const refused = await settle(
+      booking, 'markHeldPaymentRefunded', ride ? { ride_booking_id: booking.id } : { booking_id: booking.id }, 'Marked refunded', refundedNote,
+    );
+    setToRefund(refused ? { booking, ride, refused } : null);
+  };
+
+  const count = bookings.length + rides.length;
   // Stays up for an open dialog even if the last held payment has just left
   // the list, so the admin is answered instead of the dialog vanishing.
-  if (bookings.length === 0 && !toRefund) return null;
+  if (count === 0 && !toRefund) return null;
 
   return (
     <Card className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg mb-8">
@@ -137,9 +162,9 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
           <CardTitle className="flex items-center gap-2 min-w-0">
             <PauseCircle className="w-5 h-5 flex-shrink-0" />
             <span className="truncate">Payments on hold</span>
-            {bookings.length > 0 && (
+            {count > 0 && (
               <Badge className="bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900">
-                {bookings.length}
+                {count}
               </Badge>
             )}
           </CardTitle>
@@ -155,8 +180,8 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
           </Button>
         </div>
         <CardDescription>
-          Paid, but not confirmed: the booking was never approved, or was already cancelled, when the money arrived.
-          Confirm the booking with the payment, or refund it in Paystack and then mark it refunded.
+          Paid, but not confirmed: the stay or ride was never approved, or was already cancelled (or, for a ride, the guest
+          had been blocked), when the money arrived. Confirm it with the payment, or refund it in Paystack and then mark it refunded.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -217,7 +242,65 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
               )}
             </div>
           ))}
-          {bookings.length >= LIMIT && (
+          {rides.map((r) => (
+            <div
+              key={r.id}
+              className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4"
+            >
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex-1 min-w-[260px]">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <p className="font-semibold text-slate-900 dark:text-white break-words min-w-0">{titleOf(r)}</p>
+                    <Badge className="bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-900 text-xs">
+                      {ngn(heldAmount(r))} held
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-slate-600 dark:text-slate-300 break-words">
+                    <span className="font-medium">{who(r)}</span> · {r.guest_email}
+                  </p>
+                  <p className="text-sm text-slate-700 dark:text-slate-200 mt-1">Pickup {pickupOf(r)}</p>
+                  <p className="text-xs text-orange-700 dark:text-orange-300 mt-2">
+                    {RIDE_HOLD_REASON_TEXT[rideHoldReason(r)]}
+                  </p>
+                  {Array.isArray(r.payment_extra_refs) && r.payment_extra_refs.length > 0 && (
+                    <p className="text-xs text-red-700 dark:text-red-300 mt-2 break-all">
+                      Also paid again under {r.payment_extra_refs.join(', ')}: refund those in Paystack.
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-2 break-all">
+                    Paystack reference <code className="font-mono select-all">{r.transaction_hash || 'not recorded'}</code>
+                    {' · '}Ride <code className="font-mono">{r.id}</code>
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => confirmRide(r)}
+                    disabled={workingId !== null}
+                    className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
+                  >
+                    {workingId === r.id ? 'Working…' : 'Confirm ride'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setToRefund({ booking: r, ride: true, refused: null })}
+                    disabled={workingId !== null}
+                    className="rounded-xl border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40"
+                  >
+                    Mark refunded
+                  </Button>
+                </div>
+              </div>
+              {refusals[r.id] && (
+                <div className="mt-3 flex items-start gap-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3">
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-800 dark:text-red-200">{refusals[r.id]}</p>
+                </div>
+              )}
+            </div>
+          ))}
+          {(bookings.length >= LIMIT || rides.length >= LIMIT) && (
             <p className="text-xs text-slate-500 dark:text-slate-400 text-center pt-2">
               Showing the newest {LIMIT}. Older ones appear as these are settled.
             </p>
@@ -242,7 +325,7 @@ export default function HeldPaymentsAdmin({ properties = [], reloadKey = 0, onLo
                 </p>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                This sends no money. It records that you have refunded the guest, and cancels the booking.
+                This sends no money. It records that you have refunded the guest, and cancels the {toRefund.ride ? 'ride' : 'booking'}.
               </p>
               <p className="text-sm text-slate-600 dark:text-slate-300 break-all">
                 Paystack reference <code className="font-mono select-all">{toRefund.booking.transaction_hash || 'not recorded'}</code>

@@ -1,5 +1,28 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.27';
 
+// The payment states that mean a guest has booked with us: paid, a payment on
+// hold for the admin to confirm, or a payment already given back. A refunded
+// guest who books again is a returning customer, not somebody's referral.
+// Unpaid requests (cancelled or not) do not count: asking is not booking.
+const BOOKED = ['paid', 'pending_confirmation', 'refunded'];
+
+// Has this email booked a stay or a ride? Read with the service role: the
+// question is about the caller, but the answer must not depend on what their
+// read rules happen to let them see. guest_email is compared exactly by the
+// platform, so the lower-case spelling is asked for as well when it differs
+// (a booking an admin typed in by hand is most likely lower case). One row is
+// enough to answer, so one is asked for, never the default page of 50.
+async function hasBooked(db: any, email: string): Promise<boolean> {
+    const spellings = [...new Set([email, email.toLowerCase()])];
+    for (const entity of ['Booking', 'RideBooking']) {
+        for (const guest_email of spellings) {
+            const rows = await db[entity].filter({ guest_email, payment_status: { $in: BOOKED } }, '-created_date', 1);
+            if (rows.length > 0) return true;
+        }
+    }
+    return false;
+}
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -14,8 +37,13 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
-        if (!user) {
+        // On the platform auth.me() throws for a signed-out caller rather
+        // than answering null. Caught here, that is the 401 it should be,
+        // not the 500 the catch at the bottom would make of it. Every lookup
+        // below is by the caller's email, and a filter on an empty value
+        // matches other people's rows, so an account without one is refused.
+        const user = await base44.auth.me().catch(() => null);
+        if (!user || !user.email) {
             return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
         }
 
@@ -83,6 +111,26 @@ Deno.serve(async (req) => {
             }), { status: 409, headers });
         }
         const referrer = others[0];
+
+        // Referral codes are for new accounts: the owner's decision of
+        // 2026-10-23 (todo.md, "Decision 3"). A link sent to people who are
+        // already customers would earn the sender 5% of each one's next
+        // booking, which they did nothing to bring, and would block the
+        // friend who really brought them from ever being entered.
+        //
+        // The code is judged before the account, so this comes last. Someone
+        // who opens their own link to see that it works is told it is their
+        // own code, a mistyped code is reported as not found, and a copied
+        // code still leaves its line in the log for the admin. Each of those
+        // is the more specific answer; this one refuses only a code that
+        // would otherwise have been accepted. Nothing is written before it.
+        if (await hasBooked(db, user.email)) {
+            return new Response(JSON.stringify({
+                success: false,
+                code: 'EXISTING_CUSTOMER',
+                error: 'Referral codes are for new accounts. This account has already booked with us.',
+            }), { status: 409, headers });
+        }
 
         // The Referral row is the record of who referred whom: the reward
         // follows it and nothing else. It is written first, then every row

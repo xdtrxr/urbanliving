@@ -73,7 +73,7 @@ async function emailGuest(
     sdk: any,
     ride: any,
     approved: boolean,
-    extras: { finalPrice?: number; reason?: string; alternatives?: any[] } = {},
+    extras: { finalPrice?: number; reason?: string; alternatives?: any[]; refundNGN?: number } = {},
 ) {
     if (!ride.guest_email) return;
     const when = new Date(ride.start_at).toLocaleString('en-GB', {
@@ -122,6 +122,8 @@ async function emailGuest(
           `Unfortunately ${ride.vehicle_name} isn't available for ${when}.\n\n` +
           `🔖 Status: CANCELLED\n` +
           (ride.booking_reference ? `🏷️ Reference: ${ride.booking_reference}\n` : '') +
+          // The guest paid before the decision; the money goes back.
+          (extras.refundNGN ? `💸 Your payment of ${ngn(extras.refundNGN)} will be refunded in full. It can take a few working days to reach you once it is sent.\n` : '') +
           altBlock +
           `🔎 Browse other vehicles: ${APP_BASE_URL}/PlanTrip\n\n` +
           `— Urban Stays`;
@@ -159,6 +161,76 @@ async function getOrNull(entity: any, id: string) {
     }
 }
 
+// ── Held ride decisions ──────────────────────────────────────────────────────
+// LOCKSTEP: from this line to "end of held ride decisions" the text is the
+// same in decideRideBooking and telegramWebhook; scripts/check-ride-payment.mjs
+// fails if the two copies differ.
+//
+// A guest can pay before anyone has approved the ride; the payment is then
+// held (see ridePaymentVerdict in verifyRidePayment). Approving such a ride
+// confirms it with that payment, through verifyRidePayment's confirm path,
+// the one way a held payment becomes a confirmed ride, and at the price that
+// was paid. Declining it cancels the ride and leaves a refund owed, which the
+// admin is reminded of here.
+
+function rideHasHeldPayment(ride: any) {
+    return !!ride && ride.payment_status === 'pending_confirmation' && !!ride.transaction_hash;
+}
+
+// { ok: true, guestEmailed } or { ok: false, code, error }.
+async function confirmRideWithHeldPayment(sdk: any, rideId: string) {
+    try {
+        const answer = await sdk.functions.invoke('verifyRidePayment', {
+            ride_booking_id: rideId,
+            confirm_held: true,
+            internal_secret: Deno.env.get('INTERNAL_FUNCTION_SECRET') || '',
+        });
+        const data = (answer && answer.data && answer.data.data) || {};
+        return { ok: true, guestEmailed: !!data.guest_emailed };
+    } catch (err) {
+        const said = (err as any)?.response?.data;
+        if (said && said.code === 'ADMIN_ONLY') {
+            return {
+                ok: false,
+                code: 'ADMIN_ONLY',
+                error: 'The payment on hold could not be confirmed from here. Open Admin and press "Confirm" on the Payments on hold card.',
+            };
+        }
+        return {
+            ok: false,
+            code: (said && said.code) || 'HELD_NOT_CONFIRMED',
+            error: (said && said.error) || 'The payment on hold could not be confirmed. Nothing was changed.',
+        };
+    }
+}
+
+// Plain text, with the button that records the refund once it has been made.
+async function tellAdminRideRefundOwed(ride: any) {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_ADMIN_CHAT_ID');
+    if (!token || !chatId) {
+        console.error(`Ride ${ride.id} was declined with a payment on hold and Telegram is not configured: nobody was reminded of the refund.`);
+        return;
+    }
+    const amountNGN = Number(ride.total_price) || 0;
+    try {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: `REFUND OWED. Ride ${ride.id} was declined, and the guest's payment of ₦${amountNGN.toLocaleString()} (ref ${ride.transaction_hash}) is still on hold.\n`
+                    + `Guest: ${ride.guest_name || 'no name'} (${ride.guest_email})\n\n`
+                    + 'Refund it in Paystack, then press Mark refunded.',
+                reply_markup: { inline_keyboard: [[{ text: 'Mark refunded', callback_data: `held_ride_refund_${ride.id}` }]] },
+            }),
+        });
+    } catch (err) {
+        console.error(`Refund-owed reminder failed for ride ${ride.id}:`, err);
+    }
+}
+// ── end of held ride decisions ───────────────────────────────────────────────
+
 Deno.serve(async (req) => {
     const headers = {
         'Content-Type': 'application/json',
@@ -174,7 +246,7 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
+        const user = await base44.auth.me().catch(() => null);
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
         if (user.role !== 'admin') return json({ success: false, error: 'Admin access required' }, 403);
 
@@ -197,6 +269,41 @@ Deno.serve(async (req) => {
                 error: `This ride has already been actioned (status: ${ride.status})`,
                 code: 'ALREADY_DECIDED',
             }, 409);
+        }
+
+        // ── A payment is already on hold for it ─────────────────────────
+        // Approving confirms the ride with that money, at the price it was
+        // paid at; declining it leaves a refund owed (see the held ride
+        // decisions block above).
+        const heldPayment = rideHasHeldPayment(ride);
+        if (heldPayment && action === 'approve') {
+            const paidPrice = Number(ride.total_price) || 0;
+            if (final_price !== undefined && final_price !== null && final_price !== '' && Number(final_price) !== paidPrice) {
+                return json({
+                    success: false,
+                    error: `A payment of ${ngn(paidPrice)} is on hold for this ride, so its price cannot change. Approve it at that price, or decline it and refund the payment.`,
+                    code: 'PRICE_FIXED_BY_PAYMENT',
+                }, 409);
+            }
+            const confirmed: any = await confirmRideWithHeldPayment(base44, ride.id);
+            if (!confirmed.ok) return json({ success: false, error: confirmed.error, code: confirmed.code }, 409);
+            await editTelegram(
+                ride.telegram_message_id,
+                `🚗 Ride \`${ride.id}\` — ${ride.vehicle_name}`,
+                '✅ *APPROVED* (in-app) and confirmed with the payment that was on hold',
+            );
+            return json({
+                success: true,
+                data: {
+                    ride_booking_id,
+                    status: 'approved',
+                    total_price: paidPrice,
+                    price_changed: false,
+                    suggested: [],
+                    confirmed_with_payment: true,
+                    guest_emailed: confirmed.guestEmailed,
+                },
+            });
         }
 
         const approved = action === 'approve';
@@ -274,10 +381,12 @@ Deno.serve(async (req) => {
                 ? `✅ *APPROVED* (in-app)${priceMoved ? ` — price set to ${ngn(charged)}` : ''}`
                 : `❌ *REJECTED* (in-app)${alternatives.length ? ` — ${alternatives.length} alternative(s) offered` : ''}`,
         );
+        if (heldPayment) await tellAdminRideRefundOwed(ride);
         await emailGuest(base44, ride, approved, {
             finalPrice: charged,
             reason: priceMoved ? String(price_adjustment_reason).trim() : undefined,
             alternatives,
+            refundNGN: heldPayment ? Number(ride.total_price) || 0 : undefined,
         });
         await tryPush(base44, {
             user_email: ride.guest_email,
@@ -288,6 +397,8 @@ Deno.serve(async (req) => {
                 ? priceMoved
                     ? `${ride.vehicle_name} is held for you at ${ngn(charged)} (was ${ngn(estimated)}). Tap to pay.`
                     : `${ride.vehicle_name} is held for you — tap to pay and lock it in.`
+                : heldPayment
+                    ? `${ride.vehicle_name} isn't free for that window. Your payment will be refunded in full.`
                 : alternatives.length
                     ? `${ride.vehicle_name} isn't free, but ${alternatives.length} similar car${alternatives.length === 1 ? '' : 's'} ${alternatives.length === 1 ? 'is' : 'are'}. Tap to see.`
                     : `${ride.vehicle_name} isn't free for that window. Tap to try another.`,
@@ -303,6 +414,7 @@ Deno.serve(async (req) => {
                 total_price: approved ? charged : undefined,
                 price_changed: approved ? priceMoved : undefined,
                 suggested: alternatives.map((v: any) => ({ id: v.id, name: v.name })),
+                refund_owed: !approved && heldPayment,
             },
         });
     } catch (error) {
