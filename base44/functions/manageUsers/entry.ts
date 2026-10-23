@@ -65,7 +65,10 @@ const summary = (u: any) => ({
     created_date: u.created_date || null,
 });
 
-const who = (u: any) => (u.full_name ? `${u.full_name} (${u.email})` : String(u.email || u.id));
+// A name is typed by the person it belongs to: one line, of a sane length,
+// so it cannot pass itself off as another line of the admin's message.
+const clean = (v: unknown) => String(v || '').replace(/[\r\n\u2028\u2029]+/g, ' ').trim().slice(0, 120);
+const who = (u: any) => (u.full_name ? `${clean(u.full_name)} (${clean(u.email)})` : clean(u.email || u.id));
 
 // One plain-text line to the admin group. Plain text on purpose: names are
 // typed by the people they belong to and were never escaped for Markdown,
@@ -82,7 +85,9 @@ async function notifyAdminLine(text: string) {
             body: JSON.stringify({ chat_id: chatId, text }),
         });
     } catch (err) {
-        console.error('Telegram notify failed (non-fatal):', err);
+        // A failed fetch names the URL it asked for, and the bot token is in
+        // that URL: it is cut out before anything is logged.
+        console.error('Telegram notify failed (non-fatal):', String((err as Error)?.message || err).split(token).join('[token]'));
     }
 }
 
@@ -196,8 +201,11 @@ Deno.serve(async (req) => {
         if (!looksLikeEmail(email)) {
             return json({ success: false, error: 'Enter a full email address, like name@example.com.', code: 'BAD_EMAIL' }, 400);
         }
-        const existing = await db.User.filter({ email }, '-created_date', 1);
-        if (Array.isArray(existing) && existing.length > 0) {
+        // Emails are compared exactly by the platform, and older accounts
+        // keep the letter case they signed up with: asked in any case.
+        const anyCase = { $regex: `^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' };
+        const existing = await db.User.filter({ email: anyCase }, '-created_date', 5);
+        if (!Array.isArray(existing) || existing.some((u: any) => sameEmail(u.email, email))) {
             return json({ success: false, error: `${email} already has an account. Change their role in the list instead.`, code: 'ALREADY_USER' }, 409);
         }
 
@@ -220,7 +228,7 @@ Deno.serve(async (req) => {
             return json({
                 success: false,
                 error: 'Base44 did not send the invitation. Invitations have a daily limit on the Base44 plan, so if several went out today, try again tomorrow.'
-                    + (typeof said === 'string' && said.trim() ? ` (Base44 said: ${said.trim()})` : ''),
+                    + (typeof said === 'string' && said.trim() ? ` (Base44 said: ${clean(said).slice(0, 200)})` : ''),
                 code: 'INVITE_FAILED',
             }, 502);
         }
@@ -230,6 +238,6 @@ Deno.serve(async (req) => {
         return json({ success: true, data: { invited: true, email, role, invited_as: invitedAs } });
     } catch (error) {
         console.error('manageUsers error:', error);
-        return json({ success: false, error: 'Something went wrong. Please try again.', details: (error as Error).message }, 500);
+        return json({ success: false, error: 'Something went wrong. Please try again.' }, 500);
     }
 });

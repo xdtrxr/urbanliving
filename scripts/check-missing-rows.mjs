@@ -15,7 +15,9 @@
 // This runs the shipped functions (scripts/lib/function-rig.mjs) with both
 // kinds of id and wants the refusal each one intended, never a 500.
 
-import { createRig, loadFunction, call, stubNetwork } from './lib/function-rig.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRig, loadFunction, call, stubNetwork, ROOT } from './lib/function-rig.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -87,6 +89,38 @@ console.log('\n— rows named by other rows —');
   const handler = await loadFunction(rig, 'getRideDriverContact');
   const r = await call(rig, handler, { ride_booking_id: 'ride1' }, guest);
   check('a ride whose driver was deleted answers calmly, not with a crash', r.status !== 500 && !!r.error, true);
+}
+
+console.log('\n— a caller who is not signed in —');
+// On the platform auth.me() throws for a caller with no session, and the rig
+// does the same. Every function that asks who is calling must answer that
+// with a refusal, never a 500 (until 2026-10-23 most of them did).
+{
+  const fnDir = path.join(ROOT, 'base44', 'functions');
+  const askers = fs.readdirSync(fnDir)
+    .filter((name) => /auth\.me\(\)/.test(fs.readFileSync(path.join(fnDir, name, 'entry.ts'), 'utf8')))
+    .sort();
+  // The live app has INTERNAL_FUNCTION_SECRET set (since 2026-10-13); the
+  // functions that accept it are open to anybody only while it is unset.
+  rig.env.INTERNAL_FUNCTION_SECRET = 'internal-check-secret';
+  const crashed = [];
+  const notRun = [];
+  for (const name of askers) {
+    let handler;
+    try {
+      handler = await loadFunction(rig, name);
+    } catch {
+      // It imports a package from npm the rig cannot bundle (Google's
+      // client libraries). Named below, not counted as passing.
+      notRun.push(name);
+      continue;
+    }
+    const r = await call(rig, handler, { booking_id: 'stay1', ride_booking_id: 'x', action: 'list' }, null);
+    if (r.status >= 500 || r.status === 200) crashed.push(`${name}:${r.status}`);
+  }
+  if (notRun.length) console.log(`  (not run here, they import npm packages the rig cannot load: ${notRun.join(', ')})`);
+  check(`all ${askers.length - notRun.length} functions that ask who is calling, run here, refuse a signed-out caller, none with a 500`, crashed, []);
+  check('and the ones not run here still read the session safely', notRun.every((name) => !/=\s*await\s+(base44|sdk)\.auth\.me\(\);/.test(fs.readFileSync(path.join(fnDir, name, 'entry.ts'), 'utf8'))), true);
 }
 
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);

@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
         // Authenticate caller — admin only since this writes to a shared
         // operational spreadsheet that contains every booking, not just
         // the caller's own.
-        const user = await base44.auth.me();
+        const user = await base44.auth.me().catch(() => null);
         if (!user) {
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }

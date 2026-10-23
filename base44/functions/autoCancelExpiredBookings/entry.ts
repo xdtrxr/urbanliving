@@ -562,7 +562,7 @@ Deno.serve(async (req) => {
     let sdk: any;
     try {
         sdk = createClientFromRequest(req);
-        const user = await sdk.auth.me();
+        const user = await sdk.auth.me().catch(() => null);
         if (!user) {
             return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
         }

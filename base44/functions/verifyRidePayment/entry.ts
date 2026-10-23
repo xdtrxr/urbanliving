@@ -176,6 +176,9 @@ function paymentIsFor(metadata: unknown, kind: string, id: string) {
 //   held:expired        it ran out of time to pay and was cancelled for that
 //   held:cancelled      it was cancelled, or is otherwise closed
 //   held:blocked        the guest has been blocked from rides since asking
+// and, decided by the caller rather than here, 'price_changed': the payment
+// is for the price the ride had when the guest started paying, and an admin
+// changed it while Paystack was being asked.
 // An approved ride stays payable for as long as it is still 'pending', even a
 // little past its deadline: it is still holding its car.
 function ridePaymentVerdict(ride: any, guestBlocked: boolean) {
@@ -200,6 +203,7 @@ const RIDE_HELD_BECAUSE: Record<string, string> = {
     cancelled: 'was cancelled',
     blocked: 'cannot be confirmed on this account',
     holding: 'already has a payment on hold',
+    price_changed: 'had its price changed while you were paying',
 };
 
 function rideHeldSentence(amountNGN: number, why: string, reference: string) {
@@ -517,7 +521,7 @@ async function confirmHeldRide(base44: any, body: any, secretKey: string | undef
     let allowed = !!secret && typeof body.internal_secret === 'string' && sameSecret(body.internal_secret, secret);
     if (!allowed) {
         try {
-            const who = await base44.auth.me();
+            const who = await base44.auth.me().catch(() => null);
             allowed = !!who && who.role === 'admin';
         } catch {
             allowed = false;
@@ -718,13 +722,19 @@ Deno.serve(async (req) => {
         // The price can change while Paystack is asked: an admin approving
         // the ride may set a final figure. So the amount is checked again,
         // against the row as it is now.
+        // The money has been taken, so it is held for the admin, who is told,
+        // rather than answered with a mismatch and forgotten.
         const expectedNowKobo = Math.round((Number(now.total_price) || 0) * 100);
         if (expectedNowKobo !== actualKobo) {
             console.error(`Ride amount changed while verifying: expected ${expectedNowKobo}, got ${actualKobo}`);
+            const outcome = await holdRidePayment(base44, { ...now, total_price: amountNGN }, reference, 'price_changed');
+            if (outcome === 'paid') return json({ success: true, data: { already_paid: true, ride_booking_id } });
             return json({
-                success: false, error: 'Payment amount mismatch',
-                expected_kobo: expectedNowKobo, actual_kobo: actualKobo,
-            }, 400);
+                success: false,
+                error: rideHeldSentence(amountNGN, 'price_changed', reference),
+                code: 'PAYMENT_HELD',
+                data: { ride_booking_id: ride.id, reference, amount_ngn: amountNGN, hold_reason: 'price_changed' },
+            }, 409);
         }
 
         // The money is real and it is for this ride. Whether it may confirm

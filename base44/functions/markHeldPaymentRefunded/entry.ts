@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
         let allowed = !!secret && typeof body.internal_secret === 'string' && sameSecret(body.internal_secret, secret);
         if (!allowed) {
             try {
-                const user = await base44.auth.me();
+                const user = await base44.auth.me().catch(() => null);
                 allowed = !!user && user.role === 'admin';
                 if (allowed) who = user.email;
             } catch {

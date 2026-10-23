@@ -366,6 +366,9 @@ async function holdStayPayment(sdk: any, booking: any, reference: string, why: s
 //   held:expired        it ran out of time to pay and was cancelled for that
 //   held:cancelled      it was cancelled, or is otherwise closed
 //   held:blocked        the guest has been blocked from rides since asking
+// and, decided by the caller rather than here, 'price_changed': the payment
+// is for the price the ride had when the guest started paying, and an admin
+// changed it while Paystack was being asked.
 // An approved ride stays payable for as long as it is still 'pending', even a
 // little past its deadline: it is still holding its car.
 function ridePaymentVerdict(ride: any, guestBlocked: boolean) {
@@ -390,6 +393,7 @@ const RIDE_HELD_BECAUSE: Record<string, string> = {
     cancelled: 'was cancelled',
     blocked: 'cannot be confirmed on this account',
     holding: 'already has a payment on hold',
+    price_changed: 'had its price changed while you were paying',
 };
 
 function rideHeldSentence(amountNGN: number, why: string, reference: string) {

@@ -183,6 +183,22 @@ pay('ref-together', 'together');
   check('and the admin gets one alert, not two', holdAlerts() - before, 1);
 }
 
+console.log('\n— the price changes while Paystack is being asked —');
+add('repriced', 27, APPROVED);
+pay('ref-repriced', 'repriced');
+{
+  let release;
+  rig.paystackGate = new Promise((go) => { release = go; });
+  const page = report('repriced', 'ref-repriced');
+  await new Promise((tick) => setTimeout(tick, 5));
+  row('repriced').total_price = PRICE + 30000;
+  rig.paystackGate = null;
+  release();
+  const answer = await page;
+  check('the payment taken at the old price is held, not dropped', [answer.status, answer.code, answer.data && answer.data.hold_reason, state('repriced')], [409, 'PAYMENT_HELD', 'price_changed', ['pending', 'pending_confirmation', 'ref-repriced']]);
+  check('and the admin is told', rig.telegram.at(-1).text.includes('had its price changed while you were paying'), true);
+}
+
 console.log('\n— the payment page, the sweep, cancelling, the guest\'s list —');
 r = await call(rig, openPaymentPage, { ride_booking_id: 'unapproved' }, guest);
 check('the payment page will not take a second payment for a held ride', [r.status, r.code, r.data], [409, 'PAYMENT_HELD', { ride_booking_id: 'unapproved', amount_ngn: PRICE, hold_reason: 'holding' }]);

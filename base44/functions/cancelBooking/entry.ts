@@ -89,20 +89,34 @@ async function takeBackReferralReward(db: any, booking: any, what: string) {
         return { skipped: 'already_taken_back' };
     }
 
-    // The money first, read right before it is written.
+    // The money first, read right before it is written. A write can fail
+    // after it has landed: the claim is removed only when the balance reads
+    // as it did before, so the money is never taken twice. If it did move,
+    // the claim stays, and the error still reaches the admin.
     let taken = 0;
+    const findReferrer = async () => (await db.User.filter({ email: referral.referrer_email }, 'created_date', 1))[0];
+    let before: any = null;
     try {
-        const referrer = (await db.User.filter({ email: referral.referrer_email }, 'created_date', 1))[0];
-        if (referrer) {
-            const balance = Math.max(0, Number(referrer.referral_balance_ngn) || 0);
+        before = await findReferrer();
+        if (before) {
+            const balance = Math.max(0, Number(before.referral_balance_ngn) || 0);
             taken = Math.min(balance, amountNGN);
-            await db.User.update(referrer.id, {
+            await db.User.update(before.id, {
                 referral_balance_ngn: balance - taken,
-                loyalty_points: Math.max(0, (Number(referrer.loyalty_points) || 0) - REFERRER_LOYALTY_BONUS),
+                loyalty_points: Math.max(0, (Number(before.loyalty_points) || 0) - REFERRER_LOYALTY_BONUS),
             });
         }
     } catch (err) {
-        await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        let moved = false;
+        if (before) {
+            try {
+                const now = await findReferrer();
+                moved = !now || (Number(now.referral_balance_ngn) || 0) !== (Number(before.referral_balance_ngn) || 0);
+            } catch {
+                moved = true;
+            }
+        }
+        if (!moved) await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
         throw err;
     }
     const shortfall = amountNGN - taken;
@@ -169,7 +183,7 @@ Deno.serve(async (req) => {
 
     try {
         const base44 = createClientFromRequest(req);
-        const user = await base44.auth.me();
+        const user = await base44.auth.me().catch(() => null);
         if (!user) return json({ success: false, error: 'Unauthorized' }, 401);
 
         const { booking_id, reason } = await req.json().catch(() => ({}));
