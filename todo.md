@@ -1,7 +1,42 @@
 # Urban Stays — outstanding work
 
-Last updated: 2026-10-13. Each item has enough context to resume cold.
+Last updated: 2026-10-23. Each item has enough context to resume cold.
 The numbered items 1 to 6 further down date from 2026-07-29 and have not been re-checked since; rides (Drive), the driver wallet and ride reports have shipped in the meantime.
+
+---
+
+# Built on 2026-10-23, waiting to go live
+
+Branch `fix/finish-line`, local, not pushed. The owner's "lets finish and complete this project" (2026-10-23), with the four decisions below taken as recommended. `npm run check` runs 17 scripts (about 2,350 assertions) and passes; the build passes; the changed screens pass the linter. Not yet opened in a browser.
+
+**Backend functions run again.** They were blocked (HTTP 402) from at least 2026-10-10 until between 10-17 and 10-21. On 2026-10-23 `scripts/check-deploy.sh` passed 82 of 82, and real guests made eight stay requests that morning (all approved, none paid: six never opened the payment page, two opened it and stopped). Uploads work again too.
+
+**What it does**
+- **Rides are held like stays.** A ride payment that may not confirm its ride (never approved, cancelled, expired, the guest blocked from rides since, or the price changed while paying) is held: Telegram alert with Confirm ride / Mark refunded, the "Payments on hold" card, guest email and screens. Approving a held ride confirms it with the money; declining leaves a refund owed. A payment must name its ride. Held rides keep their car's window and are never released by the sweep. `scripts/check-ride-payment.mjs` (69 cases).
+- **A referral reward is taken back** when an admin cancels a paid stay or ride; what the referrer already withdrew is a shortfall, told to the admin, and the guest's one reward then stays used. `scripts/check-referral-clawback.mjs`.
+- **Referral codes are for new accounts**: an account with a paid, held or refunded booking is refused (`EXISTING_CUSTOMER`), and a visitor already signed in is asked before a link's code is applied.
+- **Manage users**: a Users tab for admins (list, change role, invite by email) through the new function `manageUsers`, and a new role, **Listings helper**: may add and edit properties and vehicles and nothing else (no bookings, payments, payouts or users; no delete; no vehicle costing). Only an admin may approve a vehicle, so a helper's new car waits for an admin. Nobody can change their own role or remove the last admin. `scripts/check-manage-users.mjs`.
+- **"Delete ALL properties" is gone.**
+- **A signed-out caller is refused, not answered with a 500**, in all 47 functions that ask who is calling (the platform's `auth.me()` throws when there is no session).
+
+**To go live**
+1. Merge into `main` and push. The pull applies these entity changes by itself: `RideBooking.payment_status` gains `pending_confirmation`, `RideBooking.payment_extra_refs` (new), `User.role` gains `listing_helper`, Property and Vehicle create/update allow `listing_helper`, and `Vehicle.admin_approved` becomes admin-only to write. None of them is stricter for anything the live client does today (only admins write vehicles now).
+2. Smoke-test the preview, publish, `scripts/check-deploy.sh`.
+3. One real payment of each kind (see "Not yet tried on the live platform").
+
+---
+
+# From the client's WhatsApp chat (read 2026-10-23)
+
+The export `WhatsApp Chat - Nonso Anenechukwu (Hakeem)/` (13 April to 19 October; kept out of git by `.git/info/exclude`) was read in full with both PDFs: 118 asks. Nearly all are built. What is not, or needs an answer:
+- **The admin cannot answer a guest's special request before approving** (18/05: "Is there a complimentary meal?"). Rides have a note on approval; stays do not. Small to build.
+- **Crypto (stablecoin) payments** (10/05). Not built; called out of scope then, never raised again.
+- **Push notifications on by default** (13/06, 27/06). Browsers need the user's permission; the app asks only from the Profile card. A prompt on first sign-in is the most that can be done.
+- **Payment window**: the 22/04 brief says 30 minutes; the app gives 1 hour from opening the payment page (3 hours at most from approval). The client saw "pay within 1 hour" on 27/06 and did not object.
+- **Paystack on the HOMESHARES business account** (asked 14/08, 15/08, 17/08, 12/09, 28/09, 13/10): no confirmation in the chat. The secret names are set; which account they belong to cannot be read.
+- **Rotate the keys that were sent in the chat**: live Paystack keys and the Telegram bot token were posted in plain text (08/05, 14/08, 12/09). Rotate them in Paystack and BotFather and set the new values as secrets.
+- **Where the 5% referral reward comes from** (02/06, "very important questions"): a business answer, not code.
+- 43 voice notes sit inside feature discussions and could not be listened to here.
 
 ---
 
@@ -33,21 +68,21 @@ Published on 2026-10-13 at 22:16 WAT, on the owner's "make it live": commit `bc8
 
 ---
 
-# Needs a decision
+# Decided on 2026-10-23 (the recommendations), built on fix/finish-line
 
-## Decision 1: Rides need the same payment hold as stays
+## Decision 1: Rides need the same payment hold as stays. DECIDED yes, BUILT
 **Found 2026-10-12. Not built.** `verifyRidePayment` and the ride branch of `paystackWebhook` confirm a ride whenever the payment is right and the ride is not already paid. They do not look at whether the ride was approved, cancelled or expired, or whether the guest has since been blocked from rides. A guest who pays through Paystack directly for a cancelled ride gets a confirmed one, on a car that may have gone to someone else.
 **What exists:** the stay version, to copy. `stayPaymentVerdict`, `holdStayPayment`, the `confirm_held` branch and `markHeldPaymentRefunded` in `base44/functions/`, the screens in `src/config/payments.js`, and `scripts/check-stay-payment.mjs` (102 cases). The payment page already asks the server again before Paystack opens for a ride, which closes the easy way in (a page left open); it cannot stop a payment made outside the page.
 **Also in the ride payment path, and to be closed by the same work:** a Paystack transaction whose metadata names no booking is still accepted for a ride (the stay path now refuses one), so one such payment handed in for two rides of the same price at the same moment marks both paid.
 **Decision:** whether rides follow the same rule as stays (hold, alert, confirm or refund by hand). That is the recommendation, and about a day of work.
 
-## Decision 2: A referral reward is paid at payment and never taken back
+## Decision 2: A referral reward is paid at payment and never taken back. DECIDED: taken back when an admin cancels a paid booking, BUILT
 A guest referred by a friend (or by a second account of their own) pays for a stay, the friend's balance gets 5% within seconds, and the stay is then cancelled and refunded. Nothing touches the reward. Choices: take the amount back when an admin cancels a paid stay or ride (recording a shortfall if it was already withdrawn), or hold every reward as pending until check-out.
 
-## Decision 3: May an existing customer enter a referral code?
+## Decision 3: May an existing customer enter a referral code? DECIDED no (new accounts only), BUILT
 `attributeReferral` accepts any account at any time, and `ReferralTracker` submits a code from a `?ref=` link silently when the visitor is signed in. So a link sent to people who are already customers earns 5% of each one's next booking, and blocks a genuine referrer from being entered later. The usual rule is "new accounts only": refuse an account that already has a paid stay or ride, and ask before submitting for a signed-in visitor.
 
-## Decision 4: Does a ride count as the "first booking"?
+## Decision 4: Does a ride count as the "first booking"? DECIDED: left as it is (yes)
 The reward is paid once per referred guest, for the first stay OR ride they pay for. A cheap ride uses up the reward a later stay would have earned. The code has always done this; the wording in the app says "first booking".
 
 ---
