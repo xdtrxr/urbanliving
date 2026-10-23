@@ -66,7 +66,7 @@ check('and the admin is told in the cancellation message', cancelNote().includes
 r = await call(rig, cancelStay, { booking_id: 's1' }, admin);
 check('cancelling again takes nothing more', [r.data && r.data.already_cancelled, user('rita').referral_balance_ngn, reversals('s1').length], [true, 0, 1]);
 r = await call(rig, payReward, { booking_id: 's1' }, admin);
-check('the cancelled stay can never earn again', [r.data && r.data.skipped, user('rita').referral_balance_ngn], ['already_awarded', 0]);
+check('the cancelled stay can never earn again: the admin tool refuses it', [r.status, r.code, user('rita').referral_balance_ngn], [409, 'NOT_PAID', 0]);
 
 console.log('\n— the next stay the guest keeps still earns the one reward —');
 rig.db.Booking.push(paidStay('s2', gina, { check_in: '2027-03-01', check_out: '2027-03-03', paid_at: '2026-10-22T10:00:00.000Z' }));
@@ -81,6 +81,10 @@ r = await call(rig, cancelStay, { booking_id: 't1' }, admin);
 check('what is there is taken; the balance never goes below zero', user('sade').referral_balance_ngn, 0);
 check('the shortfall is written on the record', reversals('t1')[0] && reversals('t1')[0].description.includes(`₦${(REWARD - 20000).toLocaleString()} could not be taken back`), true);
 check('and the admin is told how much was already withdrawn', cancelNote().includes(`₦${(REWARD - 20000).toLocaleString()} was already withdrawn`), true);
+check('with money not returned, the guest\'s one reward stays used', referral('ref-tayo').status, 'booking_completed');
+rig.db.Booking.push(paidStay('t2', tayo, { check_in: '2027-03-10', check_out: '2027-03-12', paid_at: '2026-10-22T10:00:00.000Z' }));
+r = await call(rig, payReward, { booking_id: 't2' }, admin);
+check('so the next stay does not pay the referrer a second time', [r.data && r.data.skipped, user('sade').referral_balance_ngn], ['already_awarded', 0]);
 
 console.log('\n— two admins cancel the same paid stay at once —');
 rig.db.Booking.push(paidStay('s3', gina, { check_in: '2027-04-01', check_out: '2027-04-03' }));
@@ -121,6 +125,7 @@ r = await call(rig, cancelStay, { booking_id: 's4' }, admin);
 rig.failOn = null;
 check('the cancellation still stands', [r.status, stay('s4').status], [200, 'cancelled']);
 check('and the admin is told to check the balance', cancelNote().includes('could NOT be taken back'), true);
+check('nothing was half done: the balance, the referral row and no reversal record', [user('rita').referral_balance_ngn, referral('ref-gina').status, reversals('s4').length], [REWARD, 'booking_completed', 0]);
 
 console.log('\n— the shared block is word for word the same —');
 const src = (name) => fs.readFileSync(path.join(ROOT, 'base44', 'functions', name, 'entry.ts'), 'utf8');

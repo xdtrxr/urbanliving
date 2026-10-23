@@ -715,6 +715,17 @@ Deno.serve(async (req) => {
                 data: { ride_booking_id: ride.id, paid_at: now.paid_at || null, already_processed_by: 'webhook' },
             });
         }
+        // The price can change while Paystack is asked: an admin approving
+        // the ride may set a final figure. So the amount is checked again,
+        // against the row as it is now.
+        const expectedNowKobo = Math.round((Number(now.total_price) || 0) * 100);
+        if (expectedNowKobo !== actualKobo) {
+            console.error(`Ride amount changed while verifying: expected ${expectedNowKobo}, got ${actualKobo}`);
+            return json({
+                success: false, error: 'Payment amount mismatch',
+                expected_kobo: expectedNowKobo, actual_kobo: actualKobo,
+            }, 400);
+        }
 
         // The money is real and it is for this ride. Whether it may confirm
         // the ride is a separate question (ridePaymentVerdict). A ride that

@@ -74,16 +74,20 @@ async function reverseHeldEarnings(sr: any, rideId: string, keepDriverId: string
 // reward that booking earned is taken back. The referrer's balance goes down
 // by it, but never below zero: what they have already withdrawn is a
 // shortfall, written on the record and told to the admin, for a person to
-// settle. The guest's referral row goes back to 'signed_up', so a later
-// booking that is kept can still earn the one reward.
+// settle. Only when all of it came back does the guest's referral row go back
+// to 'signed_up', so a later booking that is kept can earn the one reward;
+// with a shortfall the row keeps saying the reward was used, or the referrer
+// would be paid a second time on top of money never returned.
 //
 // Claim first, as the reward does: the reversal's own loyalty row (negative
 // points, same booking id) is written, and only the oldest such row goes on.
 // The reward's own row is left in place, so the cancelled booking can never
-// earn again (payReferralReward lets only the oldest claim pay).
+// earn again (payReferralReward lets only the oldest claim pay). The money is
+// moved before the referral row is touched: if the money write fails, the
+// claim is removed and nothing else has changed.
 //
 // Answers { skipped } or { amount_ngn, taken_ngn, shortfall_ngn }. Throws if
-// a write fails part-way; the caller tells the admin to check the balance.
+// a write fails; the caller tells the admin to check the balance.
 const REFERRER_LOYALTY_BONUS = 250;
 
 async function takeBackReferralReward(db: any, booking: any, what: string) {
@@ -103,28 +107,36 @@ async function takeBackReferralReward(db: any, booking: any, what: string) {
     });
     const reversals = (await db.LoyaltyTransaction.filter({ transaction_type: 'referral', booking_id: booking.id }, 'created_date', 50))
         .filter((row: any) => (Number(row.points_earned) || 0) < 0);
-    if (reversals.slice().sort(oldestFirst)[0].id !== claim.id) {
+    const first = reversals.slice().sort(oldestFirst)[0];
+    if (!first || first.id !== claim.id) {
         await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        if (!first) throw new Error(`The reversal claim for booking ${booking.id} could not be read back`);
         return { skipped: 'already_taken_back' };
     }
 
-    // The row that says the reward stands, then the money.
-    await db.Referral.update(referral.id, { status: 'signed_up', booking_id: '', amount_earned_ngn: 0 });
+    // The money first, read right before it is written.
     let taken = 0;
-    const referrer = (await db.User.filter({ email: referral.referrer_email }, 'created_date', 1))[0];
-    if (referrer) {
-        const balance = Math.max(0, Number(referrer.referral_balance_ngn) || 0);
-        taken = Math.min(balance, amountNGN);
-        await db.User.update(referrer.id, {
-            referral_balance_ngn: balance - taken,
-            loyalty_points: Math.max(0, (Number(referrer.loyalty_points) || 0) - REFERRER_LOYALTY_BONUS),
-        });
+    try {
+        const referrer = (await db.User.filter({ email: referral.referrer_email }, 'created_date', 1))[0];
+        if (referrer) {
+            const balance = Math.max(0, Number(referrer.referral_balance_ngn) || 0);
+            taken = Math.min(balance, amountNGN);
+            await db.User.update(referrer.id, {
+                referral_balance_ngn: balance - taken,
+                loyalty_points: Math.max(0, (Number(referrer.loyalty_points) || 0) - REFERRER_LOYALTY_BONUS),
+            });
+        }
+    } catch (err) {
+        await db.LoyaltyTransaction.delete(claim.id).catch(() => {});
+        throw err;
     }
     const shortfall = amountNGN - taken;
     if (shortfall > 0) {
         await db.LoyaltyTransaction.update(claim.id, {
             description: `${claim.description || 'REFERRAL_REVERSED'}; ₦${shortfall.toLocaleString()} could not be taken back (already withdrawn)`,
         }).catch(() => {});
+    } else {
+        await db.Referral.update(referral.id, { status: 'signed_up', booking_id: '', amount_earned_ngn: 0 });
     }
     return { amount_ngn: amountNGN, taken_ngn: taken, shortfall_ngn: shortfall };
 }
