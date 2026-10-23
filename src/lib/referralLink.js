@@ -8,7 +8,8 @@
 // link is asked first: a link sent round to existing customers must not
 // quietly enter its sender as their referrer.
 //
-// Used by src/components/utils/ReferralTracker.jsx. No imports on purpose:
+// Used by src/components/utils/ReferralTracker.jsx and, for what a refusal
+// means, src/components/dashboard/ReferralCodePrompt.jsx. No imports on purpose:
 // scripts/check-referral-attribution.mjs runs this file as it is.
 
 export const REFERRAL_KEY = 'urbanstays_referral_code';
@@ -50,17 +51,21 @@ export function referralStep({ urlCode, storedCode, user }) {
   return { action: 'ask', code: fromLink.toUpperCase() };
 }
 
+// The server's refusals that no other code would change: the account has
+// booked with us already, or has a referrer already. Facts about the
+// account, not mistakes, so they are said calmly and never as an error.
+export const FINAL_REFUSALS = ['EXISTING_CUSTOMER', 'ALREADY_ATTRIBUTED'];
+export const isFinalRefusal = (code) => FINAL_REFUSALS.includes(code);
+
 // What to show after the person pressed Apply, from the result invokeFn
-// returns ({ ok, error, code }). A quiet note, never an error screen: the
-// server's own sentence when it refused, so "already booked with us" and
-// "already used a code" read as the facts they are.
+// returns ({ ok, error, code }). A quiet note, never an error screen, in the
+// server's own words when it refused.
 export function referralNote(result) {
   if (result && result.ok) {
     return { title: 'Referral code applied', description: 'Your friend earns their reward when you make your first booking.' };
   }
   const sentence = (result && result.error) || 'Something went wrong. Please try again.';
-  const code = result && result.code;
-  if (code === 'EXISTING_CUSTOMER' || code === 'ALREADY_ATTRIBUTED') return { title: null, description: sentence };
+  if (isFinalRefusal(result && result.code)) return { title: null, description: sentence };
   return { title: 'Referral code not applied', description: sentence };
 }
 
