@@ -294,6 +294,18 @@ r = await invite('fourth@example.com', 'listing_helper');
 check('the platform refusing: a sentence about the daily limit, with what Base44 said',
   [r.status, r.code, /daily limit/.test(r.error || ''), /Daily invite limit reached/.test(r.error || '')], [502, 'INVITE_FAILED', true, true]);
 
+// ── The screens (source) ───────────────────────────────────────────────────
+const source = (file) => fs.readFileSync(path.join(ROOT, file), 'utf8');
+const ADMIN_PAGE = source('src/pages/Admin.jsx');
+const count = (text, needle) => text.split(needle).length - 1;
+
+console.log('\n— no button deletes every property —');
+// Until 2026-10-23 the Admin page had a "Delete All Properties" button that
+// listed every Property and deleted them one by one from the browser.
+check('the Admin page has no delete-all handler or button', /DeleteAll|Delete All Properties|Danger Zone/i.test(ADMIN_PAGE), false);
+check('it deletes a property in one place only: the single-listing dialog', count(ADMIN_PAGE, 'Property.delete('), 1);
+check('and that one deletes the property the dialog names', /await base44\.entities\.Property\.delete\(propertyToDelete\.id\);/.test(ADMIN_PAGE), true);
+
 // ── Result ─────────────────────────────────────────────────────────────────
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

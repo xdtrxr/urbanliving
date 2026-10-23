@@ -202,9 +202,6 @@ export default function AdminPage() {
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [isUploadingVideos, setIsUploadingVideos] = useState(false);
 
-  // New state for "Delete All Properties"
-  const [isDeleting, setIsDeleting] = useState(false);
-  
   // Removed old activeTab for data ingestion
   // const [activeTab, setActiveTab] = useState('data-ingestion');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -697,40 +694,6 @@ export default function AdminPage() {
         ...prev,
         videos: prev.videos.filter(url => url !== urlToRemove)
     }));
-  };
-
-  const handleDeleteAllProperties = async () => {
-    const confirmation = window.confirm(
-      'DANGER: Are you sure you want to permanently delete ALL properties from the database? This action cannot be undone.'
-    );
-
-    if (confirmation) {
-      setIsDeleting(true);
-      try {
-        // Fetch all properties from the frontend
-        const allProperties = await base44.entities.Property.list();
-        const count = allProperties.length;
-
-        if (count === 0) {
-          alert("There are no properties to delete.");
-          setIsDeleting(false);
-          return;
-        }
-
-        // Loop through and delete each property one by one
-        for (const prop of allProperties) {
-          await base44.entities.Property.delete(prop.id);
-        }
-
-        alert(`Success! ${count} properties have been deleted.`);
-        await loadProperties(); // Refresh the property list
-      } catch (error) {
-        console.error('Failed to delete properties:', error);
-        alert(`Error: ${error.message}`);
-      } finally {
-        setIsDeleting(false);
-      }
-    }
   };
 
   // NEW: MCP Data Fetch Function
@@ -1876,39 +1839,6 @@ export default function AdminPage() {
                 )}
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Danger Zone Card */}
-        <Card className="bg-red-50/90 dark:bg-red-950/30 border-red-200 dark:border-red-900 rounded-3xl shadow-lg mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-800 dark:text-red-200">
-              <AlertTriangle className="w-5 h-5" />
-              Danger Zone
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-red-700 dark:text-red-300 mb-4">
-              This is a high-risk area. Actions performed here are permanent and can result in data loss. Proceed with extreme caution.
-            </p>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteAllProperties}
-              disabled={isDeleting}
-              className="w-full bg-red-600 hover:bg-red-700"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete All Properties
-                </>
-              )}
-            </Button>
           </CardContent>
         </Card>
 
