@@ -1,4 +1,4 @@
-// Stay payments — what the screens say about the money on a booking.
+// Stay and ride payments — what the screens say about the money on a booking.
 //
 // A payment that reached Paystack for a stay the admin had never approved, or
 // for one already cancelled, used to confirm the booking anyway. It is now
@@ -7,6 +7,10 @@
 // does not set paid_at. The admin then confirms the booking with that
 // payment, or refunds it by hand in Paystack and marks it refunded
 // (payment_status 'refunded', status 'cancelled').
+//
+// Rides are held the same way, on the same row fields, and for one more
+// reason: the guest has been blocked from rides since asking. "Rides", at the
+// end, has the helpers whose words or rules differ for a ride.
 //
 // Three screens show such a booking: the payment page, My Bookings and the
 // admin panel. What each one calls it, whether the guest may pay or cancel,
@@ -81,32 +85,81 @@ export const waitsOnTeam = (booking) => !!booking
 
 const HELD_PROMISE = 'We will confirm this booking or refund you in full. You do not need to pay again.';
 
-// What a guest is told on the card of a held booking, as { title, body }.
-export function heldNotice(booking) {
+// What a guest is promised about money that is being held, by what it paid
+// for. `blocked` is for a guest blocked from rides since asking: that ride
+// will not be confirmed, so it is not promised. Nothing on the screen says
+// why; the team tells them, with the refund.
+export const HELD_GUEST_TEXT = {
+  stay: HELD_PROMISE,
+  ride: 'We will confirm this ride or refund you in full. You do not need to pay again.',
+  blocked: 'Our team will contact you about a refund. You do not need to pay again.',
+};
+
+// `kind` is 'stay' or 'ride'. `reason` is the server's hold_reason, when the
+// screen has it: only the payment page does.
+const promiseFor = (kind, reason) => {
+  if (kind !== 'ride') return HELD_GUEST_TEXT.stay;
+  return reason === 'blocked' ? HELD_GUEST_TEXT.blocked : HELD_GUEST_TEXT.ride;
+};
+
+// What a guest is told on the card of a held booking or ride, as
+// { title, body }.
+export function heldNotice(booking, kind = 'stay') {
   const amount = heldAmount(booking);
   return {
     title: amount > 0 ? `We have your payment of ${naira(amount)}.` : 'We have your payment.',
-    body: HELD_PROMISE,
+    body: promiseFor(kind),
   };
 }
 
 // ── The payment page ────────────────────────────────────────────────────────
-// What startStayPayment or verifyPaystackPayment said about a payment being
-// held, read off invokeFn's result: { sentence, reference }, or null when the
-// answer is anything else. Both answer 409 with code PAYMENT_HELD and a
-// sentence for the guest in `error`; after a payment the reference comes too,
-// in `data`. invokeFn keeps `data` for answers that succeeded, so on this
-// refusal it is read from the body. `paidReference` is the one Paystack gave
-// the page, for an answer that names none.
-export function heldPaymentFrom(result, paidReference) {
+// A refusal's sentence and its `data`, read off invokeFn's result. invokeFn
+// keeps `data` only for answers that succeeded, so on a refusal both are read
+// from the body.
+function refusalOf(result) {
+  const body = result && result.body && typeof result.body === 'object' ? result.body : {};
+  return {
+    data: body.data && typeof body.data === 'object' ? body.data : {},
+    said: typeof body.error === 'string' ? body.error.trim() : '',
+  };
+}
+
+// What the server said about a payment being held, read off invokeFn's
+// result: { sentence, reference, reason }, or null when the answer is
+// anything else. For a stay that is startStayPayment or verifyPaystackPayment,
+// for a ride startRidePayment or verifyRidePayment. All four answer 409 with
+// code PAYMENT_HELD and a sentence for the guest in `error`; after a payment
+// the reference and the hold_reason come too, in `data`. `paidReference` is
+// the one Paystack gave the page, for an answer that names none. `kind`
+// ('stay' or 'ride') words the promise for an answer that has no sentence.
+export function heldPaymentFrom(result, paidReference, kind = 'stay') {
   if (!result || result.ok || result.code !== 'PAYMENT_HELD') return null;
-  const body = result.body && typeof result.body === 'object' ? result.body : {};
-  const data = body.data && typeof body.data === 'object' ? body.data : {};
-  const said = typeof body.error === 'string' ? body.error.trim() : '';
+  const { data, said } = refusalOf(result);
+  const reason = typeof data.hold_reason === 'string' && data.hold_reason ? data.hold_reason : null;
   return {
     // The server always sends a sentence. Without one invokeFn falls back to
     // "Request failed with status code 409", which nobody should read here.
-    sentence: said || HELD_PROMISE,
+    sentence: said || promiseFor(kind, reason),
+    reference: String(data.reference || paidReference || ''),
+    reason,
+  };
+}
+
+const REFUNDED_SENTENCE = {
+  stay: 'This payment was refunded. Request the dates again to book.',
+  ride: 'This payment was refunded. Book the ride again if you still need it.',
+};
+
+// The same for a payment that has already been refunded: 409 with code
+// PAYMENT_REFUNDED, from verifyRidePayment for a reference handed in again
+// and from startRidePayment for a ride whose payment went back. The payment
+// page gives a ride a screen of its own for it. A stay's is still an ordinary
+// refusal, shown in the error card.
+export function refundedPaymentFrom(result, paidReference, kind = 'stay') {
+  if (!result || result.ok || result.code !== 'PAYMENT_REFUNDED') return null;
+  const { data, said } = refusalOf(result);
+  return {
+    sentence: said || REFUNDED_SENTENCE[kind === 'ride' ? 'ride' : 'stay'],
     reference: String(data.reference || paidReference || ''),
   };
 }
@@ -115,6 +168,12 @@ export function heldPaymentFrom(result, paidReference) {
 // asks again at that moment: it may have been open for an hour, and a guest
 // blocked from rides since it loaded must not reach Paystack.
 //   { open: true }           go on to Paystack
+//   { open: false, held }    a payment for this ride is already on hold
+//                            (paid in another tab, or straight to Paystack):
+//                            the held screen, never a second payment. `held`
+//                            is heldPaymentFrom's answer
+//   { open: false, refunded }  its payment has been refunded: the refunded
+//                            screen. `refunded` is refundedPaymentFrom's
 //   { open: false, error }   the server refused, or the ride is paid for:
 //                            shown in the page's error card
 //   { open: false, retry }   nothing usable came back: say so and leave the
@@ -125,6 +184,10 @@ export function ridePayDecision(start) {
       ? { open: false, error: 'This ride has already been paid for.' }
       : { open: true };
   }
+  const held = heldPaymentFrom(start, '', 'ride');
+  if (held) return { open: false, held };
+  const refunded = refundedPaymentFrom(start, '', 'ride');
+  if (refunded) return { open: false, refunded };
   // A refusal is an answer in the 400s. No answer at all, or a server that
   // fell over, is not the server saying no.
   const status = Number(start && start.status) || 0;
@@ -196,14 +259,119 @@ export function confirmedNote(data) {
   return 'The arrival email could not be sent. Contact the guest yourself.';
 }
 
+// For a stay and a ride alike: markHeldPaymentRefunded answers both with the
+// same { refunded, guest_emailed }, or { already }.
 export function refundedNote(data) {
   const d = data || {};
   if (d.already) return 'It was already marked refunded.';
   return d.guest_emailed ? 'The guest has been emailed.' : 'The email to the guest could not be sent. Tell them yourself.';
 }
 
-// The badge on that request in the admin's pending list.
+// The badge on that request in the admin's pending list, and on a held ride
+// in the admin's ride list.
 export const heldBadgeLabel = (booking) => {
   const amount = heldAmount(booking);
   return amount > 0 ? `Paid, ${naira(amount)} held` : 'Paid, payment held';
 };
+
+// ── Rides ───────────────────────────────────────────────────────────────────
+// A ride is held on the row fields a stay is: payment_status
+// 'pending_confirmation', the reference in transaction_hash, any further
+// payment for the same ride in payment_extra_refs, status left as it was and
+// paid_at unset. So the helpers above that read nothing but payment_status
+// and total_price serve a ride as they are: isPaymentHeld, isPaymentRefunded,
+// heldAmount, paymentAllowsCancel, heldBadgeLabel and refundedNote, and
+// heldNotice, heldPaymentFrom and refundedPaymentFrom given kind 'ride'.
+// What follows is what a ride does differently. A ride on My Bookings and in
+// the admin's ride list comes from getRideBookings, with `bucket`, the
+// server's word for where it belongs.
+
+// The badge for the money on a ride, { key, label }, or null when there is
+// nothing to say (unpaid). Read before the bucket, for the reason
+// stayStatusLabel reads payment_status first.
+export function ridePaymentBadge(ride) {
+  if (isPaymentHeld(ride)) return { key: 'payment_held', label: HELD_LABEL };
+  if (isPaymentRefunded(ride)) return { key: 'refunded', label: REFUNDED_LABEL };
+  if (ride && ride.payment_status === 'paid') return { key: 'paid', label: '✓ Paid' };
+  return null;
+}
+
+// Whether the guest is offered Pay on a ride: approved, still standing, and
+// no payment taken, held or refunded for it. A held ride can be approved and
+// standing (its guest was blocked after the approval), and must not be
+// offered a second payment.
+export const rideAwaitsPayment = (ride) => !!ride && ride.bucket !== 'cancelled' && !!ride.approved_at && !moneyMoved(ride);
+
+// Whether the guest is offered Cancel on a ride: no money has moved for it,
+// and it is neither over nor cancelled already. cancelRideBooking refuses a
+// held ride with PAYMENT_HELD; this keeps the button from being there.
+export const rideCanBeCancelled = (ride) => !!ride && paymentAllowsCancel(ride)
+  && ride.bucket !== 'cancelled' && ride.bucket !== 'past';
+
+// Whether a ride is waiting on the team: for an answer to the request, or for
+// a decision on a payment being held. My Bookings files both under "Awaiting
+// confirmation", and keeps asking the server while there are any.
+export const rideWaitsOnTeam = (ride) => !!ride && (ride.bucket === 'pending-approval' || isPaymentHeld(ride));
+
+// Why a ride's payment is being held, read back off the row as holdReason
+// does for a stay: 'not_approved', 'cancelled', 'expired' or
+// 'after_approval'. null for a ride with nothing held.
+//
+// The server holds a ride's payment as 'not_approved', 'expired',
+// 'cancelled' or 'blocked', and stores none of them. A cancelled ride and one
+// nobody approved say which they are. One that was approved and still stands
+// does not: its guest has been blocked from rides since, or the payment came
+// after the window to pay had closed, or it crossed the approval. The row
+// cannot tell those apart, so the admin is told all three, not a guess.
+export function rideHoldReason(ride) {
+  if (!isPaymentHeld(ride)) return null;
+  if (ride.status === 'cancelled') return ride.cancel_reason === 'payment_expired' ? 'expired' : 'cancelled';
+  return ride.approved_at ? 'after_approval' : 'not_approved';
+}
+
+export const RIDE_HOLD_REASON_TEXT = {
+  not_approved: 'Held because the ride has not been approved. Approving it confirms it with this payment.',
+  cancelled: 'Held because the ride was cancelled.',
+  expired: 'Held because the ride had run out of time to pay and was cancelled.',
+  after_approval: 'Held after the ride was approved: the guest has been blocked from rides, the window to pay had closed, or the payment crossed the approval.',
+};
+
+// What the admin is told after confirming a held ride with its payment
+// (verifyRidePayment with confirm_held). The server says whether the guest
+// was emailed, and anything but a plain yes is taken as no, as confirmedNote
+// does for a stay. A confirmed ride still needs a driver.
+export function rideConfirmedNote(data) {
+  const d = data || {};
+  if (d.already_paid) return 'It was already paid. Nothing was changed.';
+  const told = d.guest_emailed === true
+    ? 'The guest has been emailed.'
+    : 'The email to the guest could not be sent. Tell them yourself.';
+  return `${told} Assign a driver next.`;
+}
+
+// What the admin is told after approving or rejecting a ride whose payment
+// was on hold, from decideRideBooking's answer, as { title, description }.
+// Approving one held because it was never approved confirms it with that
+// payment (confirmed_with_payment); rejecting one leaves a refund owed
+// (refund_owed). null for a decision that touched no money, so the panel
+// keeps its usual words. The email to the guest is mentioned only when the
+// answer says what became of it.
+export function rideHeldDecisionNote(data) {
+  const d = data || {};
+  if (d.refund_owed) {
+    return {
+      title: 'Rejected. A refund is owed',
+      description: 'The guest had already paid for this ride. Refund it in Paystack, then press "Mark refunded" under Payments on hold.',
+    };
+  }
+  if (d.confirmed_with_payment) {
+    const told = d.guest_emailed === true
+      ? ' The guest has been emailed.'
+      : d.guest_emailed === false ? ' The email to the guest could not be sent. Tell them yourself.' : '';
+    return {
+      title: 'Approved and paid',
+      description: `The ride is confirmed with the payment that was on hold.${told} Assign a driver next.`,
+    };
+  }
+  return null;
+}

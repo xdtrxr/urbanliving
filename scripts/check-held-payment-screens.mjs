@@ -21,6 +21,8 @@ import {
   isPaymentHeld, isPaymentRefunded, heldAmount, stayStatusLabel, pendingCardState, stayCanBePaid,
   paymentAllowsCancel, waitsOnTeam, heldNotice, heldPaymentFrom, ridePayDecision, holdReason,
   heldBookingFor, heldBadgeLabel, confirmedNote, refundedNote,
+  HELD_GUEST_TEXT, RIDE_HOLD_REASON_TEXT, refundedPaymentFrom, ridePaymentBadge, rideAwaitsPayment,
+  rideCanBeCancelled, rideWaitsOnTeam, rideHoldReason, rideConfirmedNote, rideHeldDecisionNote,
 } from '../src/config/payments.js';
 import { fromResponse, fromThrown } from '../src/lib/fnResult.js';
 
@@ -132,9 +134,9 @@ check('no amount on the row: no "₦0"', heldNotice({}).title, 'We have your pay
 console.log('\n— the payment page: what the server said —');
 const SAID = 'We have your payment for this booking. We will confirm it or refund you in full.';
 const onLoad = refused(409, { code: 'PAYMENT_HELD', error: SAID });
-check('opening the page for a held booking: its own screen, with the server\'s sentence', heldPaymentFrom(onLoad), { sentence: SAID, reference: '' });
+check('opening the page for a held booking: its own screen, with the server\'s sentence', heldPaymentFrom(onLoad), { sentence: SAID, reference: '', reason: null });
 const afterPaying = refused(409, { code: 'PAYMENT_HELD', error: SAID, data: { booking_id: 'b1', reference: 'LUX_b1_1760000000000', amount_ngn: 120000, hold_reason: 'not_approved' } });
-check('paying into a booking nobody approved: held, with the reference', heldPaymentFrom(afterPaying, 'LUX_b1_1760000000000'), { sentence: SAID, reference: 'LUX_b1_1760000000000' });
+check('paying into a booking nobody approved: held, with the reference and the reason', heldPaymentFrom(afterPaying, 'LUX_b1_1760000000000'), { sentence: SAID, reference: 'LUX_b1_1760000000000', reason: 'not_approved' });
 check('the reference is the server\'s when the two differ', heldPaymentFrom(afterPaying, 'something-else').reference, 'LUX_b1_1760000000000');
 check('an answer that names no reference shows the one Paystack gave the page', heldPaymentFrom(onLoad, 'LUX_b1_2').reference, 'LUX_b1_2');
 const wordless = heldPaymentFrom(refused(409, { code: 'PAYMENT_HELD' }));
@@ -295,6 +297,136 @@ check('it was already paid', /already paid/.test(confirmedNote({ already_paid: t
 check('refunded, guest emailed', refundedNote({ refunded: true, guest_emailed: true }), 'The guest has been emailed.');
 check('refunded, the email failed', [refundedNote({ refunded: true, guest_emailed: false }), refundedNote({}), refundedNote(null)].every((t) => /could not be sent/.test(t)), true);
 check('already marked refunded', /already marked refunded/.test(refundedNote({ already: true })), true);
+
+// ── Rides ──────────────────────────────────────────────────────────────────
+// A ride payment is held on the same row fields, for the stay's reasons and
+// one more: the guest has been blocked from rides since asking. Rides as
+// getRideBookings hands them to My Bookings and to the admin's ride list,
+// each with the server's bucket. Every fixture has an id of its own.
+console.log('\n— rides: the helpers —');
+const APPROVED_AT = '2026-10-20T08:00:00.000Z';
+const ride = (fields) => ({
+  id: 'r-asked', vehicle_id: 'v1', vehicle_name: 'Toyota Prado', guest_name: 'Bola Ade', guest_email: 'bola@example.com',
+  start_at: '2026-12-20T09:00:00.000Z', end_at: '2026-12-20T21:00:00.000Z', duration_tier: '12hr',
+  total_price: 85000, estimated_price: 85000, status: 'pending', payment_status: 'unpaid', bucket: 'pending-approval', ...fields,
+});
+const rideHeld = (id, fields) => ride({ id, payment_status: 'pending_confirmation', transaction_hash: `LUX_${id}_1760000000000`, ...fields });
+const rideAsked = ride({});
+const rideApproved = ride({ id: 'r-approved', approved_at: APPROVED_AT, bucket: 'upcoming', payment_deadline: '2026-10-20T09:00:00.000Z' });
+const rideHeldUnapproved = rideHeld('r-held-unapproved', {});
+const rideHeldApproved = rideHeld('r-held-approved', { approved_at: APPROVED_AT, bucket: 'upcoming' });
+const rideHeldNow = rideHeld('r-held-now', { approved_at: APPROVED_AT, bucket: 'current' });
+const rideHeldCancelled = rideHeld('r-held-cancelled', { status: 'cancelled', cancel_reason: 'user_cancelled', bucket: 'cancelled' });
+const rideHeldRejected = rideHeld('r-held-rejected', { status: 'cancelled', cancel_reason: 'admin_rejected', bucket: 'cancelled' });
+const rideHeldExpired = rideHeld('r-held-expired', { status: 'cancelled', cancel_reason: 'payment_expired', approved_at: APPROVED_AT, bucket: 'cancelled' });
+const rideRefunded = ride({ id: 'r-refunded', status: 'cancelled', cancel_reason: 'admin_rejected', payment_status: 'refunded', transaction_hash: 'LUX_r-refunded_1', bucket: 'cancelled' });
+const ridePaid = ride({ id: 'r-paid', status: 'confirmed', payment_status: 'paid', approved_at: APPROVED_AT, bucket: 'upcoming' });
+const ridePast = ride({ id: 'r-past', status: 'completed', payment_status: 'paid', approved_at: APPROVED_AT, bucket: 'past' });
+const rideLapsed = ride({ id: 'r-lapsed', status: 'cancelled', cancel_reason: 'payment_expired', approved_at: APPROVED_AT, bucket: 'cancelled' });
+const allHeldRides = [rideHeldUnapproved, rideHeldApproved, rideHeldNow, rideHeldCancelled, rideHeldRejected, rideHeldExpired];
+check('the fixtures have ids of their own',
+  new Set([rideAsked, rideApproved, ...allHeldRides, rideRefunded, ridePaid, ridePast, rideLapsed].map((r) => r.id)).size, 12);
+check('the shared readers serve a ride as they are',
+  [isPaymentHeld(rideHeldApproved), isPaymentRefunded(rideRefunded), heldAmount(rideHeldApproved), heldBadgeLabel(rideHeldApproved), paymentAllowsCancel(rideHeldApproved)],
+  [true, true, 85000, `Paid, ${naira(85000)} held`, false]);
+
+const rideBadge = (r) => { const b = ridePaymentBadge(r); return b && [b.key, b.label]; };
+check('a held ride is badged held, whatever its status or bucket', allHeldRides.map(rideBadge), Array(6).fill(['payment_held', HELD_LABEL]));
+check('a refunded ride says Refunded', rideBadge(rideRefunded), ['refunded', REFUNDED_LABEL]);
+check('a paid ride says Paid, as before', [rideBadge(ridePaid), rideBadge(ridePast)], [['paid', '✓ Paid'], ['paid', '✓ Paid']]);
+check('an unpaid ride has no money badge', [rideBadge(rideAsked), rideBadge(rideApproved), rideBadge(rideLapsed), rideBadge(null)], [null, null, null, null]);
+
+check('approved and unpaid: Pay', rideAwaitsPayment(rideApproved), true);
+check('held, even approved and still standing: no Pay', allHeldRides.map(rideAwaitsPayment), Array(6).fill(false));
+check('not approved, paid, refunded, lapsed or nothing: no Pay',
+  [rideAsked, ridePaid, ridePast, rideRefunded, rideLapsed, null].map(rideAwaitsPayment), Array(6).fill(false));
+check('a row that never had a payment_status is unpaid, as before', rideAwaitsPayment({ ...rideApproved, payment_status: undefined }), true);
+
+check('no money moved and still standing: Cancel', [rideCanBeCancelled(rideAsked), rideCanBeCancelled(rideApproved)], [true, true]);
+check('held: no Cancel', allHeldRides.map(rideCanBeCancelled), Array(6).fill(false));
+check('paid, refunded, over or cancelled: no Cancel, as before',
+  [ridePaid, ridePast, rideRefunded, rideLapsed, null].map(rideCanBeCancelled), Array(5).fill(false));
+
+check('waiting on the team: a request with no answer, and every held ride', [rideAsked, ...allHeldRides].map(rideWaitsOnTeam), Array(7).fill(true));
+check('not waiting on the team', [rideApproved, ridePaid, ridePast, rideRefunded, rideLapsed, null].map(rideWaitsOnTeam), Array(6).fill(false));
+
+check('why a ride is held, read off the row',
+  [rideHeldUnapproved, rideHeldApproved, rideHeldNow, rideHeldCancelled, rideHeldRejected, rideHeldExpired].map(rideHoldReason),
+  ['not_approved', 'after_approval', 'after_approval', 'cancelled', 'cancelled', 'expired']);
+check('nothing held, no reason', [rideAsked, rideApproved, ridePaid, rideRefunded, null].map(rideHoldReason), [null, null, null, null, null]);
+check('a sentence for each reason rideHoldReason can give, and no others', Object.keys(RIDE_HOLD_REASON_TEXT).sort(), ['after_approval', 'cancelled', 'expired', 'not_approved']);
+check('each one a sentence about a ride', Object.values(RIDE_HOLD_REASON_TEXT).every((t) => /^Held .+\.$/.test(t) && !/booking|stay|request/i.test(t)), true);
+check('the one the row cannot settle names a block from rides among its causes', /blocked from rides/.test(RIDE_HOLD_REASON_TEXT.after_approval), true);
+
+console.log('\n— rides: what the guest is told —');
+const rideNotice = heldNotice(rideHeldApproved, 'ride');
+check('the card says how much we have, that we will confirm the ride or refund, and not to pay again',
+  `${rideNotice.title} ${rideNotice.body}`,
+  `We have your payment of ${naira(85000)}. We will confirm this ride or refund you in full. You do not need to pay again.`);
+check('the stay\'s words are unchanged', heldNotice(heldNeverApproved).body, HELD_GUEST_TEXT.stay);
+check('a blocked guest is told the team will be in touch about a refund, and not to pay again',
+  [/contact you about a refund/.test(HELD_GUEST_TEXT.blocked), /do not need to pay again/.test(HELD_GUEST_TEXT.blocked)], [true, true]);
+check('calm: nothing about a block, a report or the account, and no promise to confirm',
+  /block|report|account|confirm/i.test(HELD_GUEST_TEXT.blocked), false);
+
+console.log('\n— rides: the payment page —');
+const RIDE_SAID = 'We have your payment for this ride. We will be in touch.';
+const rideAfterPaying = (reason, said = RIDE_SAID) => refused(409, {
+  code: 'PAYMENT_HELD', ...(said ? { error: said } : {}),
+  data: { ride_booking_id: 'r-held-approved', reference: 'LUX_r-held-approved_1760000000000', amount_ngn: 85000, hold_reason: reason },
+});
+check('verifyRidePayment holds it: the server\'s sentence, the reference and the reason',
+  heldPaymentFrom(rideAfterPaying('blocked'), 'LUX_r-held-approved_1760000000000', 'ride'),
+  { sentence: RIDE_SAID, reference: 'LUX_r-held-approved_1760000000000', reason: 'blocked' });
+check('each of the server\'s reasons is passed on as it came',
+  ['not_approved', 'expired', 'cancelled', 'blocked', 'holding'].map((why) => heldPaymentFrom(rideAfterPaying(why), 'x', 'ride').reason),
+  ['not_approved', 'expired', 'cancelled', 'blocked', 'holding']);
+check('with no sentence, a ride is promised in ride words', heldPaymentFrom(rideAfterPaying('not_approved', ''), 'x', 'ride').sentence, HELD_GUEST_TEXT.ride);
+check('and a blocked guest is told about the refund, not promised the ride', heldPaymentFrom(rideAfterPaying('blocked', ''), 'x', 'ride').sentence, HELD_GUEST_TEXT.blocked);
+check('a stay with no sentence keeps the stay\'s words, whatever the reason says', heldPaymentFrom(rideAfterPaying('blocked', '')).sentence, HELD_GUEST_TEXT.stay);
+
+const REFUNDED_SAID = 'This payment was refunded.';
+const rideRefundedAnswer = refused(409, { code: 'PAYMENT_REFUNDED', error: REFUNDED_SAID });
+check('a refunded payment: its own screen, with the server\'s sentence and the page\'s reference',
+  refundedPaymentFrom(rideRefundedAnswer, 'LUX_r-refunded_1', 'ride'), { sentence: REFUNDED_SAID, reference: 'LUX_r-refunded_1' });
+check('the reference is the server\'s when it names one',
+  refundedPaymentFrom(refused(409, { code: 'PAYMENT_REFUNDED', error: REFUNDED_SAID, data: { reference: 'LUX_r-refunded_2' } }), 'other', 'ride').reference, 'LUX_r-refunded_2');
+const wordlessRefund = refundedPaymentFrom(refused(409, { code: 'PAYMENT_REFUNDED' }), '', 'ride');
+check('with no sentence: plain words, never the status line', [/status code/.test(wordlessRefund.sentence), /refunded/.test(wordlessRefund.sentence), /ride/.test(wordlessRefund.sentence)], [false, true, true]);
+check('everything else is not a refunded payment',
+  [refundedPaymentFrom(rideAfterPaying('holding'), 'x', 'ride'), refundedPaymentFrom(refused(400, { code: 'REFERENCE_MISMATCH', error: 'x' }), 'x', 'ride'),
+    refundedPaymentFrom(answered({ ride_booking_id: 'r-paid' }), 'x', 'ride'), refundedPaymentFrom({ ok: true, code: 'PAYMENT_REFUNDED' }), refundedPaymentFrom(unanswered()), refundedPaymentFrom(null)],
+  [null, null, null, null, null, null]);
+check('and a refunded payment is not a held one', heldPaymentFrom(rideRefundedAnswer, 'x', 'ride'), null);
+
+const startHeld = refused(409, { code: 'PAYMENT_HELD', error: RIDE_SAID, data: { ride_booking_id: 'r-held-unapproved', amount_ngn: 85000, hold_reason: 'holding' } });
+check('Pay on a ride whose payment is already held: the held screen, never Paystack',
+  ridePayDecision(startHeld), { open: false, held: { sentence: RIDE_SAID, reference: '', reason: 'holding' } });
+check('Pay on a ride whose payment was refunded: the refunded screen, never Paystack',
+  ridePayDecision(refused(409, { code: 'PAYMENT_REFUNDED', error: REFUNDED_SAID })), { open: false, refunded: { sentence: REFUNDED_SAID, reference: '' } });
+check('the other refusals still go to the error card',
+  ridePayDecision(refused(409, { code: 'NOT_APPROVED', error: 'This ride has not been approved yet' })), { open: false, error: 'This ride has not been approved yet' });
+
+console.log('\n— rides: what the admin is told —');
+check('confirmed, guest emailed', rideConfirmedNote({ ride_booking_id: 'r-held-approved', confirmed: true, paid_at: APPROVED_AT, reference: 'x', guest_emailed: true }),
+  'The guest has been emailed. Assign a driver next.');
+check('confirmed, the email failed', rideConfirmedNote({ confirmed: true, guest_emailed: false }), 'The email to the guest could not be sent. Tell them yourself. Assign a driver next.');
+check('an answer that does not say: never "has been emailed"', [rideConfirmedNote({ confirmed: true }), rideConfirmedNote(null), rideConfirmedNote(undefined)].every((t) => /could not be sent/.test(t)), true);
+check('it was already paid', rideConfirmedNote({ already_paid: true, confirmed: true, guest_emailed: true }), 'It was already paid. Nothing was changed.');
+check('marked refunded: a ride\'s answer is read as a stay\'s is',
+  [refundedNote({ ride_booking_id: 'r-held-rejected', refunded: true, reference: 'x', amount_ngn: 85000, guest_emailed: true }), refundedNote({ ride_booking_id: 'r-held-rejected', refunded: true, guest_emailed: false }), refundedNote({ already: true })],
+  ['The guest has been emailed.', 'The email to the guest could not be sent. Tell them yourself.', 'It was already marked refunded.']);
+const approvedHeld = rideHeldDecisionNote({ ride_booking_id: 'r-held-unapproved', status: 'approved', total_price: 85000, confirmed_with_payment: true });
+check('approving a held ride: it is confirmed with the payment, and needs a driver',
+  [approvedHeld.title, /confirmed with the payment that was on hold/.test(approvedHeld.description), /Assign a driver/.test(approvedHeld.description)], ['Approved and paid', true, true]);
+check('and the email is not mentioned when the answer does not say', /email/i.test(approvedHeld.description), false);
+check('when it does say',
+  [/has been emailed/.test(rideHeldDecisionNote({ confirmed_with_payment: true, guest_emailed: true }).description), /could not be sent/.test(rideHeldDecisionNote({ confirmed_with_payment: true, guest_emailed: false }).description)], [true, true]);
+const rejectedHeld = rideHeldDecisionNote({ ride_booking_id: 'r-held-rejected', status: 'rejected', refund_owed: true });
+check('rejecting a held ride: a refund is owed, refunded in Paystack and then marked',
+  [rejectedHeld.title, /Refund it in Paystack/.test(rejectedHeld.description), /Mark refunded/.test(rejectedHeld.description)], ['Rejected. A refund is owed', true, true]);
+check('a decision that touched no money keeps the panel\'s usual words',
+  [rideHeldDecisionNote({ status: 'approved', total_price: 85000, price_changed: false }), rideHeldDecisionNote({ status: 'rejected', suggested: [] }), rideHeldDecisionNote(null)], [null, null, null]);
 
 console.log(`\n${fail === 0 ? 'PASS' : 'FAIL'} — ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
