@@ -52,6 +52,9 @@ function windowOf(r: any): { startMs: number; endMs: number } | null {
 
 // Lockstep copy, see getRideBookings.
 function computeBucket(r: any, nowMs: number): string {
+    // Money is on hold for it, waiting for the admin: the guest is waiting
+    // too, whatever the ride's own status says. As getBookings does for stays.
+    if (r.payment_status === 'pending_confirmation') return 'pending-approval';
     if (r.status === 'cancelled') return 'cancelled';
     if (r.status === 'completed') return 'past';
     if (r.status === 'pending' && !r.approved_at) return 'pending-approval';
