@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Lock, ShieldCheck, CreditCard, Loader2, CheckCircle, AlertTriangle, ArrowLeft, Mail, User, Clock } from 'lucide-react';
+import { Lock, ShieldCheck, CreditCard, Loader2, CheckCircle, AlertTriangle, ArrowLeft, Mail, User, Clock, RotateCcw } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { invokeFn } from '@/lib/invokeFn';
-import { heldPaymentFrom, ridePayDecision } from '@/config/payments';
+import { heldPaymentFrom, refundedPaymentFrom, ridePayDecision } from '@/config/payments';
 import { awardBookingMilestones } from '@/components/utils/loyaltyService';
 import IdUploadGate from '@/components/booking/IdUploadGate';
 
@@ -44,6 +44,9 @@ export default function PaymentPage() {
   // never approved or was already cancelled, so it is not confirmed. Neither
   // an error nor a success, and it gets a screen of its own.
   const [heldPayment, setHeldPayment] = useState(null);
+  // Rides only: this ride's payment has already gone back to the guest. Also
+  // not an error, and there is nothing left to pay for.
+  const [refundedPayment, setRefundedPayment] = useState(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -97,12 +100,13 @@ export default function PaymentPage() {
   // the booking cancelled on its next read (single source of truth).
   // Not once the money has moved: the clock keeps running behind the screens
   // that follow a payment, and a guest who has paid, or whose payment is
-  // being held, must not be told the booking was cancelled for not paying.
+  // being held or was refunded, must not be told the booking was cancelled
+  // for not paying.
   useEffect(() => {
-    if (!hasExpired || !bookingData?.id || paymentComplete || heldPayment) return;
+    if (!hasExpired || !bookingData?.id || paymentComplete || heldPayment || refundedPayment) return;
     alert('Your payment window has expired and the booking has been cancelled. Please request availability again.');
     navigate(createPageUrl('Bookings'));
-  }, [hasExpired, bookingData?.id, paymentComplete, heldPayment, navigate]);
+  }, [hasExpired, bookingData?.id, paymentComplete, heldPayment, refundedPayment, navigate]);
 
   const formatRemaining = (ms) => {
     if (ms == null) return '';
@@ -174,7 +178,14 @@ export default function PaymentPage() {
         // of falling into the catch below as a generic failure.
         const start = await invokeFn('startRidePayment', { ride_booking_id: rideBookingId });
         if (!start.ok) {
-          setError(start.error || 'This ride is not ready for payment.');
+          // A payment for this ride is already with us and the team is
+          // deciding, or it has already gone back. Neither is an error to
+          // show in red, and neither leaves anything to pay.
+          const held = heldPaymentFrom(start, '', 'ride');
+          const refunded = held ? null : refundedPaymentFrom(start, '', 'ride');
+          if (held) setHeldPayment(held);
+          else if (refunded) setRefundedPayment(refunded);
+          else setError(start.error || 'This ride is not ready for payment.');
           setIsPageLoading(false);
           return;
         }
@@ -298,13 +309,21 @@ export default function PaymentPage() {
               reference: transactionRef,
             });
         // The money arrived, but for a booking that was never approved or
-        // was already cancelled, so the server is holding it for the admin
-        // to confirm or refund. Not a success: no milestones, no "Payment
+        // was already cancelled (or, for a ride, whose guest has since been
+        // blocked from rides), so the server is holding it for the admin to
+        // confirm or refund. Not a success: no milestones, no "Payment
         // Successful", no ID step. Not a failure either: the payment is
         // safe and there is nothing for the guest to chase.
-        const held = heldPaymentFrom(result, transactionRef);
+        const held = heldPaymentFrom(result, transactionRef, isRide ? 'ride' : 'stay');
         if (held) {
           setHeldPayment({ ...held, justPaid: true });
+          return;
+        }
+        // Rides: a reference whose payment has already been refunded. It
+        // confirms nothing, and the guest is told so plainly.
+        const refunded = isRide ? refundedPaymentFrom(result, transactionRef, 'ride') : null;
+        if (refunded) {
+          setRefundedPayment(refunded);
           return;
         }
         if (!result.ok) {
@@ -453,7 +472,11 @@ export default function PaymentPage() {
     if (isRide) {
       const decision = ridePayDecision(await invokeFn('startRidePayment', { ride_booking_id: rideBookingId }));
       if (!decision.open) {
-        if (decision.error) setError(decision.error);
+        // Paid in another tab, or straight to Paystack, since this page
+        // loaded: the held or refunded screen, never a second payment.
+        if (decision.held) setHeldPayment(decision.held);
+        else if (decision.refunded) setRefundedPayment(decision.refunded);
+        else if (decision.error) setError(decision.error);
         else alert(decision.retry);
         setIsProcessing(false);
         return;
@@ -502,7 +525,9 @@ export default function PaymentPage() {
               <Clock className="w-8 h-8 text-blue-600 dark:text-blue-400" />
             </div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-              {heldPayment.justPaid ? 'Payment received, booking not confirmed yet' : 'We have your payment'}
+              {heldPayment.justPaid
+                ? (isRide ? 'Payment received, ride not confirmed yet' : 'Payment received, booking not confirmed yet')
+                : 'We have your payment'}
             </h2>
             <p className="text-slate-600 dark:text-slate-300 mb-6">{heldPayment.sentence}</p>
             {heldPayment.reference && (
@@ -517,6 +542,46 @@ export default function PaymentPage() {
             >
               View my bookings
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Rides only: the payment for this ride has gone back to the guest, so the
+  // ride stands cancelled and nothing here can be paid. Calm, like the held
+  // screen, with the reference to quote and a way to book again.
+  if (refundedPayment) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
+          <CardContent className="p-8 text-center">
+            <div className="w-14 h-14 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+              <RotateCcw className="w-8 h-8 text-slate-600 dark:text-slate-300" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Payment refunded</h2>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">{refundedPayment.sentence}</p>
+            {refundedPayment.reference && (
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3 mb-6">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Payment reference</p>
+                <p className="font-mono text-sm text-slate-700 dark:text-slate-200 break-all">{refundedPayment.reference}</p>
+              </div>
+            )}
+            <div className="space-y-3">
+              <Button
+                onClick={() => navigate(createPageUrl('PlanTrip'))}
+                className="w-full rounded-xl"
+              >
+                Book another ride
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate(createPageUrl('Bookings'))}
+                className="w-full rounded-xl"
+              >
+                View my bookings
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
