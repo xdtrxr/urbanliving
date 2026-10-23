@@ -5,7 +5,9 @@
 // (scripts/check-referral-reward.mjs covers the paying). A referral code is
 // made in the browser and nothing makes it unique, so the function has to
 // stand up to a copied code, to the caller's own code, to text that is really
-// a pattern, and to two requests at once. getReferralStatistics is what the
+// a pattern, and to two requests at once. Since 2026-10-23 a code is for a
+// new account only: a caller who has already booked a stay or a ride is
+// refused, and nothing is written. getReferralStatistics is what the
 // referrer then sees; until 2026-10-12 it read the friend's booking as the
 // referrer, which the Booking read rule refuses, and showed 0 booked.
 //
@@ -32,6 +34,42 @@ const rig = createRig({
 });
 const attribute = await loadFunction(rig, 'attributeReferral');
 const statistics = await loadFunction(rig, 'getReferralStatistics');
+
+// The platform, where the rig stops short. auth.me() THROWS for a signed-out
+// caller (the rig answers null), so "signed out" below is the platform's.
+// And every Booking and RideBooking read is noted with who made it (the
+// caller, or the service role) and the limit it asked for.
+const answersNull = rig.client;
+const bookingReads = [];
+const noted = (entities, as) => new Proxy({}, {
+  get: (_, name) => {
+    const table = entities[name];
+    if (name !== 'Booking' && name !== 'RideBooking') return table;
+    return {
+      ...table,
+      filter: (query, sort, limit, skip) => {
+        bookingReads.push({ entity: name, as, limit });
+        return table.filter(query, sort, limit, skip);
+      },
+    };
+  },
+});
+rig.client = () => {
+  const client = answersNull();
+  return {
+    ...client,
+    auth: {
+      ...client.auth,
+      me: async () => {
+        const user = await client.auth.me();
+        if (!user) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+        return user;
+      },
+    },
+    entities: noted(client.entities, 'caller'),
+    asServiceRole: { ...client.asServiceRole, entities: noted(client.asServiceRole.entities, 'service') },
+  };
+};
 
 // Ada owns ADA1. Hauwa has copied it onto her own profile. Lara owns LARA1,
 // stored in lower case as some early rows were.
@@ -85,7 +123,7 @@ check('a code nobody holds', [r.status, r.code], [404, 'INVALID_CODE']);
 r = await use('', chidi);
 check('no code', r.status, 400);
 r = await use('TUNDE1', null);
-check('signed out', r.status, 401);
+check('signed out, where the platform throws rather than answering null, is a 401 and not a 500', [r.status, r.error], [401, 'Unauthorized']);
 
 console.log('\n— one referrer per guest, for good —');
 r = await use('lara1', bola);
@@ -101,6 +139,74 @@ rig.failOn = null;
 check('the answer is yes and the row is there', [r.status, rowsFor(funke).length, stamp(funke)], [200, 1, null]);
 r = await use('TUNDE1', funke);
 check('asking again is a plain "already"', [r.status, r.code, rowsFor(funke).length], [409, 'ALREADY_ATTRIBUTED', 1]);
+
+console.log('\n— codes are for new accounts —');
+// Each of these has booked with us in one way: Gina a paid stay, Hadiza a
+// paid ride, Ike a payment on hold, Jide a payment given back. Lola signed up
+// with capitals in her email and her stay was typed in lower case. Mide has
+// asked for sixty stays and paid for one, the first, which a read of the
+// default page of 50, newest first, would never reach. Kemi has only asked:
+// an unpaid request, one cancelled before she paid, an unpaid ride. Tunde,
+// a referrer, has paid for a stay too.
+const gina = guest('gina');
+const hadiza = guest('hadiza');
+const ike = guest('ike');
+const jide = guest('jide');
+const kemi = guest('kemi');
+const mide = guest('mide');
+const lola = { id: 'lola', email: 'Lola@Example.com', role: 'user' };
+rig.db.User.push(...[gina, hadiza, ike, jide, kemi, mide, lola].map((u) => ({ ...u })));
+rig.db.Booking = [
+  { id: 'gina-stay', guest_email: gina.email, status: 'confirmed', payment_status: 'paid' },
+  { id: 'ike-stay', guest_email: ike.email, status: 'cancelled', payment_status: 'pending_confirmation', transaction_hash: 'ref-ike' },
+  { id: 'jide-stay', guest_email: jide.email, status: 'cancelled', payment_status: 'refunded' },
+  { id: 'kemi-asked', guest_email: kemi.email, status: 'pending', payment_status: 'unpaid' },
+  { id: 'kemi-dropped', guest_email: kemi.email, status: 'cancelled', payment_status: 'unpaid' },
+  { id: 'lola-stay', guest_email: 'lola@example.com', status: 'completed', payment_status: 'paid' },
+  { id: 'tunde-stay', guest_email: tunde.email, status: 'confirmed', payment_status: 'paid' },
+  { id: 'bola-stay', guest_email: bola.email, status: 'confirmed', payment_status: 'paid' },
+  { id: 'mide-paid', guest_email: mide.email, status: 'completed', payment_status: 'paid', created_date: '2026-01-01T00:00:00.000Z' },
+  ...Array.from({ length: 60 }, (_, i) => ({
+    id: `mide-ask-${i}`, guest_email: mide.email, status: 'cancelled', payment_status: 'unpaid',
+    created_date: new Date(Date.UTC(2026, 1, 1) + i * 86400000).toISOString(),
+  })),
+];
+rig.db.RideBooking = [
+  { id: 'hadiza-ride', guest_email: hadiza.email, status: 'completed', payment_status: 'paid' },
+  { id: 'kemi-ride', guest_email: kemi.email, status: 'pending', payment_status: 'unpaid' },
+];
+const SENTENCE = 'Referral codes are for new accounts. This account has already booked with us.';
+const refused = async (who, label) => {
+  const before = rig.db.Referral.length;
+  const answer = await use('TUNDE1', who);
+  check(`${label}: refused, in the server's own words, and nothing written`,
+    [answer.status, answer.code, answer.error, rowsFor(who).length, rig.db.Referral.length - before, stamp(who)],
+    [409, 'EXISTING_CUSTOMER', SENTENCE, 0, 0, null]);
+};
+bookingReads.length = 0;
+await refused(gina, 'a paid stay');
+await refused(hadiza, 'a paid ride');
+await refused(ike, 'a payment on hold, on a booking since cancelled');
+await refused(jide, 'a payment given back');
+await refused(lola, 'a paid stay under the same email in another letter case');
+await refused(mide, 'one paid stay behind sixty unpaid requests');
+r = await use('TUNDE1', kemi);
+check('only unpaid and cancelled-unpaid requests: still a new account, and attributed',
+  [r.status, r.data && r.data.referrer_email, rowsFor(kemi).length, stamp(kemi)], [200, tunde.email, 1, 'TUNDE1']);
+check('every booking read was made with the service role, with a limit of its own',
+  [bookingReads.length > 0, bookingReads.every((x) => x.as === 'service' && Number.isInteger(x.limit) && x.limit > 0 && x.limit <= 50)], [true, true]);
+check('both stays and rides were looked at', [...new Set(bookingReads.map((x) => x.entity))].sort(), ['Booking', 'RideBooking']);
+
+// The code is judged before the account: each of these is the more specific
+// answer, and none writes anything either.
+r = await use('NOBODY1', gina);
+check('a customer with a code nobody holds is told it was not found', [r.status, r.code, rowsFor(gina).length], [404, 'INVALID_CODE', 0]);
+r = await use('TUNDE1', tunde);
+check('a customer opening their own link is told it is their own code', [r.status, r.code, rowsFor(tunde).length], [400, 'SELF_REFERRAL', 0]);
+r = await use('ADA1', gina);
+check('a customer with a copied code is told it cannot be used right now', [r.status, r.code, rowsFor(gina).length], [409, 'AMBIGUOUS_CODE', 0]);
+r = await use('lara1', bola);
+check('a referred guest who has since booked is told they already used a code', [r.status, r.code, rowsFor(bola).length], [409, 'ALREADY_ATTRIBUTED', 1]);
 
 console.log('\n— what the referrer is shown —');
 // Tunde referred Bola, Eze (maybe) and Funke. Bola has paid for a stay; the
@@ -133,6 +239,10 @@ r = await stats(tunde.email, root);
 check('an admin may look', [r.status, r.data && r.data.totalReferrals], [200, 3]);
 r = await stats(lara.email, lara);
 check('a referrer whose friend has not paid yet', [r.data && r.data.totalReferrals, r.data && r.data.successfulReferrals, r.data && r.data.totalBookedByReferrals], [1, 0, 0]);
+// getReferralStatistics does not catch the throw from auth.me() (a 500 on
+// the platform, not a 401). That is a separate function, left as it is in
+// this round, so its signed-out case is asked of the rig's null as before.
+rig.client = answersNull;
 r = await stats(tunde.email, null);
 check('signed out', r.status, 401);
 
